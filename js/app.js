@@ -4,7 +4,7 @@ import { memory, requestPersistence } from "./memory.js";
 import { looksLikeImportantFact, buildConfirmationQuestion } from "./facts.js";
 import { Voice } from "./voice.js";
 
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "1.1.0";
 const $ = (id) => document.getElementById(id);
 
 const els = {
@@ -17,6 +17,7 @@ const els = {
   apiKey: $("api-key"), toggleKey: $("toggle-key"), pasteKey: $("paste-key"), clearKey: $("clear-key"),
   testConn: $("test-conn"), assistantName: $("assistant-name"), userName: $("user-name"),
   personality: $("personality"), speakReplies: $("speak-replies"), webSearch: $("web-search"),
+  autoLearn: $("auto-learn"), factsList: $("facts-list"),
   save: $("save-settings"), settingsStatus: $("settings-status"),
   factsCount: $("facts-count"), clearHistory: $("clear-history"), clearFacts: $("clear-facts"),
   version: $("app-version"),
@@ -103,7 +104,7 @@ function appendLinkified(parent, text) {
   if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
 }
 
-function renderBubble(role, text, { error = false, sources = [] } = {}) {
+function renderBubble(role, text, { error = false, sources = [], meta = "" } = {}) {
   const wrap = document.createElement("div");
   wrap.className = `msg ${role === "user" ? "user" : "assistant"}${error ? " error" : ""}`;
   const b = document.createElement("div");
@@ -121,9 +122,71 @@ function renderBubble(role, text, { error = false, sources = [] } = {}) {
     }
     wrap.appendChild(s);
   }
+  if (meta) addMeta(wrap, meta);
   els.messages.appendChild(wrap);
   scrollToBottom();
   return wrap;
+}
+
+function addMeta(wrap, text) {
+  const m = document.createElement("div");
+  m.className = "meta";
+  m.textContent = text;
+  wrap.appendChild(m);
+}
+
+function formatMeta(r, firstMs) {
+  const secs = (r.ms / 1000).toFixed(1);
+  const model = (r.model || "").replace(/^gemini-/, "");
+  return `${secs} s${model ? " · " + model : ""}`;
+}
+
+// Burbuja que se va llenando mientras llega el streaming
+function createStreamingBubble(typingNode) {
+  const wrap = document.createElement("div");
+  wrap.className = "msg assistant streaming";
+  const b = document.createElement("div");
+  b.className = "bubble";
+  wrap.appendChild(b);
+  if (typingNode && typingNode.parentNode) typingNode.replaceWith(wrap);
+  else els.messages.appendChild(wrap);
+  return { wrap, bubble: b };
+}
+
+// ---------- Memoria automática ----------
+function showMemoryNote(items) {
+  const note = document.createElement("div");
+  note.className = "memory-note";
+  const txt = document.createElement("span");
+  txt.className = "txt";
+  txt.textContent = "Guardé: " + items.map((i) => i.fact).join(" · ");
+  const undo = document.createElement("button");
+  undo.className = "link-btn";
+  undo.textContent = "Deshacer";
+  undo.onclick = () => {
+    for (const i of items) memory.deleteFact(i.id);
+    txt.textContent = "Listo, no lo guardé.";
+    note.classList.add("undone");
+    undo.remove();
+    if (!els.settingsView.hidden) renderFactsList();
+  };
+  note.append(txt, undo);
+  const near = isNearBottom();
+  els.messages.appendChild(note);
+  if (near) scrollToBottom();
+}
+
+async function autoLearn(userText, assistantText) {
+  try {
+    if (!config.autoLearn || !client.isConfigured()) return;
+    const extractor = new GeminiClient({ apiKey: config.geminiApiKey, authMethod: config.authMethod });
+    const facts = await extractor.extractFacts(userText, assistantText, memory.getFacts());
+    if (!facts.length) return;
+    const saved = facts.map((fact) => ({ fact, id: memory.saveFact(fact, { auto: true }) }));
+    showMemoryNote(saved);
+  } catch (e) {
+    console.warn("Antares memoria:", e);
+  }
 }
 
 function renderConfirm(factText) {
@@ -182,26 +245,43 @@ async function sendMessage(text) {
   text = (text || "").trim();
   if (!text) return;
   renderBubble("user", text); // la burbuja aparece antes de llamar a la API
-  let typing = null;
+  let typing = null, stream = null;
   try {
     const history = memory.getHistory(20);
     const facts = memory.getFacts();
     memory.addMessage("user", text);
-    if (looksLikeImportantFact(text)) { pendingFact = text; renderConfirm(text); }
+    if (!config.autoLearn && looksLikeImportantFact(text)) { pendingFact = text; renderConfirm(text); }
 
     typing = showTyping();
     pendingCount++;
     const search = !!config.webSearch && needsSearch(text);
-    const r = await client.ask(text, history, facts, { search });
+    const r = await client.ask(text, history, facts, {
+      search,
+      onChunk: (partial) => {
+        if (!stream) { stream = createStreamingBubble(typing); typing = null; }
+        const near = isNearBottom();
+        stream.bubble.textContent = partial;
+        if (near) scrollToBottom(false);
+      },
+    });
     hideTyping(typing); typing = null;
-    renderBubble("assistant", r.text, { error: !r.ok, sources: r.sources });
+    if (stream) {
+      // reemplazamos la burbuja parcial por la final (con links y fuentes)
+      const final = renderBubble("assistant", r.text, { error: !r.ok, sources: r.sources, meta: r.ok ? formatMeta(r) : "" });
+      stream.wrap.replaceWith(final);
+    } else {
+      renderBubble("assistant", r.text, { error: !r.ok, sources: r.sources, meta: r.ok ? formatMeta(r) : "" });
+    }
+    hideTyping(null);
     if (r.ok) {
       memory.addMessage("assistant", r.text); // los errores no se guardan en el historial
       if (config.speakReplies) voice.speak(r.text);
+      autoLearn(text, r.text); // en segundo plano, no bloquea
     }
   } catch (e) {
     console.error(e);
     hideTyping(typing);
+    if (stream) stream.wrap.remove();
     renderBubble("assistant", `Error interno: ${e && e.name ? e.name + ": " : ""}${e && e.message ? e.message : e}`, { error: true });
   } finally {
     pendingCount = Math.max(0, pendingCount - 1);
@@ -249,10 +329,25 @@ function setKeyVisible(visible) {
   els.apiKey.type = visible ? "text" : "password";
   els.toggleKey.textContent = visible ? "Ocultar" : "Mostrar";
 }
-function updateFactsCount() {
-  const n = memory.getFacts().length;
-  els.factsCount.textContent = n ? `Datos guardados: ${n}` : "No hay datos guardados todavía.";
+function renderFactsList() {
+  const items = memory.getFactItems();
+  els.factsList.innerHTML = "";
+  for (const it of items) {
+    const li = document.createElement("li");
+    const span = document.createElement("span");
+    span.textContent = it.fact;
+    const del = document.createElement("button");
+    del.className = "del";
+    del.setAttribute("aria-label", "Borrar dato");
+    del.textContent = "×";
+    del.onclick = () => { memory.deleteFact(it.id); renderFactsList(); };
+    li.append(span, del);
+    els.factsList.appendChild(li);
+  }
+  els.factsCount.textContent = items.length ? `${items.length} dato${items.length === 1 ? "" : "s"} guardado${items.length === 1 ? "" : "s"}` : "Todavía no recuerdo nada sobre vos.";
 }
+const updateFactsCount = renderFactsList;
+
 function openSettings() {
   config = memory.getConfig();
   els.apiKey.value = config.geminiApiKey || "";
@@ -262,6 +357,7 @@ function openSettings() {
   els.personality.value = config.personality || "";
   els.speakReplies.checked = !!config.speakReplies;
   els.webSearch.checked = !!config.webSearch;
+  els.autoLearn.checked = !!config.autoLearn;
   els.settingsStatus.textContent = "";
   els.settingsStatus.classList.remove("err");
   updateFactsCount();
@@ -304,6 +400,7 @@ els.save.addEventListener("click", () => {
   config.personality = els.personality.value.trim();
   config.speakReplies = els.speakReplies.checked;
   config.webSearch = els.webSearch.checked;
+  config.autoLearn = els.autoLearn.checked;
   if (!memory.saveConfig(config)) { setStatus("No se pudo guardar (¿almacenamiento lleno o modo privado?)", true); return; }
   client = makeClient();
   applyProfileToUI();
@@ -330,6 +427,13 @@ els.testConn.addEventListener("click", async () => {
   }
 });
 
+// El interruptor de memoria se aplica al instante (está debajo de "Guardar")
+els.autoLearn.addEventListener("change", () => {
+  config.autoLearn = els.autoLearn.checked;
+  memory.saveConfig(config);
+  setStatus(config.autoLearn ? "Aprendizaje automático activado" : "Aprendizaje automático desactivado");
+});
+
 els.clearHistory.addEventListener("click", () => {
   if (!confirm("¿Borrar toda la conversación de este dispositivo?")) return;
   memory.clearHistory();
@@ -338,10 +442,10 @@ els.clearHistory.addEventListener("click", () => {
   setStatus("Conversación borrada");
 });
 els.clearFacts.addEventListener("click", () => {
-  if (!confirm("¿Borrar todos los datos que guardaste?")) return;
+  if (!confirm("¿Borrar todo lo que Antares recuerda de vos?")) return;
   memory.clearFacts();
   updateFactsCount();
-  setStatus("Datos borrados");
+  setStatus("Memoria borrada");
 });
 
 // ---------- Modal de diagnóstico ----------

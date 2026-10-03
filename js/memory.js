@@ -11,6 +11,7 @@ export const DEFAULT_CONFIG = {
   personality: "",
   speakReplies: true,
   webSearch: true,
+  autoLearn: true,   // aprender datos del usuario automáticamente
   geminiModel: "",   // último modelo que respondió bien
   authMethod: "",    // forma de enviar la key que funcionó
   noGrounding: {},   // modelos donde la búsqueda de Google no está disponible
@@ -42,11 +43,20 @@ export const memory = {
   },
   clearHistory() { save(K_HISTORY, []); },
 
-  getFacts() { return load(K_FACTS, []).map((f) => f.fact); },
-  saveFact(fact) {
+  getFactItems() {
+    return load(K_FACTS, []).map((f, i) => ({ id: f.id || f.ts || String(i), fact: f.fact, ts: f.ts, auto: !!f.auto }));
+  },
+  getFacts() { return this.getFactItems().map((f) => f.fact); },
+  saveFact(fact, { auto = false } = {}) {
     const f = load(K_FACTS, []);
-    f.push({ fact, ts: new Date().toISOString() });
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    f.push({ id, fact, ts: new Date().toISOString(), auto });
     save(K_FACTS, f);
+    return id;
+  },
+  deleteFact(id) {
+    const items = this.getFactItems().filter((f) => f.id !== id);
+    save(K_FACTS, items.map(({ id: i, fact, ts, auto }) => ({ id: i, fact, ts, auto })));
   },
   clearFacts() { save(K_FACTS, []); },
 };

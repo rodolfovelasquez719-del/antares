@@ -82,11 +82,16 @@
         <button type="button" class="pill-btn wide primary" id="save-settings">Guardar</button>
         <p class="status" id="settings-status" role="status"></p>
 
+        <h2 class="section-title">Memoria</h2>
+        <label class="switch-row"><input type="checkbox" id="auto-learn"> <span>Aprender datos sobre mí automáticamente</span></label>
+        <p class="hint">Lo que Antares recuerda de vos. Se guarda solo en este navegador.</p>
+        <ul id="facts-list" class="facts-list"></ul>
+        <p class="hint" id="facts-count"></p>
+
         <div class="danger-zone">
-          <p class="hint" id="facts-count"></p>
           <div class="row">
             <button type="button" class="pill-btn" id="clear-history">Borrar conversación</button>
-            <button type="button" class="pill-btn" id="clear-facts">Borrar datos guardados</button>
+            <button type="button" class="pill-btn" id="clear-facts">Borrar toda la memoria</button>
           </div>
         </div>
         <p class="hint small" id="app-version"></p>

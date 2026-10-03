@@ -205,3 +205,30 @@ body.kb-open .composer { padding-bottom: 10px; }
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.45;
   color: var(--text);
 }
+
+/* ---------- Tiempo de respuesta y memoria ---------- */
+.meta { margin: 4px 6px 0; font-size: 11px; color: #6f6f7a; letter-spacing: 0.2px; }
+.memory-note {
+  align-self: center; display: flex; align-items: center; gap: 10px;
+  max-width: 92%; font-size: 12.5px; color: var(--muted);
+  background: rgba(111, 220, 140, 0.08); border: 1px solid rgba(111, 220, 140, 0.18);
+  padding: 6px 8px 6px 12px; border-radius: 14px; animation: pop 0.18s ease-out;
+}
+.memory-note .txt { overflow-wrap: anywhere; }
+.memory-note.undone { opacity: 0.6; }
+.link-btn {
+  border: 0; background: rgba(255, 255, 255, 0.08); color: var(--text);
+  font-size: 12px; padding: 5px 10px; border-radius: 10px; cursor: pointer; flex: none;
+}
+.section-title { margin: 24px 0 0; font-size: 15px; font-weight: 700; padding-top: 16px; border-top: 1px solid var(--divider); }
+.facts-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.facts-list li {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface); border-radius: 12px; padding: 8px 6px 8px 12px; font-size: 14px;
+}
+.facts-list li span { flex: 1; overflow-wrap: anywhere; }
+.facts-list li .del {
+  width: 32px; height: 32px; border-radius: 50%; border: 0; flex: none; cursor: pointer;
+  background: transparent; color: var(--muted); font-size: 18px; line-height: 1;
+}
+.facts-list li .del:active { background: rgba(255, 107, 107, 0.2); color: var(--danger); }

@@ -6,21 +6,22 @@ export const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta
 // Modelos con plan gratuito, en orden de preferencia (IDs verificados en
 // ai.google.dev/gemini-api/docs/models, 2026-10). El último que funcionó se prueba primero.
 export const MODELS = [
-  "gemini-3.5-flash",
-  "gemini-3.5-flash-lite",
-  "gemini-3.8-flash",
-  "gemini-3.7-flash",
-  "gemini-3.6-flash",
-  "gemini-3.1-flash-lite",
-  "gemini-flash-latest",
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",
+  "gemini-3.1-flash-lite",   // ~1.2 s, usa vos
+  "gemini-3.8-flash",        // ~2.2 s, el más tico
+  "gemini-flash-latest",     // ~2.0 s
+  "gemini-3.6-flash",        // ~2.5 s
+  "gemini-3.5-flash-lite",   // ~0.6 s (tiende a "usted")
+  "gemini-3.5-flash",        // ~3.1 s
+  "gemini-3.7-flash",        // a veces 503
 ];
+// Modelo rápido para tareas internas (extraer datos para la memoria)
+export const FAST_MODELS = ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-flash-latest"];
 
 const RETRYABLE = [429, 500, 502, 503, 504];
 const RETRY_DELAY_MS = 1500;
 const TIMEOUT_MS = 45000;
 const TOTAL_BUDGET_MS = 60000;
+const STREAM_IDLE_MS = 30000; // máximo sin recibir nada a mitad de una respuesta
 const MAX_OUTPUT_TOKENS = 2048;
 const THINKING_LEVEL = "low";
 
@@ -28,8 +29,13 @@ export const AUTH_LABELS = { header: "header x-goog-api-key", query: "?key=", be
 export const DEFAULT_ASSISTANT_NAME = "Antares";
 
 const SYSTEM_PROMPT_TEMPLATE = (name) =>
-  `Sos ${name}, un asistente virtual personal. Hablás en español de Costa Rica ` +
-  `y tratás al usuario de "vos" (vos podés, mirá, tenés, contame). Tu tono es ` +
+  `Sos ${name}, un asistente virtual personal. Hablás en español de Costa Rica.\n` +
+  `REGLA OBLIGATORIA: tratá SIEMPRE al usuario de "vos" (voseo), en todas las ` +
+  `respuestas sin excepción: vos tenés, vos podés, querés, sabés, mirá, decime, ` +
+  `contame, fijate, tranquilo. NUNCA uses "usted" (ni "le", "su", "puede", "tiene" ` +
+  `dirigidos al usuario) y NUNCA uses "tú" (tienes, puedes, dime). Antes de responder, ` +
+  `revisá que cada verbo dirigido al usuario esté en forma de vos.\n` +
+  `Tu tono es ` +
   `cálido, cercano y relajado, como un amigo que sabe mucho del tema: claro, ` +
   `honesto y con buena onda, sin sonar formal ni robótico. Podés usar alguna ` +
   `expresión tica con naturalidad (pura vida, mae, diay, tuanis), sin exagerar.\n` +
@@ -95,17 +101,61 @@ export class GeminiClient {
   }
 
   // ---------- API pública ----------
-  async ask(userMessage, history, knownFacts, { search = false } = {}) {
+  // onChunk(textoAcumulado) se llama a medida que llega la respuesta (streaming)
+  async ask(userMessage, history, knownFacts, { search = false, onChunk = null } = {}) {
     if (!this.isConfigured()) { this.lastOk = false; return { text: MISSING_KEY_MSG, ok: false, sources: [] }; }
     let system = this.systemPrompt;
     if (knownFacts && knownFacts.length) {
-      system += "\n\nDatos que el usuario te pidió recordar:\n" + knownFacts.map((f) => `- ${f}`).join("\n");
+      system += "\n\nLo que sabés del usuario (usalo con naturalidad cuando sea relevante, " +
+        "sin repetirlo en cada mensaje):\n" + knownFacts.map((f) => `- ${f}`).join("\n");
     }
     if (search) {
       system += "\n\nSi usás resultados de búsqueda, resumilos con tus palabras en texto plano.";
     }
     const messages = [...history, { role: "user", content: userMessage }];
-    return this.callApi(system, messages, { search });
+    return this.callApi(system, messages, { search, onChunk, stream: !!onChunk });
+  }
+
+  // Extrae datos personales duraderos del usuario (para la memoria automática).
+  // Devuelve un array de frases cortas, solo las nuevas.
+  async extractFacts(userText, assistantText, knownFacts = []) {
+    if (!this.isConfigured() || !userText) return [];
+    const system =
+      "Extraés datos personales DURADEROS sobre el usuario a partir de su mensaje: nombre, " +
+      "familia y nombres de familiares o mascotas, dónde vive, trabajo o estudios, gustos y " +
+      "preferencias, fechas importantes (cumpleaños, aniversarios), salud o rutinas relevantes. " +
+      "Ignorá estados pasajeros (\"tengo hambre\"), preguntas, opiniones del asistente y datos de " +
+      "otras personas que no se relacionen con el usuario. Escribí cada dato como frase corta en " +
+      "español, en tercera persona y autocontenida (ej: \"Se llama Freddy\", \"Su hija se llama " +
+      "Evangeline\", \"Le gusta el café negro\"). No repitas datos que ya están en la lista de " +
+      "datos conocidos (aunque estén redactados distinto). Respondé SOLO con JSON: " +
+      "{\"facts\": [\"...\"]}. Si no hay datos nuevos, {\"facts\": []}.";
+    const known = knownFacts.length ? knownFacts.map((f) => `- ${f}`).join("\n") : "(ninguno)";
+    const content = `Datos conocidos:\n${known}\n\nMensaje del usuario:\n${userText}` +
+      (assistantText ? `\n\nRespuesta del asistente (solo contexto):\n${assistantText.slice(0, 600)}` : "");
+    const r = await this.callApi(system, [{ role: "user", content }], {
+      models: FAST_MODELS, json: true, maxTokens: 512, budgetMs: 20000, retries: false, thinking: false,
+    });
+    if (!r.ok) return [];
+    let facts = [];
+    try {
+      const txt = r.text.replace(/^```(json)?/i, "").replace(/```$/, "").trim();
+      const data = JSON.parse(txt);
+      facts = Array.isArray(data) ? data : (data.facts || []);
+    } catch { return []; }
+    const norm = (t) => String(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9ñ ]/g, " ").replace(/\s+/g, " ").trim();
+    const seen = new Set(knownFacts.map(norm));
+    const out = [];
+    for (const f of facts) {
+      if (typeof f !== "string") continue;
+      const clean = f.trim().replace(/\s+/g, " ").slice(0, 160);
+      const n = norm(clean);
+      if (!n || seen.has(n)) continue;
+      seen.add(n);
+      out.push(clean);
+    }
+    return out.slice(0, 5);
   }
 
   async testConnection() {
@@ -175,20 +225,24 @@ export class GeminiClient {
   }
 
   buildRequest(system, messages, model, { auth = "header", thinking = true, search = false,
-                                          maxTokens = MAX_OUTPUT_TOKENS } = {}) {
-    const generationConfig = { maxOutputTokens: maxTokens, temperature: 0.7 };
+                                          maxTokens = MAX_OUTPUT_TOKENS, stream = false, json = false } = {}) {
+    const generationConfig = { maxOutputTokens: maxTokens, temperature: json ? 0.2 : 0.7 };
     if (thinking) generationConfig.thinkingConfig = { thinkingLevel: THINKING_LEVEL };
+    if (json) generationConfig.responseMimeType = "application/json";
     const body = {
       system_instruction: { parts: [{ text: system }] },
       contents: GeminiClient.toContents(messages),
       generationConfig,
     };
     if (search) body.tools = [{ google_search: {} }];
-    let url = `${GEMINI_BASE_URL}/${model}:generateContent`;
+    const params = [];
+    if (stream) params.push("alt=sse");
+    if (auth === "query") params.push("key=" + encodeURIComponent(this.apiKey));
+    const method = stream ? "streamGenerateContent" : "generateContent";
+    const url = `${GEMINI_BASE_URL}/${model}:${method}` + (params.length ? "?" + params.join("&") : "");
     const headers = { "Content-Type": "application/json" };
-    if (auth === "query") url += "?key=" + encodeURIComponent(this.apiKey);
-    else if (auth === "bearer") headers["Authorization"] = "Bearer " + this.apiKey;
-    else headers["x-goog-api-key"] = this.apiKey;
+    if (auth === "bearer") headers["Authorization"] = "Bearer " + this.apiKey;
+    else if (auth !== "query") headers["x-goog-api-key"] = this.apiKey;
     return { url, init: { method: "POST", headers, body: JSON.stringify(body) } };
   }
 
@@ -254,16 +308,61 @@ export class GeminiClient {
     return msg + "\n\nIntentos:\n" + this.attemptsSummaryLines().join("\n");
   }
 
-  async callApi(system, messages, { search = false, maxTokens = MAX_OUTPUT_TOKENS } = {}) {
+  // Lee un stream SSE de Gemini. Devuelve {text, sources, finishReason, blockReason, error}.
+  async readStream(resp, onChunk, resetIdle) {
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "", text = "", finishReason = "", blockReason = "";
+    const sources = [];
+    const handle = (json) => {
+      let data;
+      try { data = JSON.parse(json); } catch { return; }
+      if (data.error) throw new Error(data.error.message || "error en el stream");
+      if (data.promptFeedback && data.promptFeedback.blockReason) blockReason = data.promptFeedback.blockReason;
+      const c = (data.candidates || [])[0];
+      if (!c) return;
+      const parts = (c.content || {}).parts || [];
+      const piece = parts.filter((p) => !p.thought).map((p) => p.text || "").join("");
+      if (c.finishReason) finishReason = c.finishReason;
+      for (const ch of ((c.groundingMetadata || {}).groundingChunks || [])) {
+        if (ch.web && ch.web.uri && !sources.some((x) => x.uri === ch.web.uri)) {
+          sources.push({ uri: ch.web.uri, title: ch.web.title || ch.web.uri });
+        }
+      }
+      if (piece) { text += piece; if (onChunk) { try { onChunk(text); } catch { /* */ } } }
+    };
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      resetIdle();
+      buf += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.search(/\r?\n\r?\n/)) >= 0) {
+        const event = buf.slice(0, idx);
+        buf = buf.slice(idx).replace(/^\r?\n\r?\n/, "");
+        const dataLines = event.split(/\r?\n/).filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim());
+        if (dataLines.length) handle(dataLines.join("\n"));
+      }
+    }
+    if (buf.trim().startsWith("data:")) handle(buf.trim().slice(5).trim());
+    return { text: text.trim(), sources: sources.slice(0, 5), finishReason, blockReason };
+  }
+
+  async callApi(system, messages, { search = false, maxTokens = MAX_OUTPUT_TOKENS, stream = false, onChunk = null,
+                                    models = null, json = false, budgetMs = TOTAL_BUDGET_MS, retries = true,
+                                    thinking: thinkingOpt = true } = {}) {
     this.lastOk = false;
     this.attempts = [];
-    const fail = (text) => ({ text, ok: false, sources: [] });
+    const t0 = performance.now();
+    const done = (r, model) => ({ ...r, model, ms: Math.round(performance.now() - t0) });
+    const fail = (text) => done({ text, ok: false, sources: [] }, "");
     if (!this.isConfigured()) return fail(MISSING_KEY_MSG);
     if (!GeminiClient.toContents(messages).length) return fail("No hay mensaje para enviar.");
 
-    const deadline = performance.now() + TOTAL_BUDGET_MS;
-    const queue = this.modelOrder();
+    const deadline = t0 + budgetMs;
+    const queue = models ? [...models] : this.modelOrder();
     const authOrder = this.authOrder();
+    const internal = !!models; // llamadas internas no cambian el modelo preferido
     let lastCode = null, lastShort = "";
 
     const record = (model, auth, code, msg, usedSearch) => {
@@ -274,20 +373,31 @@ export class GeminiClient {
       const i = queue.findIndex((m) => m.includes("lite"));
       if (i > 0) queue.unshift(queue.splice(i, 1)[0]);
     };
+    const remember = (model, auth) => {
+      this.lastModel = model;
+      if (internal) return;
+      const changed = model !== this.preferredModel || auth !== this.authMethod;
+      this.preferredModel = model;
+      this.authMethod = auth;
+      if (changed && this.onModelOk) {
+        try { this.onModelOk({ model, authMethod: auth, noGrounding: this.noGrounding }); } catch { /* */ }
+      }
+    };
 
     while (queue.length) {
       if (performance.now() > deadline) { record("(resto)", "-", "-", "se agotó el tiempo total", false); break; }
       const model = queue.shift();
-      let authI = 0, retried = false, thinking = true;
+      let authI = 0, retried = false, thinking = thinkingOpt;
       let useSearch = search && !this.noGrounding[model];
       for (;;) {
         const remaining = deadline - performance.now();
         if (remaining < 3000) break;
         const auth = authOrder[authI];
-        const { url, init } = this.buildRequest(system, messages, model, { auth, thinking, search: useSearch, maxTokens });
+        const { url, init } = this.buildRequest(system, messages, model,
+          { auth, thinking, search: useSearch, maxTokens, stream, json });
         const ctrl = new AbortController();
         const tmo = Math.min(TIMEOUT_MS, remaining);
-        const timer = setTimeout(() => ctrl.abort(), tmo);
+        let timer = setTimeout(() => ctrl.abort(), tmo);
         let resp;
         try {
           resp = await fetch(url, { ...init, signal: ctrl.signal });
@@ -302,6 +412,41 @@ export class GeminiClient {
             "No pude conectarme a Gemini. Revisá tu conexión a internet" +
             (navigator.onLine === false ? " (estás sin conexión)." : ".")));
         }
+
+        if (resp.ok && stream && resp.body) {
+          // Respuesta en streaming: los errores después del primer texto ya no cambian de modelo
+          let partial = "";
+          try {
+            const st = await this.readStream(resp, (t) => { partial = t; onChunk && onChunk(t); }, () => {
+              clearTimeout(timer);
+              timer = setTimeout(() => ctrl.abort(), STREAM_IDLE_MS);
+            });
+            clearTimeout(timer);
+            if (st.text) {
+              record(model, auth, 200, "OK (stream)", useSearch);
+              this.lastOk = true;
+              remember(model, auth);
+              return done({ text: st.text, ok: true, sources: st.sources }, model);
+            }
+            const msg = st.blockReason || st.finishReason === "SAFETY"
+              ? "Gemini bloqueó la respuesta por seguridad. Probá reformular la pregunta."
+              : "Gemini no devolvió ninguna respuesta. Probá de nuevo.";
+            record(model, auth, 200, `vacío ${st.finishReason || st.blockReason || ""}`.trim(), useSearch);
+            if (st.blockReason || st.finishReason === "SAFETY") return fail(msg);
+            break; // respuesta vacía: probar otro modelo
+          } catch (e) {
+            clearTimeout(timer);
+            if (partial) {
+              record(model, auth, 200, "stream cortado", useSearch);
+              this.lastOk = true;
+              remember(model, auth);
+              return done({ text: partial + "\n\n(La respuesta se cortó por un problema de conexión.)", ok: true, sources: [] }, model);
+            }
+            record(model, auth, e.name === "AbortError" ? "timeout" : "stream", String(e.message || e).slice(0, 150), useSearch);
+            lastCode = 504; promoteLite(); break;
+          }
+        }
+
         let bodyText = "";
         try { bodyText = await resp.text(); } catch { bodyText = ""; }
         clearTimeout(timer);
@@ -312,16 +457,8 @@ export class GeminiClient {
           const r = GeminiClient.parseResponse(data);
           record(model, auth, 200, r.ok ? "OK" : r.text.slice(0, 150), useSearch);
           this.lastOk = r.ok;
-          if (r.ok) {
-            this.lastModel = model;
-            const changed = model !== this.preferredModel || auth !== this.authMethod;
-            this.preferredModel = model;
-            this.authMethod = auth;
-            if (changed && this.onModelOk) {
-              try { this.onModelOk({ model, authMethod: auth, noGrounding: this.noGrounding }); } catch { /* */ }
-            }
-          }
-          return r;
+          if (r.ok) remember(model, auth);
+          return done(r, model);
         }
 
         const code = resp.status;
@@ -338,12 +475,12 @@ export class GeminiClient {
         if (useSearch && code >= 400 && code < 500 && code !== 404) {
           useSearch = false;
           this.noGrounding[model] = true;
-          if (this.onModelOk) { try { this.onModelOk({ noGrounding: this.noGrounding }); } catch { /* */ } }
+          if (this.onModelOk && !internal) { try { this.onModelOk({ noGrounding: this.noGrounding }); } catch { /* */ } }
           continue;
         }
         if (GeminiClient.isModelUnavailable(code, short)) break;
         if (code === 504) { promoteLite(); break; }
-        if (RETRYABLE.includes(code) && !retried) { retried = true; await sleep(RETRY_DELAY_MS); continue; }
+        if (RETRYABLE.includes(code) && !retried && retries) { retried = true; await sleep(RETRY_DELAY_MS); continue; }
         if (RETRYABLE.includes(code)) break;
         return fail(this.withSummary(GeminiClient.httpErrorMessage(code, short)));
       }
