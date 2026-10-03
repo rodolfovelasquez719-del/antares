@@ -101,7 +101,8 @@ export class GeminiClient {
 
   // ---------- API pública ----------
   // onChunk(textoAcumulado) se llama a medida que llega la respuesta (streaming)
-  async ask(userMessage, history, knownFacts, { search = false, onChunk = null } = {}) {
+  // media: [{mime, data}] (inline base64) o [{mime, fileUri}] (Files API)
+  async ask(userMessage, history, knownFacts, { search = false, onChunk = null, media = null } = {}) {
     if (!this.isConfigured()) { this.lastOk = false; return { text: MISSING_KEY_MSG, ok: false, sources: [] }; }
     let system = this.systemPrompt;
     if (knownFacts && knownFacts.length) {
@@ -111,8 +112,16 @@ export class GeminiClient {
     if (search) {
       system += "\n\nSi usa resultados de búsqueda, resúmalos con sus palabras en texto plano.";
     }
-    const messages = [...history, { role: "user", content: userMessage }];
-    return this.callApi(system, messages, { search, onChunk, stream: !!onChunk });
+    const hasMedia = !!(media && media.length);
+    if (hasMedia) {
+      system += "\n\nEl usuario adjuntó fotos o videos: descríbalos o analícelos según lo que pida, " +
+        "con precisión y sin inventar detalles que no se vean.";
+    }
+    const messages = [...history, { role: "user", content: userMessage, media: hasMedia ? media : undefined }];
+    return this.callApi(system, messages, {
+      search: search && !hasMedia, onChunk, stream: !!onChunk,
+      ...(hasMedia ? { timeoutMs: 120000, budgetMs: 240000 } : {}),
+    });
   }
 
   // Extrae datos personales duraderos del usuario (para la memoria automática).
@@ -195,12 +204,19 @@ export class GeminiClient {
     const contents = [];
     for (const m of messages) {
       const text = String(m.content || "").trim();
-      if (!text) continue;
+      const media = (m.media || []).filter((x) => x && x.mime && (x.data || x.fileUri)).map((x) => x.fileUri
+        ? { file_data: { mime_type: x.mime, file_uri: x.fileUri } }
+        : { inline_data: { mime_type: x.mime, data: x.data } });
+      if (!text && !media.length) continue;
       const role = (m.role === "assistant" || m.role === "model") ? "model" : "user";
-      if (contents.length && contents[contents.length - 1].role === role) {
-        contents[contents.length - 1].parts[0].text += "\n\n" + text;
+      const last = contents[contents.length - 1];
+      if (last && last.role === role) {
+        const tp = last.parts.find((p) => "text" in p);
+        if (text) { if (tp) tp.text += "\n\n" + text; else last.parts.push({ text }); }
+        last.parts.unshift(...media);
       } else {
-        contents.push({ role, parts: [{ text }] });
+        // las fotos/videos van antes del texto (recomendado por Gemini)
+        contents.push({ role, parts: [...media, ...(text ? [{ text }] : [])] });
       }
     }
     while (contents.length && contents[0].role !== "user") contents.shift();
@@ -348,11 +364,12 @@ export class GeminiClient {
   }
 
   async callApi(system, messages, { search = false, maxTokens = MAX_OUTPUT_TOKENS, stream = false, onChunk = null,
-                                    models = null, json = false, budgetMs = TOTAL_BUDGET_MS, retries = true,
+                                    models = null, json = false, budgetMs = TOTAL_BUDGET_MS, retries = true, timeoutMs = TIMEOUT_MS,
                                     thinking: thinkingOpt = true } = {}) {
     this.lastOk = false;
     this.attempts = [];
     const t0 = performance.now();
+    const hasMedia = messages.some((m) => m.media && m.media.length);
     const done = (r, model) => ({ ...r, model, ms: Math.round(performance.now() - t0) });
     const fail = (text) => done({ text, ok: false, sources: [] }, "");
     if (!this.isConfigured()) return fail(MISSING_KEY_MSG);
@@ -395,7 +412,7 @@ export class GeminiClient {
         const { url, init } = this.buildRequest(system, messages, model,
           { auth, thinking, search: useSearch, maxTokens, stream, json });
         const ctrl = new AbortController();
-        const tmo = Math.min(TIMEOUT_MS, remaining);
+        const tmo = Math.min(timeoutMs, remaining);
         let timer = setTimeout(() => ctrl.abort(), tmo);
         let resp;
         try {
@@ -478,6 +495,8 @@ export class GeminiClient {
           continue;
         }
         if (GeminiClient.isModelUnavailable(code, short)) break;
+        // con fotos/videos, un 400 puede ser un formato que este modelo no acepta: probar otro
+        if (hasMedia && code === 400) break;
         if (code === 504) { promoteLite(); break; }
         if (RETRYABLE.includes(code) && !retried && retries) { retried = true; await sleep(RETRY_DELAY_MS); continue; }
         if (RETRYABLE.includes(code)) break;

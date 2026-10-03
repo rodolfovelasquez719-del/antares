@@ -36,9 +36,9 @@ export const memory = {
     const h = load(K_HISTORY, []);
     return limit ? h.slice(-limit) : h;
   },
-  addMessage(role, content) {
+  addMessage(role, content, extra) {
     const h = load(K_HISTORY, []);
-    h.push({ role, content, ts: new Date().toISOString() });
+    h.push({ role, content, ts: new Date().toISOString(), ...(extra || {}) });
     save(K_HISTORY, h.slice(-MAX_HISTORY));
   },
   clearHistory() { save(K_HISTORY, []); },

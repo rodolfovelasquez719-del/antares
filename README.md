@@ -40,6 +40,10 @@ Al publicar una versión nueva, cambiá `VERSION` en `sw.js` para que se actuali
   (recuerda el último que funcionó). Acepta keys `AQ.` (auth keys nuevas) y `AIza`.
 - Búsqueda web con la herramienta `google_search` de Gemini (grounding) cuando la pregunta
   parece necesitar info actual. Si tu plan/modelo no la permite, sigue sin búsqueda.
+- Fotos y videos: botón de clip con "Tomar foto", "Grabar video" y "Subir de la galería"
+  (hasta 4). Las fotos se comprimen en el navegador (máx 1600 px, JPEG 0.85); los videos
+  van dentro de la petición si caben (~18 MB) y si no se suben a la Files API de Gemini.
+  En el historial solo se guardan miniaturas pequeñas.
 - Respuestas en streaming (el texto aparece mientras se genera) con el tiempo de respuesta
   y el modelo usado debajo de cada burbuja.
 - Memoria automática: después de cada mensaje, un modelo rápido detecta datos duraderos sobre

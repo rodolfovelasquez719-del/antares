@@ -33,8 +33,26 @@
 
       <main id="messages" class="messages" aria-live="polite"></main>
 
+      <div id="attachments" class="attachments" hidden></div>
       <form id="composer" class="composer" autocomplete="off">
+        <div id="attach-menu" class="attach-menu" hidden role="menu">
+          <button type="button" role="menuitem" data-pick="photo">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+            Tomar foto</button>
+          <button type="button" role="menuitem" data-pick="video">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="3" y="6.5" width="12.5" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m15.5 10.5 5-3v9l-5-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+            Grabar video</button>
+          <button type="button" role="menuitem" data-pick="gallery">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="1.7" fill="currentColor"/><path d="m4.5 17.5 5-5 4 4 2.5-2.5 3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+            Subir de la galería</button>
+        </div>
+        <input type="file" id="pick-photo" accept="image/*" capture="environment" hidden>
+        <input type="file" id="pick-video" accept="video/*" capture="environment" hidden>
+        <input type="file" id="pick-gallery" accept="image/*,video/*" multiple hidden>
         <div class="pill">
+          <button type="button" class="icon-btn attach" id="attach-btn" aria-label="Adjuntar foto o video" aria-haspopup="menu" aria-expanded="false">
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M20.5 11.5 12.4 19.6a5 5 0 0 1-7.07-7.07l8.13-8.13a3.33 3.33 0 0 1 4.71 4.71l-8.14 8.13a1.67 1.67 0 0 1-2.36-2.36l7.43-7.42" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
           <textarea id="msg-input" rows="1" placeholder="Escríbale a Antares..." enterkeyhint="send" aria-label="Mensaje"></textarea>
           <button type="button" class="icon-btn mic" id="mic-btn" aria-label="Hablar" hidden>
             <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>

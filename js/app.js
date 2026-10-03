@@ -3,8 +3,10 @@ import { GeminiClient, DEFAULT_ASSISTANT_NAME, needsSearch } from "./gemini.js";
 import { memory, requestPersistence } from "./memory.js";
 import { looksLikeImportantFact, buildConfirmationQuestion } from "./facts.js";
 import { Voice } from "./voice.js";
+import { prepareFile, toGeminiMedia, formatBytes, MAX_ATTACHMENTS } from "./media.js";
 
-const APP_VERSION = "1.2.0";
+const APP_VERSION = "1.3.0";
+const DEFAULT_MEDIA_PROMPT = "Describa lo que ve.";
 const $ = (id) => document.getElementById(id);
 
 const els = {
@@ -21,6 +23,8 @@ const els = {
   save: $("save-settings"), settingsStatus: $("settings-status"),
   factsCount: $("facts-count"), clearHistory: $("clear-history"), clearFacts: $("clear-facts"),
   version: $("app-version"),
+  attachBtn: $("attach-btn"), attachMenu: $("attach-menu"), attachments: $("attachments"),
+  pickPhoto: $("pick-photo"), pickVideo: $("pick-video"), pickGallery: $("pick-gallery"),
   modal: $("modal"), modalBody: $("modal-body"), modalCopy: $("modal-copy"), modalClose: $("modal-close"),
 };
 
@@ -106,12 +110,43 @@ function appendLinkified(parent, text) {
   if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
 }
 
-function renderBubble(role, text, { error = false, sources = [], meta = "" } = {}) {
+// media: [{kind: "image"|"video", url?, thumb?}] (url = archivo completo de esta sesión; thumb = miniatura guardada)
+function renderMedia(b, media) {
+  const grid = document.createElement("div");
+  grid.className = "bubble-media" + (media.length === 1 ? " single" : "");
+  for (const m of media) {
+    const item = document.createElement("div");
+    item.className = "media-item";
+    if (m.kind === "video" && m.url) {
+      const v = document.createElement("video");
+      v.src = m.url; v.controls = true; v.playsInline = true; v.preload = "metadata"; v.muted = true;
+      if (m.thumb) v.poster = m.thumb;
+      item.appendChild(v);
+    } else if (m.url || m.thumb) {
+      const img = document.createElement("img");
+      img.src = m.url || m.thumb; img.alt = m.kind === "video" ? "Video adjunto" : "Foto adjunta";
+      item.appendChild(img);
+      if (m.kind === "video") { const bd = document.createElement("span"); bd.className = "badge"; bd.textContent = "▶ video"; item.appendChild(bd); }
+    } else {
+      const ph = document.createElement("div");
+      ph.className = "ph"; ph.textContent = m.kind === "video" ? "[video]" : "[foto]";
+      item.appendChild(ph);
+    }
+    grid.appendChild(item);
+  }
+  b.appendChild(grid);
+}
+
+function renderBubble(role, text, { error = false, sources = [], meta = "", media = null } = {}) {
   const wrap = document.createElement("div");
   wrap.className = `msg ${role === "user" ? "user" : "assistant"}${error ? " error" : ""}`;
   const b = document.createElement("div");
   b.className = "bubble";
-  appendLinkified(b, text);
+  if (media && media.length) {
+    renderMedia(b, media);
+    if (!text) b.classList.add("media-only");
+  }
+  if (text) appendLinkified(b, text);
   wrap.appendChild(b);
   if (sources && sources.length) {
     const s = document.createElement("div");
@@ -137,10 +172,11 @@ function addMeta(wrap, text) {
   wrap.appendChild(m);
 }
 
-function formatMeta(r, firstMs) {
-  const secs = (r.ms / 1000).toFixed(1);
+function formatMeta(r, uploadMs = 0) {
+  const secs = ((r.ms + uploadMs) / 1000).toFixed(1);
   const model = (r.model || "").replace(/^gemini-/, "");
-  return `${secs} s${model ? " · " + model : ""}`;
+  const up = uploadMs >= 1000 ? ` (incl. ${(uploadMs / 1000).toFixed(1)} s de subida)` : "";
+  return `${secs} s${up}${model ? " · " + model : ""}`;
 }
 
 // Burbuja que se va llenando mientras llega el streaming
@@ -200,7 +236,7 @@ function renderConfirm(factText) {
   const actions = document.createElement("div");
   actions.className = "confirm-actions";
   const yes = document.createElement("button");
-  yes.className = "pill-btn primary"; yes.textContent = "Sí, guardalo";
+  yes.className = "pill-btn primary"; yes.textContent = "Sí, guárdelo";
   const no = document.createElement("button");
   no.className = "pill-btn"; no.textContent = "No";
   const done = (accepted) => {
@@ -243,22 +279,48 @@ function autosize() {
   els.input.style.height = Math.min(els.input.scrollHeight, 132) + "px";
 }
 
-async function sendMessage(text) {
+async function sendMessage(text, items = []) {
   text = (text || "").trim();
-  if (!text) return;
-  renderBubble("user", text); // la burbuja aparece antes de llamar a la API
+  items = items || [];
+  if (!text && !items.length) return;
+  const label = items.map((i) => (i.kind === "video" ? "[video]" : "[foto]")).join(" ");
+  const prompt = text || (items.length ? DEFAULT_MEDIA_PROMPT : "");
+  // la burbuja aparece antes de llamar a la API
+  renderBubble("user", text, { media: items.map((i) => ({ kind: i.kind, url: i.url, thumb: i.thumb })) });
   let typing = null, stream = null;
   try {
-    const history = memory.getHistory(20);
+    // al modelo solo le mandamos el texto del historial (las miniaturas guardadas no)
+    const history = memory.getHistory(20).map(({ role, content }) => ({ role, content }));
     const facts = memory.getFacts();
-    memory.addMessage("user", text);
-    if (!config.autoLearn && looksLikeImportantFact(text)) { pendingFact = text; renderConfirm(text); }
+    // En el historial solo guardamos texto + miniaturas pequeñas, nunca el archivo completo
+    const thumbs = items.map((i) => ({ kind: i.kind, thumb: i.thumb && i.thumb.length < 16000 ? i.thumb : "" }));
+    memory.addMessage("user", [label, prompt].filter(Boolean).join(" "), items.length ? { media: thumbs } : undefined);
+    if (text && !config.autoLearn && looksLikeImportantFact(text)) { pendingFact = text; renderConfirm(text); }
 
     typing = showTyping();
     pendingCount++;
-    const search = !!config.webSearch && needsSearch(text);
-    const r = await client.ask(text, history, facts, {
-      search,
+    let media = null, uploadMs = 0;
+    if (items.length && client.isConfigured()) {
+      const tUp = performance.now();
+      try {
+        const res = await toGeminiMedia(config.geminiApiKey, items, {
+          onProgress: (st) => { els.status.textContent = st === "subiendo" ? "Subiendo video…" : "Gemini está procesando el video…"; },
+        });
+        media = res.media;
+        uploadMs = Math.round(performance.now() - tUp);
+      } catch (e) {
+        console.warn("Antares media:", e);
+        hideTyping(typing); typing = null;
+        renderBubble("assistant", `No pude enviar ${items.length > 1 ? "los archivos" : (items[0].kind === "video" ? "el video" : "la foto")}: ${e.message || e}. ` +
+          "Revise su conexión e intente de nuevo, o pruebe con un video más corto.", { error: true });
+        return;
+      } finally {
+        if (typing) els.status.textContent = `${assistantName()} está escribiendo…`;
+      }
+    }
+    const search = !media && !!config.webSearch && needsSearch(prompt);
+    const r = await client.ask(prompt, history, facts, {
+      search, media,
       onChunk: (partial) => {
         if (!stream) { stream = createStreamingBubble(typing); typing = null; }
         const near = isNearBottom();
@@ -269,16 +331,16 @@ async function sendMessage(text) {
     hideTyping(typing); typing = null;
     if (stream) {
       // reemplazamos la burbuja parcial por la final (con links y fuentes)
-      const final = renderBubble("assistant", r.text, { error: !r.ok, sources: r.sources, meta: r.ok ? formatMeta(r) : "" });
+      const final = renderBubble("assistant", r.text, { error: !r.ok, sources: r.sources, meta: r.ok ? formatMeta(r, uploadMs) : "" });
       stream.wrap.replaceWith(final);
     } else {
-      renderBubble("assistant", r.text, { error: !r.ok, sources: r.sources, meta: r.ok ? formatMeta(r) : "" });
+      renderBubble("assistant", r.text, { error: !r.ok, sources: r.sources, meta: r.ok ? formatMeta(r, uploadMs) : "" });
     }
     hideTyping(null);
     if (r.ok) {
       memory.addMessage("assistant", r.text); // los errores no se guardan en el historial
       if (config.speakReplies) voice.speak(r.text);
-      autoLearn(text, r.text); // en segundo plano, no bloquea
+      if (text) autoLearn(text, r.text); // en segundo plano, no bloquea
     }
   } catch (e) {
     console.error(e);
@@ -290,14 +352,96 @@ async function sendMessage(text) {
   }
 }
 
+// ---------- Adjuntar fotos y videos ----------
+let noticeTimer = null;
+function chatNotice(text) {
+  els.status.textContent = text;
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => { if (!pendingCount) els.status.textContent = "Asistente personal"; }, 3500);
+}
+
+let attachments = []; // [{id, loading, kind, mime, blob, size, thumb, url, name}]
+
+function renderAttachments() {
+  els.attachments.hidden = attachments.length === 0;
+  els.attachments.replaceChildren();
+  for (const a of attachments) {
+    const box = document.createElement("div");
+    box.className = "att" + (a.loading ? " loading" : "");
+    if (!a.loading) {
+      if (a.thumb || a.kind === "image") {
+        const img = document.createElement("img");
+        img.src = a.thumb || a.url; img.alt = a.kind === "video" ? "Video" : "Foto";
+        box.appendChild(img);
+      } else box.append("video");
+      if (a.kind === "video") {
+        const bd = document.createElement("span"); bd.className = "badge"; bd.textContent = "▶ " + formatBytes(a.size);
+        box.appendChild(bd);
+      }
+    }
+    const rm = document.createElement("button");
+    rm.type = "button"; rm.className = "rm"; rm.textContent = "×"; rm.setAttribute("aria-label", "Quitar");
+    rm.onclick = () => {
+      attachments = attachments.filter((x) => x !== a);
+      if (a.url) URL.revokeObjectURL(a.url);
+      renderAttachments();
+    };
+    box.appendChild(rm);
+    els.attachments.appendChild(box);
+  }
+}
+
+async function addFiles(fileList) {
+  const files = [...(fileList || [])];
+  if (!files.length) return;
+  const free = MAX_ATTACHMENTS - attachments.length;
+  if (free <= 0) { chatNotice(`Puede adjuntar máximo ${MAX_ATTACHMENTS} archivos por mensaje.`); return; }
+  if (files.length > free) chatNotice(`Solo se agregaron ${free}: el máximo es ${MAX_ATTACHMENTS} por mensaje.`);
+  const tasks = files.slice(0, free).map(async (f) => {
+    const slot = { loading: true };
+    attachments.push(slot); renderAttachments();
+    try {
+      Object.assign(slot, await prepareFile(f), { loading: false });
+    } catch (e) {
+      attachments = attachments.filter((x) => x !== slot);
+      renderBubble("assistant", `No pude usar "${f.name || "el archivo"}": ${e.message || e}`, { error: true });
+    }
+    renderAttachments();
+  });
+  await Promise.all(tasks);
+}
+
+function setMenu(open) {
+  els.attachMenu.hidden = !open;
+  els.attachBtn.setAttribute("aria-expanded", String(open));
+}
+els.attachBtn.addEventListener("click", () => setMenu(els.attachMenu.hidden));
+document.addEventListener("click", (ev) => {
+  if (!els.attachMenu.hidden && !els.attachMenu.contains(ev.target) && !els.attachBtn.contains(ev.target)) setMenu(false);
+});
+const pickers = { photo: els.pickPhoto, video: els.pickVideo, gallery: els.pickGallery };
+els.attachMenu.addEventListener("click", (ev) => {
+  const btn = ev.target.closest("button[data-pick]");
+  if (!btn) return;
+  setMenu(false);
+  pickers[btn.dataset.pick].click();
+});
+for (const input of Object.values(pickers)) {
+  input.addEventListener("change", () => { addFiles(input.files); input.value = ""; });
+}
+
 els.form.addEventListener("submit", (ev) => {
   ev.preventDefault();
   voice.unlock(); // gesto del usuario: habilita la voz en iOS
   const text = els.input.value;
-  if (!text.trim()) return;
+  if (attachments.some((a) => a.loading)) { chatNotice("Espere un momento, todavía estoy preparando los archivos…"); return; }
+  const items = attachments;
+  if (!text.trim() && !items.length) return;
   els.input.value = "";
+  attachments = [];
+  renderAttachments();
   autosize();
-  sendMessage(text);
+  sendMessage(text, items);
 });
 els.input.addEventListener("input", autosize);
 els.input.addEventListener("keydown", (ev) => {
@@ -473,7 +617,7 @@ function init() {
   applyProfileToUI();
   els.version.textContent = `Antares Web ${APP_VERSION} · sus datos y su key se guardan solo en este navegador`;
   const history = memory.getHistory(40);
-  for (const m of history) renderBubble(m.role, m.content);
+  for (const m of history) renderBubble(m.role, m.content, { media: m.media });
   if (!history.length) welcome();
   syncViewport();
   scrollToBottom(false);

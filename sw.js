@@ -1,6 +1,6 @@
 // Antares Web - Service worker: guarda la app para que abra rápido y sin conexión.
 // Las llamadas a Gemini (otro dominio) NO se interceptan ni se guardan.
-const VERSION = "antares-v1.2.0";
+const VERSION = "antares-v1.3.0";
 const SHELL = [
   "./",
   "./index.html",
@@ -11,6 +11,7 @@ const SHELL = [
   "./js/memory.js",
   "./js/facts.js",
   "./js/voice.js",
+  "./js/media.js",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/icon-maskable-512.png",
