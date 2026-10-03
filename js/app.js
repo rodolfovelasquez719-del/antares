@@ -4,7 +4,7 @@ import { memory, requestPersistence } from "./memory.js";
 import { looksLikeImportantFact, buildConfirmationQuestion } from "./facts.js";
 import { Voice } from "./voice.js";
 
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.2.0";
 const $ = (id) => document.getElementById(id);
 
 const els = {
@@ -25,6 +25,8 @@ const els = {
 };
 
 let config = memory.getConfig();
+// v1.2.0: nuevo orden de modelos (3.5-flash-lite primero) -> olvidar el modelo preferido viejo una vez
+if (config.modelOrderRev !== 2) { config.geminiModel = ""; config.modelOrderRev = 2; memory.saveConfig(config); }
 let client = null;
 let pendingFact = null;
 let pendingCount = 0;
@@ -57,7 +59,7 @@ function applyProfileToUI() {
   const name = assistantName();
   els.title.textContent = name;
   els.avatar.textContent = (name[0] || "A").toUpperCase();
-  els.input.placeholder = `Escribile a ${name}...`;
+  els.input.placeholder = `Escríbale a ${name}...`;
   document.title = name;
 }
 
@@ -206,7 +208,7 @@ function renderConfirm(factText) {
     const fact = pendingFact; pendingFact = null;
     if (!fact) return;
     if (accepted) { memory.saveFact(fact); renderBubble("assistant", "Listo, lo guardé para recordarlo."); }
-    else renderBubble("assistant", "Dale, no lo guardo.");
+    else renderBubble("assistant", "Entendido, no lo guardo.");
   };
   yes.onclick = () => done(true);
   no.onclick = () => done(false);
@@ -317,7 +319,7 @@ if (voice.canListen) {
       onFinal: (t) => { els.input.value = ""; autosize(); sendMessage(t); },
       onError: (err) => {
         if (err === "not-allowed" || err === "service-not-allowed") {
-          renderBubble("assistant", "No tengo permiso para usar el micrófono. Habilitalo en los ajustes del navegador.", { error: true });
+          renderBubble("assistant", "No tengo permiso para usar el micrófono. Habilítelo en los ajustes del navegador.", { error: true });
         }
       },
     });
@@ -344,7 +346,7 @@ function renderFactsList() {
     li.append(span, del);
     els.factsList.appendChild(li);
   }
-  els.factsCount.textContent = items.length ? `${items.length} dato${items.length === 1 ? "" : "s"} guardado${items.length === 1 ? "" : "s"}` : "Todavía no recuerdo nada sobre vos.";
+  els.factsCount.textContent = items.length ? `${items.length} dato${items.length === 1 ? "" : "s"} guardado${items.length === 1 ? "" : "s"}` : "Todavía no recuerdo nada sobre usted.";
 }
 const updateFactsCount = renderFactsList;
 
@@ -386,7 +388,7 @@ els.pasteKey.addEventListener("click", async () => {
     else setStatus("El portapapeles está vacío", true);
   } catch {
     els.apiKey.focus();
-    setStatus("Tu navegador no deja pegar con el botón: mantené presionado el campo y elegí Pegar.", true);
+    setStatus("Su navegador no deja pegar con el botón: mantenga presionado el campo y elija Pegar.", true);
   }
 });
 els.apiKey.addEventListener("blur", () => { els.apiKey.value = els.apiKey.value.replace(/\s+/g, ""); });
@@ -442,7 +444,7 @@ els.clearHistory.addEventListener("click", () => {
   setStatus("Conversación borrada");
 });
 els.clearFacts.addEventListener("click", () => {
-  if (!confirm("¿Borrar todo lo que Antares recuerda de vos?")) return;
+  if (!confirm("¿Borrar todo lo que Antares recuerda de usted?")) return;
   memory.clearFacts();
   updateFactsCount();
   setStatus("Memoria borrada");
@@ -463,13 +465,13 @@ els.modalCopy.addEventListener("click", async () => {
 
 // ---------- Inicio ----------
 function welcome() {
-  renderBubble("assistant", `¡Hola! Soy ${assistantName()}. ¿En qué te ayudo hoy?`);
+  renderBubble("assistant", `¡Hola! Soy ${assistantName()}. ¿En qué le puedo ayudar hoy?`);
 }
 
 function init() {
   client = makeClient();
   applyProfileToUI();
-  els.version.textContent = `Antares Web ${APP_VERSION} · tus datos y tu key se guardan solo en este navegador`;
+  els.version.textContent = `Antares Web ${APP_VERSION} · sus datos y su key se guardan solo en este navegador`;
   const history = memory.getHistory(40);
   for (const m of history) renderBubble(m.role, m.content);
   if (!history.length) welcome();

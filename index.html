@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <title>Antares</title>
-  <meta name="description" content="Antares, tu asistente personal con Gemini.">
+  <meta name="description" content="Antares, su asistente personal con Gemini.">
   <meta name="theme-color" content="#16161a">
   <meta name="color-scheme" content="dark">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -35,7 +35,7 @@
 
       <form id="composer" class="composer" autocomplete="off">
         <div class="pill">
-          <textarea id="msg-input" rows="1" placeholder="Escribile a Antares..." enterkeyhint="send" aria-label="Mensaje"></textarea>
+          <textarea id="msg-input" rows="1" placeholder="Escríbale a Antares..." enterkeyhint="send" aria-label="Mensaje"></textarea>
           <button type="button" class="icon-btn mic" id="mic-btn" aria-label="Hablar" hidden>
             <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
           </button>
@@ -57,8 +57,8 @@
 
       <div class="settings-body">
         <label class="field-label" for="api-key">API key de Gemini (Google AI Studio)</label>
-        <p class="hint">Conseguila gratis en <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. Se guarda solo en este navegador.</p>
-        <input id="api-key" class="field" type="text" placeholder="Pegá acá tu API key de Gemini"
+        <p class="hint">Consígala gratis en <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. Se guarda solo en este navegador.</p>
+        <input id="api-key" class="field" type="text" placeholder="Pegue aquí su API key de Gemini"
                autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
         <div class="row">
           <button type="button" class="pill-btn" id="toggle-key">Ocultar</button>
@@ -70,7 +70,7 @@
         <label class="field-label" for="assistant-name">Nombre del asistente</label>
         <input id="assistant-name" class="field" type="text" placeholder="Antares" maxlength="40">
 
-        <label class="field-label" for="user-name">Tu nombre (cómo te va a llamar)</label>
+        <label class="field-label" for="user-name">Su nombre (cómo lo va a llamar)</label>
         <input id="user-name" class="field" type="text" placeholder="Ej: Freddy" maxlength="40">
 
         <label class="field-label" for="personality">Personalidad / descripción (opcional)</label>
@@ -84,7 +84,7 @@
 
         <h2 class="section-title">Memoria</h2>
         <label class="switch-row"><input type="checkbox" id="auto-learn"> <span>Aprender datos sobre mí automáticamente</span></label>
-        <p class="hint">Lo que Antares recuerda de vos. Se guarda solo en este navegador.</p>
+        <p class="hint">Lo que Antares recuerda de usted. Se guarda solo en este navegador.</p>
         <ul id="facts-list" class="facts-list"></ul>
         <p class="hint" id="facts-count"></p>
 

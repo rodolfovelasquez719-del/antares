@@ -35,16 +35,16 @@ Al publicar una versión nueva, cambiá `VERSION` en `sw.js` para que se actuali
 - Chat estilo asistente moderno (burbujas, indicador de "escribiendo", auto-scroll).
 - Configuración: API key (Mostrar/Ocultar, Pegar, Borrar), "Probar conexión" con diagnóstico
   por intento, nombre del asistente, tu nombre, personalidad, voz on/off, búsqueda on/off.
-- Gemini REST desde el navegador (orden: 3.1-flash-lite, 3.8-flash, flash-latest, 3.6-flash,
-  3.5-flash-lite, 3.5-flash, 3.7-flash), con reintentos y cambio automático de modelo
+- Gemini REST desde el navegador (orden: 3.5-flash-lite, 3.1-flash-lite, 3.8-flash, flash-latest,
+  3.6-flash, 3.5-flash, 3.7-flash), con reintentos y cambio automático de modelo
   (recuerda el último que funcionó). Acepta keys `AQ.` (auth keys nuevas) y `AIza`.
 - Búsqueda web con la herramienta `google_search` de Gemini (grounding) cuando la pregunta
   parece necesitar info actual. Si tu plan/modelo no la permite, sigue sin búsqueda.
 - Respuestas en streaming (el texto aparece mientras se genera) con el tiempo de respuesta
   y el modelo usado debajo de cada burbuja.
 - Memoria automática: después de cada mensaje, un modelo rápido detecta datos duraderos sobre
-  vos (nombre, familia, gustos, fechas...) y los guarda mostrando "Guardé: …" con botón
-  Deshacer. En Configuración → Memoria podés ver y borrar cada dato o apagar el aprendizaje
+  usted (nombre, familia, gustos, fechas...) y los guarda mostrando "Guardé: …" con botón
+  Deshacer. En Configuración → Memoria puede ver y borrar cada dato o apagar el aprendizaje
   (si está apagado, pregunta antes de guardar como antes).
 - Voz: lectura en voz alta (Web Speech, es-CR → es) y dictado donde el navegador lo soporte
   (el botón del micrófono se oculta si no hay soporte).

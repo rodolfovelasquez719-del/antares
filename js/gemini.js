@@ -6,16 +6,16 @@ export const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta
 // Modelos con plan gratuito, en orden de preferencia (IDs verificados en
 // ai.google.dev/gemini-api/docs/models, 2026-10). El último que funcionó se prueba primero.
 export const MODELS = [
-  "gemini-3.1-flash-lite",   // ~1.2 s, usa vos
-  "gemini-3.8-flash",        // ~2.2 s, el más tico
+  "gemini-3.5-flash-lite",   // ~0.6 s, usa "usted" con naturalidad
+  "gemini-3.1-flash-lite",   // ~1.2 s
+  "gemini-3.8-flash",        // ~2.2 s
   "gemini-flash-latest",     // ~2.0 s
   "gemini-3.6-flash",        // ~2.5 s
-  "gemini-3.5-flash-lite",   // ~0.6 s (tiende a "usted")
   "gemini-3.5-flash",        // ~3.1 s
   "gemini-3.7-flash",        // a veces 503
 ];
 // Modelo rápido para tareas internas (extraer datos para la memoria)
-export const FAST_MODELS = ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-flash-latest"];
+export const FAST_MODELS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-flash-latest"];
 
 const RETRYABLE = [429, 500, 502, 503, 504];
 const RETRY_DELAY_MS = 1500;
@@ -29,22 +29,21 @@ export const AUTH_LABELS = { header: "header x-goog-api-key", query: "?key=", be
 export const DEFAULT_ASSISTANT_NAME = "Antares";
 
 const SYSTEM_PROMPT_TEMPLATE = (name) =>
-  `Sos ${name}, un asistente virtual personal. Hablás en español de Costa Rica.\n` +
-  `REGLA OBLIGATORIA: tratá SIEMPRE al usuario de "vos" (voseo), en todas las ` +
-  `respuestas sin excepción: vos tenés, vos podés, querés, sabés, mirá, decime, ` +
-  `contame, fijate, tranquilo. NUNCA uses "usted" (ni "le", "su", "puede", "tiene" ` +
-  `dirigidos al usuario) y NUNCA uses "tú" (tienes, puedes, dime). Antes de responder, ` +
-  `revisá que cada verbo dirigido al usuario esté en forma de vos.\n` +
-  `Tu tono es ` +
-  `cálido, cercano y relajado, como un amigo que sabe mucho del tema: claro, ` +
-  `honesto y con buena onda, sin sonar formal ni robótico. Podés usar alguna ` +
-  `expresión tica con naturalidad (pura vida, mae, diay, tuanis), sin exagerar.\n` +
-  `Por defecto respondé corto y al grano (2 a 4 oraciones). Extendete solo si ` +
-  `el usuario te pide detalle o el tema realmente lo necesita. Si no sabés algo, ` +
-  `decilo con franqueza.\n` +
-  `Escribí en texto plano: sin Markdown (nada de asteriscos, numerales ni ` +
+  `Usted es ${name}, un asistente virtual personal. Habla en español de Costa Rica, ` +
+  `con el "usted" respetuoso y cálido propio de los costarricenses.\n` +
+  `REGLA OBLIGATORIA: trate SIEMPRE al usuario de "usted", en todas las respuestas sin ` +
+  `excepción: usted tiene, usted puede, ¿le ayudo?, dígame, cuénteme, con mucho gusto. ` +
+  `NUNCA use "vos" (tenés, podés, decime, contame) ni "tú" (tienes, puedes, dime). ` +
+  `Antes de responder, revise que cada verbo y pronombre dirigido al usuario esté en forma de usted.\n` +
+  `No use jerga ni modismos coloquiales: nada de "mae", "pura vida", "diay", "tuanis" ni ` +
+  `expresiones similares.\n` +
+  `Su tono es amable, cálido y profesional: cortés, claro y honesto, sin sonar frío ni robótico.\n` +
+  `Por defecto responda de forma breve y directa (2 a 4 oraciones). Extiéndase solo si ` +
+  `el usuario pide detalle o el tema realmente lo necesita. Si no sabe algo, ` +
+  `dígalo con franqueza.\n` +
+  `Escriba en texto plano: sin Markdown (nada de asteriscos, numerales ni ` +
   `tablas) y sin emojis, porque la app muestra texto simple y lo lee en voz alta.\n` +
-  `Tenés acceso a datos que el usuario te pidió recordar; usalos solo cuando ` +
+  `Tiene acceso a datos que el usuario le pidió recordar; úselos solo cuando ` +
   `sean relevantes para la conversación.`;
 
 export function buildSystemPrompt(assistantName = "", userName = "", personality = "") {
@@ -53,18 +52,18 @@ export function buildSystemPrompt(assistantName = "", userName = "", personality
   userName = (userName || "").trim();
   personality = (personality || "").trim();
   if (userName) {
-    p += `\n\nEl usuario se llama ${userName}. Llamalo así de vez en cuando, con naturalidad (no en cada mensaje).`;
+    p += `\n\nEl usuario se llama ${userName}. Llámelo así de vez en cuando, con naturalidad (no en cada mensaje), siempre tratándolo de usted.`;
   }
   if (personality) {
-    p += "\n\nPersonalidad y estilo que el usuario definió para vos " +
-      "(seguilo siempre que no contradiga lo anterior sobre formato):\n" + personality;
+    p += "\n\nPersonalidad y estilo que el usuario definió para usted " +
+      "(sígalo siempre que no contradiga lo anterior sobre el trato de usted y el formato):\n" + personality;
   }
   return p;
 }
 
 export const MISSING_KEY_MSG =
-  "No tengo configurada la API key de Gemini todavía. Conseguila gratis en " +
-  "Google AI Studio (aistudio.google.com/apikey) y agregala en Configuración " +
+  "No tengo configurada la API key de Gemini todavía. Consígala gratis en " +
+  "Google AI Studio (aistudio.google.com/apikey) y agréguela en Configuración " +
   "(el engranaje arriba a la derecha) para que pueda responder.";
 
 // Mensajes que suelen necesitar info actual -> activar búsqueda de Google (grounding)
@@ -106,11 +105,11 @@ export class GeminiClient {
     if (!this.isConfigured()) { this.lastOk = false; return { text: MISSING_KEY_MSG, ok: false, sources: [] }; }
     let system = this.systemPrompt;
     if (knownFacts && knownFacts.length) {
-      system += "\n\nLo que sabés del usuario (usalo con naturalidad cuando sea relevante, " +
+      system += "\n\nLo que sabe del usuario (úselo con naturalidad cuando sea relevante, " +
         "sin repetirlo en cada mensaje):\n" + knownFacts.map((f) => `- ${f}`).join("\n");
     }
     if (search) {
-      system += "\n\nSi usás resultados de búsqueda, resumilos con tus palabras en texto plano.";
+      system += "\n\nSi usa resultados de búsqueda, resúmalos con sus palabras en texto plano.";
     }
     const messages = [...history, { role: "user", content: userMessage }];
     return this.callApi(system, messages, { search, onChunk, stream: !!onChunk });
@@ -261,8 +260,8 @@ export class GeminiClient {
     const cands = data.candidates || [];
     if (!cands.length) {
       const reason = (data.promptFeedback || {}).blockReason;
-      if (reason) return { text: `Gemini bloqueó la consulta por seguridad (${reason}). Probá reformularla.`, ok: false, sources: [] };
-      return { text: "Gemini no devolvió ninguna respuesta. Probá de nuevo.", ok: false, sources: [] };
+      if (reason) return { text: `Gemini bloqueó la consulta por seguridad (${reason}). Intente reformularla.`, ok: false, sources: [] };
+      return { text: "Gemini no devolvió ninguna respuesta. Intente de nuevo.", ok: false, sources: [] };
     }
     const c = cands[0];
     const parts = (c.content || {}).parts || [];
@@ -275,8 +274,8 @@ export class GeminiClient {
       }
     }
     if (text) return { text, ok: true, sources: sources.slice(0, 5) };
-    if (c.finishReason === "SAFETY") return { text: "Gemini bloqueó la respuesta por seguridad. Probá reformular la pregunta.", ok: false, sources: [] };
-    if (c.finishReason === "MAX_TOKENS") return { text: "La respuesta de Gemini quedó vacía por límite de longitud. Probá con una pregunta más corta.", ok: false, sources: [] };
+    if (c.finishReason === "SAFETY") return { text: "Gemini bloqueó la respuesta por seguridad. Intente reformular la pregunta.", ok: false, sources: [] };
+    if (c.finishReason === "MAX_TOKENS") return { text: "La respuesta de Gemini quedó vacía por límite de longitud. Intente con una pregunta más corta.", ok: false, sources: [] };
     return { text: "(respuesta vacía de Gemini)", ok: false, sources: [] };
   }
 
@@ -294,12 +293,12 @@ export class GeminiClient {
 
   static httpErrorMessage(code, short) {
     const low = (short || "").toLowerCase();
-    if (code === 400 && low.includes("api key")) return "La API key de Gemini no es válida. Revisala en Configuración (el engranaje arriba a la derecha).";
-    if (code === 401 || code === 403) return "Gemini rechazó la API key (sin permiso). Verificá que la key de Google AI Studio sea correcta y esté activa.";
-    if (code === 429) return "Se alcanzó el límite gratuito de Gemini en todos los modelos (demasiadas consultas). Esperá un momento y probá de nuevo.";
-    if (code === 504) return "Gemini no respondió a tiempo (timeout/504), ni siquiera con los modelos livianos. Probá de nuevo en un rato.";
-    if (code >= 500) return `Los servidores de Gemini están saturados o no disponibles ahora (error ${code}). Probá de nuevo en un rato.`;
-    if (code === 404) return "Ningún modelo de Gemini está disponible para tu API key ahora mismo.";
+    if (code === 400 && low.includes("api key")) return "La API key de Gemini no es válida. Revísela en Configuración (el engranaje arriba a la derecha).";
+    if (code === 401 || code === 403) return "Gemini rechazó la API key (sin permiso). Verifique que la key de Google AI Studio sea correcta y esté activa.";
+    if (code === 429) return "Se alcanzó el límite gratuito de Gemini en todos los modelos (demasiadas consultas). Espere un momento e intente de nuevo.";
+    if (code === 504) return "Gemini no respondió a tiempo (timeout/504), ni siquiera con los modelos livianos. Intente de nuevo en un rato.";
+    if (code >= 500) return `Los servidores de Gemini están saturados o no disponibles ahora (error ${code}). Intente de nuevo en un rato.`;
+    if (code === 404) return "Ningún modelo de Gemini está disponible para su API key ahora mismo.";
     return `Error de la API de Gemini (${code}): ${short || "sin detalle"}`;
   }
 
@@ -409,8 +408,8 @@ export class GeminiClient {
           }
           record(model, auth, "red", String(e.message || e).slice(0, 150), useSearch);
           return fail(this.withSummary(
-            "No pude conectarme a Gemini. Revisá tu conexión a internet" +
-            (navigator.onLine === false ? " (estás sin conexión)." : ".")));
+            "No pude conectarme a Gemini. Revise su conexión a internet" +
+            (navigator.onLine === false ? " (está sin conexión)." : ".")));
         }
 
         if (resp.ok && stream && resp.body) {
@@ -429,8 +428,8 @@ export class GeminiClient {
               return done({ text: st.text, ok: true, sources: st.sources }, model);
             }
             const msg = st.blockReason || st.finishReason === "SAFETY"
-              ? "Gemini bloqueó la respuesta por seguridad. Probá reformular la pregunta."
-              : "Gemini no devolvió ninguna respuesta. Probá de nuevo.";
+              ? "Gemini bloqueó la respuesta por seguridad. Intente reformular la pregunta."
+              : "Gemini no devolvió ninguna respuesta. Intente de nuevo.";
             record(model, auth, 200, `vacío ${st.finishReason || st.blockReason || ""}`.trim(), useSearch);
             if (st.blockReason || st.finishReason === "SAFETY") return fail(msg);
             break; // respuesta vacía: probar otro modelo

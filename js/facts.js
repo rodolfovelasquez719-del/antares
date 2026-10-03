@@ -15,5 +15,5 @@ export function looksLikeImportantFact(text) {
 }
 
 export function buildConfirmationQuestion(text) {
-  return `Detecté algo que podría ser un dato importante: "${text}"\n¿Querés que lo guarde para recordarlo en el futuro?`;
+  return `Detecté algo que podría ser un dato importante: "${text}"\n¿Desea que lo guarde para recordarlo en el futuro?`;
 }
