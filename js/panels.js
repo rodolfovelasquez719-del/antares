@@ -3,6 +3,7 @@ import * as R from "./reminders.js";
 import * as S from "./shopping.js";
 import * as D from "./digest.js";
 import * as Notify from "./notify.js";
+import * as W from "./workpanels.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -13,33 +14,60 @@ const pad = (n) => String(n).padStart(2, "0");
 const dateVal = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const timeVal = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
-export function initPanels(el, changeCb) { root = el; onChange = changeCb || (() => {}); }
+const GROUPS = {
+  personal: [["recordatorios", "Recordatorios"], ["compras", "Compras"], ["noticias", "Noticias"]],
+  trabajo: [["rutas", "Rutas"], ["cubica", "Cúbica"], ["correo", "Correo"], ["bitacora", "Bitácora"]],
+};
+const ALL_TABS = [...GROUPS.personal, ...GROUPS.trabajo].map(([id]) => id);
+const groupOf = (t) => (GROUPS.trabajo.some(([id]) => id === t) ? "trabajo" : "personal");
+const lastInGroup = { personal: "recordatorios", trabajo: "rutas" };
+
+export function initPanels(el, changeCb, workDeps = {}) {
+  root = el; onChange = changeCb || (() => {});
+  W.initWork({ ...workDeps, onChange: (w) => onChange(w) }, () => render());
+}
+export function resetPanels() { W.resetWork(); editingId = null; }
 
 export function currentTab() { return tab; }
 
 export function openPanel(name) {
-  if (["recordatorios", "compras", "noticias"].includes(name)) tab = name;
+  if (ALL_TABS.includes(name)) tab = name;
   editingId = null;
+  W.clearStatus();
   render();
 }
 
 export function render() {
   if (!root) return;
+  const group = groupOf(tab);
+  lastInGroup[group] = tab;
+  // conservar la posición de desplazamiento al redibujar el mismo panel
+  const scroller = root.closest(".settings-scroll") || root;
+  const keep = root.dataset.tab === tab ? scroller.scrollTop : 0;
+  const focusId = document.activeElement && root.contains(document.activeElement) ? document.activeElement.id : "";
   root.innerHTML = `
-    <div class="panel-tabs" role="tablist" aria-label="Paneles">
-      ${tabBtn("recordatorios", "Recordatorios")}
-      ${tabBtn("compras", "Compras")}
-      ${tabBtn("noticias", "Noticias")}
+    <div class="panel-groups" role="group" aria-label="Tipo de panel">
+      <button type="button" class="seg${group === "personal" ? " on" : ""}" data-group="personal" aria-pressed="${group === "personal"}">Personal</button>
+      <button type="button" class="seg${group === "trabajo" ? " on" : ""}" data-group="trabajo" aria-pressed="${group === "trabajo"}">Trabajo</button>
     </div>
-    <div class="panel-body" id="panel-body" role="tabpanel">${body()}</div>`;
-  root.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => { tab = b.dataset.tab; editingId = null; render(); }));
-  bind();
+    <div class="panel-tabs${group === "trabajo" ? " four" : ""}" role="tablist" aria-label="Paneles">
+      ${GROUPS[group].map(([id, label]) => tabBtn(id, label)).join("")}
+    </div>
+    <div class="panel-body" id="panel-body" role="tabpanel" aria-label="${(GROUPS[group].find(([id]) => id === tab) || [, ""])[1]}">${body()}</div>`;
+  root.dataset.tab = tab;
+  root.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => { tab = b.dataset.tab; editingId = null; W.clearStatus(); render(); }));
+  root.querySelectorAll("[data-group]").forEach((b) => b.addEventListener("click", () => { tab = lastInGroup[b.dataset.group]; editingId = null; W.clearStatus(); render(); }));
+  if (groupOf(tab) === "trabajo") W.bind(tab, root.querySelector("#panel-body"));
+  else bind();
+  scroller.scrollTop = keep;
+  if (focusId) { const el = document.getElementById(focusId); if (el && root.contains(el)) el.focus({ preventScroll: true }); }
 }
 
 function tabBtn(id, label) {
   return `<button type="button" class="panel-tab${tab === id ? " on" : ""}" role="tab" aria-selected="${tab === id}" data-tab="${id}">${label}</button>`;
 }
 function body() {
+  if (groupOf(tab) === "trabajo") return W.html(tab);
   if (tab === "compras") return shoppingHtml();
   if (tab === "noticias") return newsHtml();
   return remindersHtml();

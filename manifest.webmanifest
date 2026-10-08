@@ -1,7 +1,7 @@
 {
   "name": "Antares - Asistente personal",
   "short_name": "Antares",
-  "description": "Antares, su asistente personal por voz con Gemini: recordatorios, lista de compras, resumen del día de Costa Rica, fotos, videos y PDF, con código de seguridad opcional y datos cifrados.",
+  "description": "Antares, su asistente personal por voz con Gemini: recordatorios, compras, resumen del día de Costa Rica, rutas y distancias, cúbica por camión, correos a vendedores y bitácora de rutas, con código de seguridad opcional y datos cifrados.",
   "lang": "es",
   "dir": "ltr",
   "id": "./",
@@ -67,10 +67,10 @@
   ],
   "shortcuts": [
     {
-      "name": "Recordatorios",
-      "short_name": "Recordatorios",
-      "description": "Ver y crear recordatorios",
-      "url": "./?panel=recordatorios",
+      "name": "Rutas y distancias",
+      "short_name": "Rutas",
+      "description": "Ordenar paradas y calcular kilómetros",
+      "url": "./?panel=rutas",
       "icons": [
         {
           "src": "icons/icon-192.png",
@@ -80,10 +80,23 @@
       ]
     },
     {
-      "name": "Lista de compras",
-      "short_name": "Lista",
-      "description": "Abrir la lista de compras",
-      "url": "./?panel=compras",
+      "name": "Bitácora de rutas",
+      "short_name": "Bitácora",
+      "description": "Anotar las rutas del día",
+      "url": "./?panel=bitacora",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Recordatorios",
+      "short_name": "Recordatorios",
+      "description": "Ver y crear recordatorios",
+      "url": "./?panel=recordatorios",
       "icons": [
         {
           "src": "icons/icon-192.png",

@@ -59,6 +59,8 @@ Actualizar.
   (localStorage; las miniaturas de fotos y videos, en IndexedDB). La key se envía únicamente a
   `generativelanguage.googleapis.com`, siempre en el encabezado `x-goog-api-key` (nunca en la URL).
 - El clima del HUD se consulta a Open-Meteo (Alajuela) sin enviar datos personales.
+- La calculadora de rutas envía solo los nombres de los lugares (a Open-Meteo y Nominatim) y
+  sus coordenadas (a OSRM).
 - Nada pasa por ningún servidor propio.
 - En iPhone, la app instalada en la pantalla de inicio tiene un almacenamiento distinto al de
   Safari, y Safari puede borrar los datos si no se usa la app durante 7 días.
@@ -101,6 +103,57 @@ Actualizar.
 - Funciona sin conexión para abrir la app (service worker "primero red" con espera de 3 s y
   respaldo en caché).
 
+## Novedades de la 1.7.0 (herramientas de trabajo)
+
+El botón de cuadrícula abre **Paneles** con dos grupos: **Personal** (Recordatorios, Compras, Noticias)
+y **Trabajo** (Rutas, Cúbica, Correo, Bitácora). En la pantalla principal hay una segunda fila de
+accesos en ámbar para el trabajo.
+
+### Calculadora de rutas
+- Panel **Rutas**: un lugar por línea; el primero es el punto de partida (por ejemplo, el CEDI).
+  Opciones: regresar al punto de partida, ordenar para recorrer menos (si se apaga, respeta el
+  orden escrito) y minutos de descarga por entrega (para estimar la jornada).
+- Resultado: orden sugerido, km totales por carretera, minutos de manejo, tramos, «Copiar lista»,
+  «Abrir en Google Maps» y «Anotar en la bitácora».
+- Por chat: «Calcule la ruta: CEDI Coyol, KFC Escazú, Subway Lindora, Taco Bell Heredia».
+- Orden: vecino más cercano desde la salida y mejora 2-opt sobre la matriz de tiempos de OSRM.
+- APIs gratuitas, sin key (las dos permiten CORS):
+  - Lugares: [Open-Meteo Geocoding](https://open-meteo.com/en/docs/geocoding-api) para ciudades y
+    distritos; [Nominatim / OpenStreetMap](https://nominatim.org/) para negocios y direcciones
+    («KFC Escazú», «CEDI Coyol», «Parque Central de Alajuela»), limitado a Costa Rica, **máximo
+    1 consulta por segundo** y con caché local de los lugares encontrados. El navegador no permite
+    cambiar el User-Agent; el sitio se identifica con su propio User-Agent y Referer.
+  - Distancias y tiempos: servidor público de prueba de [OSRM](https://project-osrm.org/)
+    (`router.project-osrm.org`, servicios `table` y `route`, perfil de auto).
+- **Límites honestos:** nunca inventa distancias; si un lugar no se encuentra o OSRM no responde,
+  lo dice y no calcula. Los tiempos son de auto (un camión tarda más) y no incluyen presas.
+  OpenStreetMap no conoce todos los negocios y a veces elige un homónimo: el panel muestra la
+  dirección encontrada para que usted la revise (agregue cantón o distrito si hace falta).
+  Máximo 25 paradas. El servidor de OSRM es de demostración, sin garantía de disponibilidad.
+
+### Cúbica / capacidad
+- Panel **Cúbica**: perfiles de camión (m³ y kg, se guardan) y carga por producto (cantidad,
+  m³ por unidad y kg opcional). Muestra ocupación de volumen y peso, qué cabe, qué cabe a medias
+  y qué queda fuera, siguiendo el orden de la lista.
+- Por chat: «¿Caben 300 cajas de 0,03 m3 en el camión Isuzu?» o «¿Caben 400 cajas de 0,03 m3 y
+  2 m3 de pollo en un camión de 10 m3?». Acepta coma o punto decimal.
+
+### Redactor de correos
+- Panel **Correo** o por chat («Redacte un correo de atraso para el gerente del KFC Escazú…»).
+  Plantillas: cambio de día de entrega, atraso y confirmación de horario.
+- Gemini redacta asunto y cuerpo formales, de usted; lo que falte queda entre [corchetes].
+- **Antares nunca envía correos**: solo hay botones para copiar el asunto, el cuerpo o todo.
+
+### Bitácora de rutas
+- Panel **Bitácora**: fecha, nombre de la ruta, paradas, km, notas y estado (planificada, en curso,
+  cerrada); editar y eliminar con confirmación. Por chat: «Anote la ruta de hoy: Ruta 3 Escazú,
+  KFC Escazú, Subway Lindora; nota: cliente nuevo».
+- Exportar en **CSV** (UTF-8 con BOM y punto y coma, se abre bien en Excel en español) y en **TXT**.
+
+Todo lo nuevo (camiones, carga, bitácora, última ruta y caché de lugares) se cifra igual que el
+resto cuando hay código de seguridad. Accesos directos del ícono (Android): Rutas, Bitácora,
+Recordatorios y Noticias.
+
 ## Novedades de la 1.6.0
 
 ### Recordatorios y alarmas
@@ -140,7 +193,6 @@ Actualizar.
 
 ### Otros
 - Configuración › Memoria: exportar la conversación en TXT o JSON, y «Borrar conversación» con confirmación.
-- Accesos directos del ícono (Android): Recordatorios, Lista y Noticias.
 - Recordatorios y lista se cifran igual que el resto cuando hay código de seguridad (y se migran al crearlo o quitarlo).
 
 ## Estructura
@@ -166,6 +218,11 @@ js/reminders.js        Recordatorios (datos y lectura de frases en español)
 js/shopping.js         Lista de compras por tienda
 js/digest.js           Resumen del día: dólar (Hacienda) y noticias (RSS vía rss2json)
 js/notify.js           Notificaciones locales y agenda para el service worker
-js/panels.js           Paneles de Recordatorios, Compras y Noticias
+js/panels.js           Paneles (grupos Personal y Trabajo)
+js/workpanels.js       Paneles de Rutas, Cúbica, Correo y Bitácora
+js/routes.js           Lugares (Open-Meteo, Nominatim) y rutas (OSRM, vecino más cercano + 2-opt)
+js/cubic.js            Camiones y cálculo de cúbica
+js/mail.js             Plantillas y formato del redactor de correos
+js/logbook.js          Bitácora de rutas y exportación CSV/TXT
 icons/                 Íconos 192/512, maskable, apple-touch-icon, favicon
 ```

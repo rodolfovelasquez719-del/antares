@@ -11,9 +11,13 @@ import * as Reminders from "./reminders.js";
 import * as Shopping from "./shopping.js";
 import * as Digest from "./digest.js";
 import * as Notify from "./notify.js";
-import { initPanels, openPanel, render as renderPanel } from "./panels.js";
+import { initPanels, openPanel, render as renderPanel, resetPanels } from "./panels.js";
+import * as Routes from "./routes.js";
+import * as Cubic from "./cubic.js";
+import * as Mail from "./mail.js";
+import * as Logbook from "./logbook.js";
 
-const APP_VERSION = "1.6.0";
+const APP_VERSION = "1.7.0";
 const DEFAULT_MEDIA_PROMPT = "Describa lo que ve.";
 const DEFAULT_PDF_PROMPT = "Resuma este documento: puntos clave, fechas, montos y lo que usted deba hacer.";
 const $ = (id) => document.getElementById(id);
@@ -551,11 +555,12 @@ async function runJob(job) {
     if (epoch !== lockEpoch) return; // se bloqueó mientras respondía: no se muestra ni se guarda nada
     if (r.ok) {
       lastModelShort = shortModel(r.model);
-      renderBot(r.text, { sources: r.sources, meta: formatMeta(r, uploadMs) });
+      const botWrap = renderBot(r.text, { sources: r.sources, meta: formatMeta(r, uploadMs) });
+      if (job.kind === "mail") addMailActions(botWrap, r.text);
       announce(`${assistantName()}: ${r.text}`);
       handleSave(memory.addMessage("assistant", r.text), "la respuesta");
       if (config.speakReplies && !r.stopped) voice.speak(r.text);
-      if (job.text && looksLikeImportantFact(job.text)) {
+      if (job.kind !== "mail" && job.text && looksLikeImportantFact(job.text)) {
         if (config.autoLearn) autoLearn(job.text, r.text); // en segundo plano, no bloquea
         else { pendingConfirm = job.text; renderConfirm(job.text); }
       }
@@ -606,6 +611,10 @@ function localIntent(text) {
   if (pendingReminder && Reminders.parseReminder("Recuérdeme " + pendingReminder + " " + t)
       && /\b(a\s+las?|mañana|hoy|el\s+\d|en\s+\d|lunes|martes|mi[eé]rcoles|jueves|viernes|s[áa]bado|domingo)\b/i.test(t)) return "reminder-followup";
   pendingReminder = null;
+  if (Mail.looksLikeMail(t)) return "mail";
+  if (Logbook.looksLikeLog(t)) return "log";
+  if (Routes.looksLikeRoute(t)) return "route";
+  if (Cubic.looksLikeCubic(t)) return "cubic";
   if (Shopping.looksLikeShopping(t) && Shopping.parseShopping(t)) return "shopping";
   if (Reminders.looksLikeReminder(t)) {
     if (Reminders.parseReminder(t)) return "reminder";
@@ -666,6 +675,78 @@ async function handleLocal(kind, text) {
     if (!els.panelView.hidden && document.querySelector(".panel-tab.on")?.dataset.tab === "compras") renderPanel();
     return true;
   }
+  if (kind === "route") {
+    setVista("chat");
+    renderUser(t);
+    handleSave(memory.addMessage("user", t), "el mensaje");
+    const req = Routes.parseRouteRequest(t);
+    if (req.stops.length < 2) {
+      const reply = "Indíqueme los lugares, el primero es el punto de partida. Por ejemplo: «Calcule la ruta: CEDI Sysco El Coyol, KFC Escazú, Subway Lindora». También puede usar el panel Rutas.";
+      renderBot(reply); handleSave(memory.addMessage("assistant", reply), "la respuesta");
+      return true;
+    }
+    const epoch = lockEpoch;
+    busy = true; abortCtrl = new AbortController(); setEstado("hablando");
+    const note = showNote("Calculando la ruta…");
+    try {
+      const res = await Routes.calcRoute(req.stops, { roundTrip: req.roundTrip, signal: abortCtrl.signal, onProgress: (p) => { const tx = note.querySelector(".txt"); if (tx) tx.textContent = p; } });
+      if (epoch !== lockEpoch) return true;
+      note.remove();
+      memory.saveData(Routes.K_ROUTE_DRAFT, { text: req.stops.join("\n"), roundTrip: req.roundTrip, optimize: true, serviceMin: 0, result: res.ok ? res : null });
+      const reply = res.ok ? Routes.routeText(res) : res.error;
+      const sources = res.ok ? [{ title: "Abrir la ruta en Google Maps", uri: res.mapsUrl }] : [];
+      const w = renderBot(reply, { sources, meta: res.ok ? "Distancias: OSRM · lugares: Open-Meteo / OpenStreetMap" : "" });
+      if (res.ok) addActions(w, [{ label: "Copiar lista", run: () => copyText(reply) }, { label: "Ver en el panel Rutas", run: () => showPanel("rutas") }]);
+      handleSave(memory.addMessage("assistant", reply, sources.length ? { sources } : null), "la respuesta");
+    } catch (e) {
+      note.remove();
+      if (epoch === lockEpoch) showNote(e.name === "AbortError" ? "Cálculo de ruta detenido." : "No pude calcular la ruta. Intente de nuevo.", { warn: e.name !== "AbortError" });
+    } finally {
+      busy = false; abortCtrl = null;
+      if (epoch === lockEpoch) { setEstado(baseEstado()); updateComposer(); }
+    }
+    return true;
+  }
+  if (kind === "cubic") {
+    setVista("chat");
+    renderUser(t);
+    handleSave(memory.addMessage("user", t), "el mensaje");
+    const p = Cubic.parseCubic(t);
+    let reply;
+    if (!p) reply = "Indíqueme las cantidades con sus m³. Por ejemplo: «¿Caben 300 cajas de 0,03 m³ y 2 m³ de pollo en un camión de 12 m³ y 4000 kg?»";
+    else {
+      let truck = p.truck, name = p.truckName;
+      if (!truck) {
+        const load = Cubic.loadLoad(), trucks = Cubic.loadTrucks();
+        const tr = trucks.find((x) => x.id === load.truckId) || (trucks.length === 1 ? trucks[0] : null);
+        if (tr) { truck = tr; name = tr.name; }
+      }
+      reply = truck ? Cubic.fitText(Cubic.computeFit(p.items, truck), name)
+        : "¿En qué camión? Diga la capacidad, por ejemplo «en un camión de 12 m³ y 4000 kg», o guarde sus camiones en el panel Cúbica.";
+    }
+    renderBot(reply); handleSave(memory.addMessage("assistant", reply), "la respuesta");
+    return true;
+  }
+  if (kind === "log") {
+    setVista("chat");
+    renderUser(t);
+    handleSave(memory.addMessage("user", t), "el mensaje");
+    const p = Logbook.parseLogRequest(t);
+    let reply;
+    if (!p.stops.length && /^Ruta del \d/.test(p.name)) {
+      reply = "Abrí la bitácora para que anote la ruta. También puede decirlo completo: «Anote la ruta de hoy: Ruta 3 Escazú, paradas KFC Escazú, Subway Lindora. Nota: …»";
+      renderBot(reply); handleSave(memory.addMessage("assistant", reply), "la respuesta");
+      showPanel("bitacora");
+      return true;
+    }
+    const res = Logbook.addEntry(p);
+    if (!res.ok) storageFullNote("No pude guardar la ruta");
+    reply = Logbook.entryText(res.entry);
+    const w = renderBot(reply);
+    addActions(w, [{ label: "Ver bitácora", run: () => showPanel("bitacora") }]);
+    handleSave(memory.addMessage("assistant", reply), "la respuesta");
+    return true;
+  }
   if (kind === "digest") {
     setVista("chat");
     renderUser(t);
@@ -687,6 +768,14 @@ function sendMessage(text, items = []) {
   if (busy || (!text && !items.length)) return false;
   if (!client.isConfigured()) { setEstado("sinkey"); return false; }
   const intent = items.length ? null : localIntent(text);
+  if (intent === "mail") {
+    const history = memory.getHistory(10).map(({ role, content }) => ({ role, content }));
+    setVista("chat");
+    renderUser(text);
+    handleSave(memory.addMessage("user", text), "el mensaje");
+    runJob({ text, items: [], prompt: Mail.mailPrompt(text, Mail.detectTemplate(text)), history, facts: memory.getFacts(), kind: "mail" });
+    return true;
+  }
   if (intent) { handleLocal(intent, text).catch((e) => { console.warn("Antares local:", e); showNote("No pude completar eso. Intente de nuevo.", { warn: true }); }); return true; }
   const label = items.map((i) => (i.kind === "video" ? "[video]" : i.kind === "pdf" ? "[pdf]" : "[foto]")).join(" ");
   const prompt = text || (items.some((i) => i.kind === "pdf") ? DEFAULT_PDF_PROMPT : DEFAULT_MEDIA_PROMPT);
@@ -865,7 +954,48 @@ els.quickbar.addEventListener("click", (ev) => {
   const b = ev.target.closest("button[data-panel]");
   if (b) showPanel(b.dataset.panel);
 });
-initPanels(els.panelRoot, (what) => { if (what === "reminders" || what === "notify") syncReminders(); });
+initPanels(els.panelRoot, (what) => { if (what === "reminders" || what === "notify") syncReminders(); }, {
+  hasKey: () => !!(client && client.isConfigured()),
+  download: (name, text, type) => downloadFile(name, text, type),
+  // redacción de correos desde el panel: misma conexión con Gemini, se descarta si se bloquea a mitad
+  ask: async (prompt, { signal, onChunk } = {}) => {
+    const epoch = lockEpoch;
+    const r = await client.ask(prompt, [], memory.getFacts(), { signal, onChunk });
+    return epoch === lockEpoch ? r : { ok: false, stopped: true };
+  },
+});
+
+// Botones pequeños bajo una respuesta (copiar, abrir panel…)
+function addActions(wrap, actions) {
+  if (!wrap) return;
+  const row = document.createElement("div");
+  row.className = "msg-actions";
+  for (const a of actions) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "mini-btn"; b.textContent = a.label;
+    b.onclick = async () => { const r = await a.run(); if (a.done && r !== false) { b.textContent = a.done; setTimeout(() => { b.textContent = a.label; }, 1500); } };
+    row.appendChild(b);
+  }
+  wrap.appendChild(row);
+}
+async function copyText(text) {
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; }
+  catch {
+    const ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select(); try { ok = document.execCommand("copy"); } catch { /* */ } ta.remove();
+  }
+  chatNotice(ok ? "Copiado" : "No pude copiar; mantenga presionado el texto.");
+  return ok;
+}
+function addMailActions(wrap, text) {
+  const d = Mail.parseDraft(text);
+  addActions(wrap, [
+    { label: "Copiar asunto", run: () => copyText(d.subject), done: "Copiado" },
+    { label: "Copiar cuerpo", run: () => copyText(d.body), done: "Copiado" },
+    { label: "Copiar todo", run: () => copyText(`Asunto: ${d.subject}\n\n${d.body}`), done: "Copiado" },
+  ]);
+}
 
 // La agenda se escribe en orden (una escritura a la vez) y la revisión espera a que termine
 let syncChain = Promise.resolve();
@@ -1383,6 +1513,7 @@ function lockApp(reason = "manual") {
     hideSettings();
   }
   hidePanel();
+  resetPanels();
   setMenu(false);
   for (const a of attachments) if (a.url) URL.revokeObjectURL(a.url);
   attachments = []; renderAttachments();
