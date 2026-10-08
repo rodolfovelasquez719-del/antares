@@ -6,6 +6,7 @@ export const MAX_ATTACHMENTS = 4;
 export const INLINE_LIMIT = 18 * 1024 * 1024;   // tamaño máximo total (base64) dentro de la petición
 export const FILES_API_FROM = 4 * 1024 * 1024;  // cada archivo de más de 4 MB va por la Files API
 export const MAX_VIDEO_BYTES = 500 * 1024 * 1024; // límite práctico para subir desde el celular
+export const MAX_PDF_BYTES = 20 * 1024 * 1024;
 const MAX_SIDE = 1600, JPEG_QUALITY = 0.85, THUMB_SIDE = 160;
 
 export const base64Size = (bytes) => Math.ceil(bytes / 3) * 4;
@@ -103,16 +104,28 @@ async function prepareVideo(file) {
   return { kind: "video", mime: videoMime(file), blob: file, size: file.size, thumb, url, name: file.name };
 }
 
+function isPdfFile(file) {
+  const t = (file.type || "").toLowerCase();
+  if (t === "application/pdf") return true;
+  return !t && /\.pdf$/i.test(file.name || "");
+}
+async function preparePdf(file) {
+  if (file.size > MAX_PDF_BYTES) throw new Error(`El PDF pesa ${formatBytes(file.size)}; el máximo es ${formatBytes(MAX_PDF_BYTES)}. Pruebe con un documento más corto.`);
+  const url = URL.createObjectURL(file);
+  return { kind: "pdf", mime: "application/pdf", blob: file, size: file.size, thumb: "", url, name: file.name || "documento.pdf", pages: null };
+}
+
 export async function prepareFile(file) {
   const type = file.type || "";
   if (type.startsWith("image/")) return prepareImage(file);
+  if (isPdfFile(file)) return preparePdf(file);
   if (isVideoFile(file)) {
     if (file.size > MAX_VIDEO_BYTES) {
       throw new Error(`El video pesa ${formatBytes(file.size)}; el máximo es ${formatBytes(MAX_VIDEO_BYTES)}. Por favor grabe uno más corto.`);
     }
     return prepareVideo(file);
   }
-  throw new Error("Solo se pueden adjuntar fotos o videos.");
+  throw new Error("Solo se pueden adjuntar fotos, videos o PDF.");
 }
 
 export function formatBytes(n) {
@@ -147,13 +160,13 @@ export async function uploadToFilesApi(apiKey, item, { onProgress = null, timeou
   const t0 = performance.now();
   onProgress && onProgress("procesando");
   while (file.state === "PROCESSING") {
-    if (performance.now() - t0 > timeoutMs) throw new Error("Gemini tardó demasiado en procesar el video");
+    if (performance.now() - t0 > timeoutMs) throw new Error("Gemini tardó demasiado en procesar el archivo");
     await new Promise((r) => setTimeout(r, 2000));
     const r = await fetch(`${GEMINI_FILES_URL}/${file.name}`, { headers: { "x-goog-api-key": apiKey } });
-    if (!r.ok) throw new Error(`No se pudo consultar el video (HTTP ${r.status})`);
+    if (!r.ok) throw new Error(`No se pudo consultar el archivo (HTTP ${r.status})`);
     file = await r.json();
   }
-  if (file.state !== "ACTIVE" || !file.uri) throw new Error(`Gemini no pudo procesar el video (${file.state || "sin estado"})`);
+  if (file.state !== "ACTIVE" || !file.uri) throw new Error(`Gemini no pudo procesar el archivo (${file.state || "sin estado"})`);
   return { mime: file.mimeType || item.mime, fileUri: file.uri };
 }
 

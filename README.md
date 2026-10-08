@@ -6,8 +6,9 @@ formal (trato de usted), que funciona en Android (Chrome) y iPhone (Safari → C
 
 Archivos estáticos puros, sin build: se puede subir tal cual a GitHub Pages.
 
-Versión actual: **1.5.0** (código de seguridad opcional con datos cifrados, Face ID / huella).
-La 1.4.0 trajo la interfaz estilo panel de control con reactor y HUD.
+Versión actual: **1.6.0**: recordatorios y alarmas, lista de compras por tienda, resumen del día
+(clima, dólar y noticias de Costa Rica), resumen de documentos PDF y exportar la conversación.
+La 1.5.0 trajo el código de seguridad opcional con datos cifrados; la 1.4.0, la interfaz con reactor y HUD.
 
 ## Probar en su computadora
 
@@ -100,6 +101,48 @@ Actualizar.
 - Funciona sin conexión para abrir la app (service worker "primero red" con espera de 3 s y
   respaldo en caché).
 
+## Novedades de la 1.6.0
+
+### Recordatorios y alarmas
+- Por chat: «Recuérdeme llamar al pediatra a las 5», «Avíseme mañana a las 8»,
+  «Recuérdeme el cumpleaños de Evangeline el 10 de octubre» (cumpleaños y aniversarios se repiten cada año).
+  Si falta la hora, Antares la pregunta.
+- Panel **Recordatorios** (botón de cuadrícula arriba, o «Recordatorios» bajo el HUD): agregar,
+  posponer 10 minutos y eliminar; botón para pedir permiso de notificaciones explicado en español.
+- Avisos: notificación local del sistema y nota en la conversación. Se usa `TimestampTrigger`
+  si el navegador lo trae, `periodicSync` donde exista, y una revisión cada 20 s con la app abierta.
+  **Límite honesto:** sin un servidor de notificaciones push, el aviso exacto solo llega con la app
+  abierta o en segundo plano reciente; si el teléfono la suspendió, el aviso aparece al abrirla.
+- Con código de seguridad, la agenda que lee el service worker solo guarda la hora y un aviso genérico
+  («Tiene un recordatorio»); el texto queda cifrado.
+
+### Lista de compras
+- Por chat: «Agregue pañales a la lista», «Agregue 2 Nutrilon a la lista de PriceSmart», «¿Qué falta?»,
+  «Marque Nutrilon como comprado».
+- Panel **Compras**: agrupada por tienda (Walmart, PriceSmart, Maxi Palí, Automercado, Pequeño Mundo,
+  Otro), marcar comprado, cantidad −/+, eliminar y «Quitar lo comprado». Empieza vacía.
+
+### Resumen del día (clima, dólar y noticias)
+- Por chat: «¿Cómo está el día?», «Noticias», «Tipo de cambio». También el botón «Resumen del día».
+- APIs gratuitas, sin key:
+  - Clima: [Open-Meteo](https://open-meteo.com/) (Alajuela).
+  - Tipo de cambio compra/venta del BCCR: `https://api.hacienda.go.cr/indicadores/tc/dolar`
+    (Ministerio de Hacienda, permite CORS).
+  - Noticias: RSS de La Nación, El Financiero y Delfino leídos mediante
+    [rss2json](https://rss2json.com/) (`api.rss2json.com/v1/api.json?rss_url=…`), porque los RSS
+    no permiten lectura directa desde el navegador (CORS). Solo enlaces `https`.
+- Se guarda en `sessionStorage` por una hora (no son datos personales).
+
+### Documentos PDF
+- Adjuntar → **Documento PDF** (hasta 20 MB). Si no escribe nada, Antares lo resume: puntos clave,
+  fechas, montos y lo que usted deba hacer. También puede hacerle preguntas sobre el documento.
+- Los PDF de más de 4 MB se suben con la Files API de Gemini; la respuesta llega en streaming.
+
+### Otros
+- Configuración › Memoria: exportar la conversación en TXT o JSON, y «Borrar conversación» con confirmación.
+- Accesos directos del ícono (Android): Recordatorios, Lista y Noticias.
+- Recordatorios y lista se cifran igual que el resto cuando hay código de seguridad (y se migran al crearlo o quitarlo).
+
 ## Estructura
 
 ```
@@ -111,7 +154,7 @@ screenshots/           Capturas para el manifiesto
 sw.js                  Service worker (caché de la app, sin tocar las llamadas a Gemini)
 js/app.js              Lógica de la interfaz
 js/gemini.js           Cliente de Gemini (modelos, límites, errores, Files API)
-js/media.js            Fotos y videos (compresión, miniaturas, subida)
+js/media.js            Fotos, videos y PDF (compresión, miniaturas, subida)
 js/memory.js           Historial, datos y configuración (localStorage + IndexedDB)
 js/facts.js            Detección de datos importantes
 js/voice.js            Voz (síntesis y reconocimiento)
@@ -119,5 +162,10 @@ js/weather.js          Clima de Alajuela (Open-Meteo)
 js/vault.js            IndexedDB y cifrado (PBKDF2, AES-GCM, HKDF para la passkey)
 js/lock.js             Código, intentos, passkey, migración y borrado
 js/lockui.js           Pantalla de bloqueo y teclado
+js/reminders.js        Recordatorios (datos y lectura de frases en español)
+js/shopping.js         Lista de compras por tienda
+js/digest.js           Resumen del día: dólar (Hacienda) y noticias (RSS vía rss2json)
+js/notify.js           Notificaciones locales y agenda para el service worker
+js/panels.js           Paneles de Recordatorios, Compras y Noticias
 icons/                 Íconos 192/512, maskable, apple-touch-icon, favicon
 ```

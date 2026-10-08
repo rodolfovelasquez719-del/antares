@@ -1,7 +1,7 @@
 // Antares Web - Base local (IndexedDB) y cifrado (Web Crypto).
 // Stores: "thumbs" (miniaturas) y "vault" (datos cifrados + metadatos del código).
 const DB_NAME = "antares";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const te = new TextEncoder();
 const td = new TextDecoder();
 
@@ -15,6 +15,7 @@ export function db() {
         const d = req.result;
         if (!d.objectStoreNames.contains("thumbs")) d.createObjectStore("thumbs");
         if (!d.objectStoreNames.contains("vault")) d.createObjectStore("vault");
+        if (!d.objectStoreNames.contains("notify")) d.createObjectStore("notify"); // agenda de avisos (sin datos personales si hay código)
       };
       req.onsuccess = () => {
         const d = req.result;

@@ -7,9 +7,15 @@ import { looksLikeImportantFact, buildConfirmationQuestion } from "./facts.js";
 import { Voice } from "./voice.js";
 import { prepareFile, toGeminiMedia, formatBytes, MAX_ATTACHMENTS } from "./media.js";
 import { fetchWeather } from "./weather.js";
+import * as Reminders from "./reminders.js";
+import * as Shopping from "./shopping.js";
+import * as Digest from "./digest.js";
+import * as Notify from "./notify.js";
+import { initPanels, openPanel, render as renderPanel } from "./panels.js";
 
-const APP_VERSION = "1.5.0";
+const APP_VERSION = "1.6.0";
 const DEFAULT_MEDIA_PROMPT = "Describa lo que ve.";
+const DEFAULT_PDF_PROMPT = "Resuma este documento: puntos clave, fechas, montos y lo que usted deba hacer.";
 const $ = (id) => document.getElementById(id);
 const body = document.body;
 
@@ -24,7 +30,9 @@ const els = {
   attachments: $("attachments"), stop: $("stop-btn"), micZone: $("mic-zone"), mic: $("mic-btn"), micHint: $("mic-hint"),
   form: $("composer"), input: $("msg-input"), send: $("send-btn"),
   attachBtn: $("attach-btn"), attachMenu: $("attach-menu"),
-  pickPhoto: $("pick-photo"), pickVideo: $("pick-video"), pickGallery: $("pick-gallery"),
+  pickPhoto: $("pick-photo"), pickVideo: $("pick-video"), pickGallery: $("pick-gallery"), pickPdf: $("pick-pdf"),
+  openPanel: $("open-panel"), closePanel: $("close-panel"), panelView: $("panel-view"), panelRoot: $("panel-root"), panelTitle: $("panel-title"), quickbar: $("quickbar"),
+  exportTxt: $("export-txt"), exportJson: $("export-json"),
   // configuración
   closeSettings: $("close-settings"), settingsTitle: $("settings-title"), settingsScroll: $("settings-scroll"),
   apiKey: $("api-key"), toggleKey: $("toggle-key"), pasteKey: $("paste-key"), testConn: $("test-conn"),
@@ -239,8 +247,13 @@ function renderMedia(b, media) {
   for (const m of media) {
     const item = document.createElement("div");
     item.className = "media-item";
-    const label = m.kind === "video" ? "Video adjunto" : "Foto adjunta";
-    if (m.kind === "video" && m.url) {
+    const label = m.kind === "video" ? "Video adjunto" : m.kind === "pdf" ? "Documento PDF" : "Foto adjunta";
+    if (m.kind === "pdf") {
+      const chip = document.createElement("span");
+      chip.className = "pdf-chip";
+      chip.textContent = m.name || "Documento PDF";
+      item.appendChild(chip);
+    } else if (m.kind === "video" && m.url) {
       const v = document.createElement("video");
       v.src = m.url; v.controls = true; v.playsInline = true; v.preload = "metadata"; v.muted = true;
       v.setAttribute("aria-label", label);
@@ -260,7 +273,7 @@ function renderMedia(b, media) {
     }
     if (m.kind === "video" && !m.url) {
       const bd = document.createElement("span"); bd.className = "badge"; bd.textContent = "VIDEO"; item.appendChild(bd);
-    } else if (m.kind !== "video") {
+    } else if (m.kind !== "video" && m.kind !== "pdf") {
       const bd = document.createElement("span"); bd.className = "badge"; bd.textContent = "FOTO"; item.appendChild(bd);
     }
     grid.appendChild(item);
@@ -510,14 +523,14 @@ async function runJob(job) {
       const tUp = performance.now();
       try {
         const res = await toGeminiMedia(config.geminiApiKey, job.items, {
-          onProgress: (st) => { els.connSub.textContent = st === "subiendo" ? "Subiendo video…" : "Procesando video…"; },
+          onProgress: (st) => { els.connSub.textContent = st === "subiendo" ? "Subiendo archivo…" : "Procesando archivo…"; },
         });
         media = res.media;
         uploadMs = res.uploaded ? Math.round(performance.now() - tUp) : 0;
       } catch (e) {
         if (epoch !== lockEpoch) return;
         console.warn("Antares media:", e);
-        const what = job.items.length > 1 ? "los archivos" : (job.items[0].kind === "video" ? "el video" : "la foto");
+        const what = job.items.length > 1 ? "los archivos" : (job.items[0].kind === "video" ? "el video" : job.items[0].kind === "pdf" ? "el PDF" : "la foto");
         renderError({ kind: "media", title: "No pude enviar el archivo", text: `No pude subir ${what}. Revise su conexión e intente de nuevo, o pruebe con un video más corto.`, details: String(e.message || e) }, () => runJob(job));
         setEstado("error");
         return;
@@ -586,18 +599,103 @@ function startRateCountdown() {
   rateTimer = setInterval(paint, 1000);
 }
 
+// Intenciones locales (recordatorios, compras, resumen del día): no llaman a Gemini
+let pendingReminder = null; // texto de un recordatorio al que le faltó la hora
+function localIntent(text) {
+  const t = text.trim();
+  if (pendingReminder && Reminders.parseReminder("Recuérdeme " + pendingReminder + " " + t)
+      && /\b(a\s+las?|mañana|hoy|el\s+\d|en\s+\d|lunes|martes|mi[eé]rcoles|jueves|viernes|s[áa]bado|domingo)\b/i.test(t)) return "reminder-followup";
+  pendingReminder = null;
+  if (Shopping.looksLikeShopping(t) && Shopping.parseShopping(t)) return "shopping";
+  if (Reminders.looksLikeReminder(t)) {
+    if (Reminders.parseReminder(t)) return "reminder";
+    if (!/^\s*(?:por favor[,\s]+)?rec[uú][eé]rd[ea]me\s+que\b/i.test(t)) return "reminder-ask";
+  }
+  if (t.length <= 60 && Digest.looksLikeDigest(t) && !/\b(sobre|acerca|de\s+(?!hoy|costa))\b/i.test(t.replace(/tipo\s+de\s+cambio|resumen\s+del\s+d[ií]a|c[oó]mo\s+est[aá]\s+el\s+d[ií]a/gi, ""))) return "digest";
+  return null;
+}
+async function handleLocal(kind, text) {
+  const t = text.trim();
+  if (kind === "reminder" || kind === "reminder-ask" || kind === "reminder-followup") {
+    const full = kind === "reminder-followup" ? "Recuérdeme " + pendingReminder + " " + t : t;
+    pendingReminder = null;
+    const parsed = Reminders.parseReminder(full);
+    setVista("chat");
+    renderUser(t);
+    handleSave(memory.addMessage("user", t), "el mensaje");
+    if (!parsed) {
+      pendingReminder = t.replace(/^\s*(?:por favor[,\s]+)?\S+\s*/, "");
+      const reply = "¿Para cuándo lo dejo? Diga, por ejemplo, «a las 5», «mañana a las 8» o «el 10 de octubre».";
+      renderBot(reply); handleSave(memory.addMessage("assistant", reply), "la respuesta");
+    } else {
+      const res = Reminders.addReminder(parsed);
+      if (!res.ok) storageFullNote("No pude guardar el recordatorio");
+      const when = `${Reminders.formatWhen(res.reminder ? res.reminder.at : parsed.at)}${parsed.kind === "yearly" ? ", todos los años" : ""}`;
+      const reply = res.duplicate ? `Ya tenía ese recordatorio: «${res.reminder.title}» ${when}.` : `Listo. Le recuerdo «${parsed.title}» ${when}.`;
+      renderBot(reply); handleSave(memory.addMessage("assistant", reply), "la respuesta");
+      await syncReminders();
+    }
+    return true;
+  }
+  if (kind === "shopping") {
+    const p = Shopping.parseShopping(t);
+    setVista("chat");
+    renderUser(t);
+    handleSave(memory.addMessage("user", t), "el mensaje");
+    let reply = "No entendí qué hacer con la lista. Pruebe «Agregue pañales a la lista» o «¿Qué falta?».";
+    if (p) {
+      if (p.action === "list") {
+        const g = Shopping.grouped();
+        const nOpen = g.open.length;
+        reply = nOpen ? `Le faltan ${nOpen} ${nOpen === 1 ? "artículo" : "artículos"}: ` +
+          Shopping.STORES.filter((st) => (g.byStore[st] || []).length)
+            .map((st) => `${st}: ${(g.byStore[st] || []).map((i) => i.name + (i.qty && i.qty !== "1" ? ` (${i.qty})` : "")).join(", ")}`).join(". ") + "."
+          : "La lista de compras está vacía.";
+      } else if (p.action === "clear") {
+        Shopping.clearBought(); reply = "Quité de la lista lo que ya estaba comprado.";
+      } else if (p.action === "bought") {
+        const n = Shopping.markByName(p.name, true);
+        reply = n ? `Marqué «${p.name}» como comprado.` : `No encontré «${p.name}» en la lista.`;
+      } else if (p.action === "add") {
+        const res = Shopping.addItem(p);
+        if (!res.ok) storageFullNote("No pude guardar el artículo");
+        reply = `Agregué ${p.qty && p.qty !== "1" ? p.qty + " " : ""}«${p.name}» a la lista${p.store && p.store !== "Otro" ? " (" + p.store + ")" : ""}.`;
+      }
+    }
+    renderBot(reply); handleSave(memory.addMessage("assistant", reply), "la respuesta");
+    if (!els.panelView.hidden && document.querySelector(".panel-tab.on")?.dataset.tab === "compras") renderPanel();
+    return true;
+  }
+  if (kind === "digest") {
+    setVista("chat");
+    renderUser(t);
+    handleSave(memory.addMessage("user", t), "el mensaje");
+    const note = showNote("Reuniendo el resumen del día…");
+    const d = await Digest.getDigest({});
+    note.remove();
+    const reply = Digest.digestText(d, { links: false }) + "\nToque un titular abajo para leer la nota.";
+    const sources = (d.news || []).map((n) => ({ title: n.source + ": " + n.title, uri: n.link }));
+    renderBot(reply, { sources });
+    handleSave(memory.addMessage("assistant", reply, sources.length ? { sources } : null), "la respuesta");
+    return true;
+  }
+  return false;
+}
+
 function sendMessage(text, items = []) {
   text = (text || "").trim();
   if (busy || (!text && !items.length)) return false;
   if (!client.isConfigured()) { setEstado("sinkey"); return false; }
-  const label = items.map((i) => (i.kind === "video" ? "[video]" : "[foto]")).join(" ");
-  const prompt = text || DEFAULT_MEDIA_PROMPT;
+  const intent = items.length ? null : localIntent(text);
+  if (intent) { handleLocal(intent, text).catch((e) => { console.warn("Antares local:", e); showNote("No pude completar eso. Intente de nuevo.", { warn: true }); }); return true; }
+  const label = items.map((i) => (i.kind === "video" ? "[video]" : i.kind === "pdf" ? "[pdf]" : "[foto]")).join(" ");
+  const prompt = text || (items.some((i) => i.kind === "pdf") ? DEFAULT_PDF_PROMPT : DEFAULT_MEDIA_PROMPT);
   // al modelo solo le mandamos el texto del historial (las miniaturas no)
   const history = memory.getHistory(20).map(({ role, content }) => ({ role, content }));
   const facts = memory.getFacts();
   setVista("chat");
-  renderUser(text, items.map((i) => ({ kind: i.kind, url: i.url, thumb: i.thumb })));
-  const thumbsToKeep = items.map((i) => ({ kind: i.kind, thumb: i.thumb && i.thumb.length < 16000 ? i.thumb : "" }));
+  renderUser(text, items.map((i) => ({ kind: i.kind, url: i.url, thumb: i.thumb, name: i.name })));
+  const thumbsToKeep = items.map((i) => ({ kind: i.kind, thumb: i.thumb && i.thumb.length < 16000 ? i.thumb : "", ...(i.kind === "pdf" ? { name: String(i.name || "").slice(0, 80) } : {}) }));
   handleSave(memory.addMessage("user", [label, prompt].filter(Boolean).join(" "), items.length ? { media: thumbsToKeep } : null), "el mensaje");
   runJob({ text, items, prompt, history, facts });
   return true;
@@ -661,7 +759,11 @@ function renderAttachments() {
     const box = document.createElement("div");
     box.className = "att" + (a.loading ? " loading" : "");
     if (!a.loading) {
-      if (a.thumb || a.kind === "image") {
+      if (a.kind === "pdf") {
+        const chip = document.createElement("span");
+        chip.className = "pdf-chip"; chip.textContent = (a.name || "PDF").slice(0, 18);
+        box.appendChild(chip);
+      } else if (a.thumb || a.kind === "image") {
         const img = document.createElement("img");
         img.src = a.thumb || a.url; img.alt = a.kind === "video" ? "Video adjunto" : "Foto adjunta";
         box.appendChild(img);
@@ -713,7 +815,7 @@ els.attachBtn.addEventListener("click", () => setMenu(els.attachMenu.hidden));
 document.addEventListener("click", (ev) => {
   if (!els.attachMenu.hidden && !els.attachMenu.contains(ev.target) && !els.attachBtn.contains(ev.target)) setMenu(false);
 });
-const pickers = { photo: els.pickPhoto, video: els.pickVideo, gallery: els.pickGallery };
+const pickers = { photo: els.pickPhoto, video: els.pickVideo, gallery: els.pickGallery, pdf: els.pickPdf };
 els.attachMenu.addEventListener("click", (ev) => {
   const btn = ev.target.closest("button[data-pick]");
   if (!btn) return;
@@ -732,6 +834,125 @@ for (const input of Object.values(pickers)) {
 els.toggleChat.addEventListener("click", () => setVista(body.classList.contains("compact") ? "inicio" : "chat"));
 els.openChat.addEventListener("click", () => setVista("chat"));
 els.setupOpen.addEventListener("click", () => openSettings({ focusKey: true }));
+
+// ---------- Paneles: recordatorios, compras, noticias ----------
+let panelOpen = false;
+function showPanel(name) {
+  if (!isUnlocked()) return;
+  if (!els.settingsView.hidden) closeSettings();
+  openPanel(name);
+  els.chatView.hidden = true;
+  els.panelView.hidden = false;
+  if (!panelOpen) { try { history.pushState({ antares: "panel" }, ""); panelPushed = true; } catch { /* */ } }
+  panelOpen = true;
+  els.panelTitle.focus();
+}
+let panelPushed = false;
+window.addEventListener("popstate", () => { if (panelOpen) { panelPushed = false; hidePanel(); } });
+function hidePanel() {
+  if (!panelOpen && els.panelView.hidden) { if (els.panelRoot) els.panelRoot.replaceChildren(); return; }
+  els.panelView.hidden = true;
+  els.panelRoot.replaceChildren();
+  if (els.settingsView.hidden) els.chatView.hidden = false;
+  panelOpen = false;
+  if (els.openPanel.isConnected) els.openPanel.focus({ preventScroll: true });
+}
+els.openPanel.addEventListener("click", () => showPanel("recordatorios"));
+els.closePanel.addEventListener("click", () => {
+  if (panelPushed) { panelPushed = false; history.back(); } else hidePanel();
+});
+els.quickbar.addEventListener("click", (ev) => {
+  const b = ev.target.closest("button[data-panel]");
+  if (b) showPanel(b.dataset.panel);
+});
+initPanels(els.panelRoot, (what) => { if (what === "reminders" || what === "notify") syncReminders(); });
+
+// La agenda se escribe en orden (una escritura a la vez) y la revisión espera a que termine
+let syncChain = Promise.resolve();
+function syncReminders() {
+  syncChain = syncChain.then(async () => {
+    if (!isUnlocked()) return;
+    await Notify.syncSchedule(Reminders.loadReminders(), { generic: Lock.hasPin() });
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: "CHECK_REMINDERS" });
+    }
+  }).catch((e) => console.warn("Antares: agenda", e));
+  return syncChain;
+}
+// Revisa los recordatorios vencidos: aviso del sistema (si hay permiso) y nota dentro de la app
+let tickBusy = false;
+async function reminderTick() {
+  if (tickBusy) return;
+  if (!isUnlocked()) { // bloqueada: solo el aviso genérico de la agenda (sin descifrar nada)
+    tickBusy = true;
+    try { await Notify.checkDue(); } catch { /* */ } finally { tickBusy = false; }
+    return;
+  }
+  tickBusy = true;
+  try {
+    await syncChain;
+    await Notify.checkDue();
+    const dueNow = Reminders.due();
+    if (!dueNow.length) return;
+    for (const r of dueNow) {
+      Reminders.completeReminder(r.id);
+      setVista("chat");
+      showNote(`Recordatorio: ${r.title}.`, {
+        bold: "⏰",
+        action: { label: "Posponer 10 min", run: (note) => {
+          const res = Reminders.addReminder({ title: r.title, at: Date.now() + 10 * 60 * 1000 });
+          note.remove(); syncReminders();
+          if (res.ok) showNote(`Le recuerdo «${r.title}» en 10 minutos.`);
+        } },
+      });
+      announce(`Recordatorio: ${r.title}`);
+    }
+    if (navigator.vibrate) { try { navigator.vibrate([200, 100, 200]); } catch { /* */ } }
+    if (!els.panelView.hidden && document.querySelector(".panel-tab.on")?.dataset.tab === "recordatorios") renderPanel();
+    await syncReminders();
+  } catch (e) { console.warn("Antares: recordatorios", e); }
+  finally { tickBusy = false; }
+}
+
+// Exportar la conversación
+function downloadFile(name, text, type) {
+  const blob = new Blob([text], { type });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+els.exportTxt.addEventListener("click", () => {
+  const lines = memory.getHistory(0).map((m) => `[${m.ts || ""}] ${m.role === "user" ? "Usted" : "Antares"}: ${m.content || ""}` +
+    (m.sources && m.sources.length ? "\nFuentes:\n" + m.sources.map((x) => `- ${x.title}: ${x.uri}`).join("\n") : ""));
+  downloadFile(`antares-conversacion.txt`, lines.join("\n\n"), "text/plain");
+  setSettingsStatus("Conversación exportada");
+});
+els.exportJson.addEventListener("click", () => {
+  downloadFile(`antares-conversacion.json`, JSON.stringify(memory.getHistory(0), null, 2), "application/json");
+  setSettingsStatus("Conversación exportada");
+});
+
+// Oferta única del cumpleaños de Evangeline
+const K_BDAY_OFFER = "antares.bdayOffer.v1";
+function maybeOfferBirthday() {
+  try {
+    if (Reminders.hasBirthdayReminder() || localStorage.getItem(K_BDAY_OFFER)) return;
+    localStorage.setItem(K_BDAY_OFFER, "1");
+  } catch { return; }
+  const card = document.createElement("div");
+  card.className = "confirm-card";
+  const p = document.createElement("p");
+  p.textContent = "¿Quiere que le recuerde el cumpleaños de Evangeline cada 10 de octubre?";
+  const row = document.createElement("div"); row.className = "btn-row";
+  const yes = document.createElement("button"); yes.type = "button"; yes.className = "btn primary"; yes.textContent = "Sí, recordármelo";
+  const no = document.createElement("button"); no.type = "button"; no.className = "btn"; no.textContent = "No, gracias";
+  yes.onclick = () => { card.remove(); Reminders.offerEvangelineBirthday(); syncReminders(); showNote("Listo: le avisaré cada 10 de octubre."); };
+  no.onclick = () => card.remove();
+  row.append(yes, no); card.append(p, row);
+  els.messages.appendChild(card);
+}
+
 
 // ---------- Configuración ----------
 let snapshot = null;
@@ -1107,6 +1328,7 @@ async function createPinFlow() {
   const r = await runPinFlow("create");
   if (r && r.ok) {
     setSettingsStatus("Código activado: sus datos se guardan cifrados");
+    syncReminders();
     if (els.settingsView.hidden) { setVista("chat"); showNote("Código activado. Su key, la conversación y la memoria se guardan cifradas en este dispositivo."); }
     lastActivity = Date.now();
   }
@@ -1123,6 +1345,7 @@ els.pinRemove.addEventListener("click", () => securityAction(async () => {
   if (!v || !v.ok) return;
   if (Lock.passkeyInfo()) await Lock.disablePasskey();
   const r = await Lock.removePin(v.dekX);
+  if (r.ok) syncReminders();
   setSettingsStatus(r.ok ? "Código quitado. Sus datos ya no están cifrados." : "No se pudo quitar el código: no hay espacio para guardar los datos sin cifrar.", !r.ok);
 }));
 els.passkeySwitch.addEventListener("change", (ev) => {
@@ -1159,6 +1382,7 @@ function lockApp(reason = "manual") {
     if (historyPushed) { historyPushed = false; history.back(); }
     hideSettings();
   }
+  hidePanel();
   setMenu(false);
   for (const a of attachments) if (a.url) URL.revokeObjectURL(a.url);
   attachments = []; renderAttachments();
@@ -1182,9 +1406,9 @@ function loadData() {
   els.messages.replaceChildren();
   for (const m of memory.getHistory(40)) {
     if (m.role === "user") {
-      const text = String(m.content || "").replace(/^(\[(foto|video)\]\s*)+/, "").replace(/^Describa lo que ve\.$/, "");
+      const text = String(m.content || "").replace(/^(\[(foto|video|pdf)\]\s*)+/, "").replace(/^Describa lo que ve\.$/, "");
       renderUser(m.media ? text : m.content, m.media);
-    } else renderBot(m.content);
+    } else renderBot(m.content, { sources: m.sources || [] });
   }
   vista = "inicio";
   setEstado(baseEstado());
@@ -1193,6 +1417,19 @@ function afterUnlock() {
   lastActivity = Date.now();
   loadData();
   body.classList.remove("booting");
+  maybeOfferBirthday();
+  syncReminders();
+  reminderTick();
+  openPanelFromUrl();
+}
+// Accesos directos del manifiesto: ?panel=recordatorios|compras|noticias (se usa una sola vez)
+function openPanelFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const name = params.get("panel");
+  if (!name) return;
+  params.delete("panel");
+  history.replaceState(history.state, "", location.pathname + (params.toString() ? "?" + params : "") + location.hash);
+  showPanel(name);
 }
 
 // Ofrecer el código una sola vez (es opcional)
@@ -1260,6 +1497,12 @@ async function init() {
   setTimeout(() => { tick(); setInterval(tick, 60000); }, (60 - new Date().getSeconds()) * 1000 + 50);
   refreshWeather();
   setInterval(refreshWeather, 15 * 60 * 1000);
+  setInterval(reminderTick, 20000);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") reminderTick(); });
+  navigator.serviceWorker && navigator.serviceWorker.addEventListener("message", (ev) => {
+    const d = ev.data || {};
+    if (d.type === "OPEN_PANEL") showPanel(d.panel || "recordatorios");
+  });
   syncViewport();
   setupServiceWorker();
   await Lock.loadMeta();
@@ -1275,6 +1518,10 @@ async function init() {
     loadData();
     body.classList.remove("booting");
     maybeOfferPin();
+    maybeOfferBirthday();
+    syncReminders();
+    reminderTick();
+    openPanelFromUrl();
   }
   requestPersistence();
 }

@@ -1,7 +1,7 @@
 {
   "name": "Antares - Asistente personal",
   "short_name": "Antares",
-  "description": "Antares, su asistente personal por voz con Gemini: respuestas en español formal, memoria local, fotos y videos, y código de seguridad opcional con datos cifrados.",
+  "description": "Antares, su asistente personal por voz con Gemini: recordatorios, lista de compras, resumen del día de Costa Rica, fotos, videos y PDF, con código de seguridad opcional y datos cifrados.",
   "lang": "es",
   "dir": "ltr",
   "id": "./",
@@ -63,6 +63,47 @@
       "type": "image/png",
       "form_factor": "narrow",
       "label": "Configuración de Antares"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Recordatorios",
+      "short_name": "Recordatorios",
+      "description": "Ver y crear recordatorios",
+      "url": "./?panel=recordatorios",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Lista de compras",
+      "short_name": "Lista",
+      "description": "Abrir la lista de compras",
+      "url": "./?panel=compras",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Noticias y resumen del día",
+      "short_name": "Noticias",
+      "description": "Clima, dólar y titulares de Costa Rica",
+      "url": "./?panel=noticias",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     }
   ]
 }

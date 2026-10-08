@@ -1,6 +1,6 @@
 // Antares Web - Service worker: abre rápido y sin conexión, y recibe las versiones nuevas.
 // Las llamadas a Gemini, Open-Meteo y otros dominios NO se interceptan ni se guardan.
-const VERSION = "antares-v1.5.0";
+const VERSION = "antares-v1.6.0";
 const SHELL = [
   "./",
   "./index.html",
@@ -16,6 +16,11 @@ const SHELL = [
   "./js/vault.js",
   "./js/lock.js",
   "./js/lockui.js",
+  "./js/reminders.js",
+  "./js/shopping.js",
+  "./js/digest.js",
+  "./js/notify.js",
+  "./js/panels.js",
   "./fonts/orbitron-latin.woff2",
   "./fonts/rajdhani-600-latin.woff2",
   "./icons/icon-192.png",
@@ -40,11 +45,59 @@ self.addEventListener("activate", (event) => {
       // solo se borran cachés viejas de Antares, nunca otras del mismo dominio
       .then((keys) => Promise.all(keys.filter((k) => k.startsWith("antares-") && k !== VERSION).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
+      .then(() => checkReminders().catch(() => {}))
   );
 });
 
 self.addEventListener("message", (event) => {
   if (event.data === "SKIP_WAITING") self.skipWaiting();
+  if (event.data === "CHECK_REMINDERS" || (event.data && event.data.type === "CHECK_REMINDERS")) event.waitUntil(checkReminders());
+});
+
+// ---------- Recordatorios (agenda en IndexedDB "notify"; sin texto personal si hay código) ----------
+function openDb() {
+  return new Promise((resolve) => {
+    const req = indexedDB.open("antares");
+    req.onupgradeneeded = () => req.transaction.abort(); // no crear la base desde el SW: la crea la app
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null);
+  });
+}
+async function checkReminders() {
+  const db = await openDb();
+  if (!db || !db.objectStoreNames.contains("notify")) { if (db) db.close(); return; }
+  const items = await new Promise((resolve) => {
+    const t = db.transaction("notify", "readonly");
+    const r = t.objectStore("notify").getAll();
+    r.onsuccess = () => resolve(r.result || []);
+    r.onerror = () => resolve([]);
+  });
+  const now = Date.now();
+  for (const it of items) {
+    if (!it || it.fired || it.at > now) continue;
+    it.fired = true;
+    await new Promise((resolve) => {
+      const t = db.transaction("notify", "readwrite");
+      t.objectStore("notify").put(it, it.id);
+      t.oncomplete = t.onerror = () => resolve();
+    });
+    try {
+      await self.registration.showNotification(it.title, { body: it.body, tag: it.id, icon: "icons/icon-192.png", data: { url: "./?panel=recordatorios" } });
+    } catch { /* sin permiso */ }
+  }
+  db.close();
+}
+self.addEventListener("periodicsync", (event) => {
+  if (event.tag === "antares-reminders") event.waitUntil(checkReminders());
+});
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || "./";
+  event.waitUntil((async () => {
+    const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const c of all) { if ("focus" in c) { c.postMessage({ type: "OPEN_PANEL", panel: "recordatorios" }); return c.focus(); } }
+    return self.clients.openWindow(url);
+  })());
 });
 
 // Red primero (con 3 s de espera máxima); si la red tarda o falla, se usa la copia guardada.

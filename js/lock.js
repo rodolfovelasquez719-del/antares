@@ -102,7 +102,8 @@ export async function createPin(pin, onProgress = () => {}) {
   onProgress("Cifrando sus datos…");
   // Datos actuales en claro (localStorage) y miniaturas
   const recs = [];
-  for (const k of DATA_KEYS) {
+  const keysToSeal = [...new Set([...DATA_KEYS, ...Object.keys(localStorage).filter((k) => k.startsWith("antares.") && k !== "antares.pinOffer.v1" && k !== "antares.bdayOffer.v1")])];
+  for (const k of keysToSeal) {
     const raw = localStorage.getItem(k);
     if (raw != null) recs.push([k, await seal(dek, k, raw)]);
   }
@@ -117,7 +118,7 @@ export async function createPin(pin, onProgress = () => {}) {
     for (const [id, r] of thumbRecs) ts.put(r, id);
     vs.put(m, "meta");
   });
-  for (const k of DATA_KEYS) localStorage.removeItem(k); // borrar las copias en claro
+  for (const [k] of recs) localStorage.removeItem(k); // borrar las copias en claro
   meta = m;
   await openVault(dek);
   return { ok: true, migrated: recs.length, thumbs: thumbRecs.length };
@@ -144,14 +145,15 @@ export async function verifyPin(pin) {
 export async function removePin(dekX) {
   await flushWrites();
   const data = {};
-  for (const k of DATA_KEYS) {
-    const rec = await idbGet("vault", k);
-    if (rec) data[k] = await unseal(dekX, k, rec);
+  const entries = await (await import("./vault.js")).idbEntries("vault");
+  for (const [k, rec] of entries) {
+    if (k === "meta" || !(rec && rec.iv)) continue;
+    if (k.startsWith("antares.")) { try { data[k] = await unseal(dekX, k, rec); } catch { /* */ } }
   }
   try {
     for (const [k, raw] of Object.entries(data)) localStorage.setItem(k, raw);
   } catch {
-    for (const k of DATA_KEYS) localStorage.removeItem(k);
+    for (const k of Object.keys(data)) localStorage.removeItem(k);
     return { ok: false, error: "quota" };
   }
   const plainThumbs = [];

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#03060b">
   <meta name="color-scheme" content="dark">
-  <meta name="description" content="Antares, su asistente personal con Gemini.">
+  <meta name="description" content="Antares, su asistente personal con Gemini: recordatorios, lista de compras y noticias de Costa Rica.">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -31,6 +31,9 @@
       <button class="icon-btn" type="button" id="toggle-chat" aria-label="Ver conversación" aria-pressed="false">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v10H9.5L5 19.5v-4H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 9.5h8M8 12.5h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       </button>
+      <button class="icon-btn" type="button" id="open-panel" aria-label="Recordatorios, compras y noticias">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+      </button>
       <button class="icon-btn" type="button" id="open-settings" aria-label="Configuración">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M10.3 2.8h3.4l.5 2.4 1.7.8 2.1-1.3 2.4 2.4-1.3 2.1.8 1.7 2.4.5v3.4l-2.4.5-.8 1.7 1.3 2.1-2.4 2.4-2.1-1.3-1.7.8-.5 2.4h-3.4l-.5-2.4-1.7-.8-2.1 1.3-2.4-2.4 1.3-2.1-.8-1.7-2.4-.5v-3.4l2.4-.5.8-1.7-1.3-2.1 2.4-2.4 2.1 1.3 1.7-.8z"/></svg>
       </button>
@@ -54,6 +57,12 @@
         <span class="hud-sub" id="conn-sub"></span>
       </div>
     </section>
+
+    <nav class="quickbar home-only only reposo flex" id="quickbar" aria-label="Accesos">
+      <button type="button" data-panel="noticias">Resumen del día</button>
+      <button type="button" data-panel="recordatorios">Recordatorios</button>
+      <button type="button" data-panel="compras">Compras</button>
+    </nav>
 
     <!-- Escenario -->
     <main class="stage" id="stage">
@@ -140,6 +149,9 @@
           <button type="button" role="menuitem" data-pick="video">
             <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6.5" width="12.5" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m15.5 10.5 5-3v9l-5-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
             Grabar video</button>
+          <button type="button" role="menuitem" data-pick="pdf">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h8L19 8.5V20.5H6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 3.5V8.5h5M8.5 13h7M8.5 16.5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            Documento PDF</button>
           <button type="button" role="menuitem" data-pick="gallery">
             <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="1.7" fill="currentColor"/><path d="m4.5 17.5 5-5 4 4 2.5-2.5 3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
             Subir de la galería</button>
@@ -147,8 +159,9 @@
         <input type="file" id="pick-photo" accept="image/*" capture="environment" hidden>
         <input type="file" id="pick-video" accept="video/*" capture="environment" hidden>
         <input type="file" id="pick-gallery" accept="image/*,video/*" multiple hidden>
+        <input type="file" id="pick-pdf" accept="application/pdf,.pdf" hidden>
         <div class="pill">
-          <button class="icon-btn" type="button" id="attach-btn" aria-label="Adjuntar foto o video" aria-haspopup="menu" aria-expanded="false">
+          <button class="icon-btn" type="button" id="attach-btn" aria-label="Adjuntar foto, video o PDF" aria-haspopup="menu" aria-expanded="false">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 11.5 12.4 19.6a5 5 0 0 1-7.07-7.07l8.13-8.13a3.33 3.33 0 0 1 4.71 4.71l-8.14 8.13a1.67 1.67 0 0 1-2.36-2.36l7.43-7.42" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
           <textarea id="msg-input" rows="1" placeholder="Escríbale a Antares…" aria-label="Mensaje" enterkeyhint="send"></textarea>
@@ -158,6 +171,17 @@
         </button>
       </form>
     </footer>
+  </section>
+
+  <!-- ===================== Paneles ===================== -->
+  <section id="panel-view" class="view panel-view" aria-labelledby="panel-title" hidden>
+    <header class="topbar">
+      <button class="icon-btn" type="button" id="close-panel" aria-label="Volver al asistente">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <h1 class="page-title" id="panel-title" tabindex="-1">PANELES</h1>
+    </header>
+    <main class="settings-scroll" id="panel-root"></main>
   </section>
 
   <!-- ===================== Configuración ===================== -->
@@ -288,6 +312,8 @@
         </div>
         <p class="hint">Si instaló Antares en la pantalla de inicio del iPhone, esa app guarda sus datos aparte de Safari: la key, el historial y la memoria no se comparten entre ambas. En Safari, iOS puede borrar los datos de este sitio si no lo abre durante 7 días.</p>
         <div class="danger-zone">
+          <button class="btn" type="button" id="export-txt">Exportar conversación (TXT)</button>
+          <button class="btn" type="button" id="export-json">Exportar conversación (JSON)</button>
           <button class="btn danger" type="button" id="clear-history">Borrar conversación</button>
           <button class="btn danger" type="button" id="clear-facts">Borrar toda la memoria</button>
         </div>

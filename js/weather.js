@@ -1,6 +1,7 @@
 // Antares Web - Clima actual de Alajuela con Open-Meteo (gratis, sin key). Si falla, no se muestra nada.
 const URL_ALAJUELA = "https://api.open-meteo.com/v1/forecast?latitude=10.016&longitude=-84.214" +
-  "&current=temperature_2m,weather_code,is_day&timezone=America%2FCosta_Rica";
+  "&current=temperature_2m,weather_code,is_day" +
+  "&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&forecast_days=1&timezone=America%2FCosta_Rica";
 
 const CODES = [
   [[0], "Despejado"], [[1], "Casi despejado"], [[2], "Algo nublado"], [[3], "Nublado"],
@@ -14,7 +15,7 @@ export function describeWeather(code) {
   return "";
 }
 
-// Devuelve {temp, desc, time} o null
+// Devuelve {temp, desc, code, time, max, min, rain} o null (max/min/rain pueden faltar)
 export async function fetchWeather({ timeoutMs = 8000 } = {}) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -24,7 +25,10 @@ export async function fetchWeather({ timeoutMs = 8000 } = {}) {
     const data = await r.json();
     const c = data && data.current;
     if (!c || typeof c.temperature_2m !== "number") return null;
-    return { temp: Math.round(c.temperature_2m), desc: describeWeather(c.weather_code), time: c.time };
+    const d = data.daily || {};
+    const num = (a) => (Array.isArray(a) && typeof a[0] === "number" ? Math.round(a[0]) : null);
+    return { temp: Math.round(c.temperature_2m), desc: describeWeather(c.weather_code), code: c.weather_code, time: c.time,
+      max: num(d.temperature_2m_max), min: num(d.temperature_2m_min), rain: num(d.precipitation_probability_max) };
   } catch {
     return null;
   } finally { clearTimeout(t); }

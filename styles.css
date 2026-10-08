@@ -502,3 +502,72 @@ body.booting #app { visibility: hidden; }
 .sec-status .t { flex: 1; font-size: 16.5px; line-height: 1.25; }
 .sec-status .t small { display: block; font-family: var(--font-read); font-size: 13.5px; color: var(--muted); }
 .sec-status .tag { font-size: 11.5px; letter-spacing: .5px; color: var(--amber); border: 1px solid rgba(255,196,87,.45); border-radius: 6px; padding: 0 5px; font-family: var(--font-ui); }
+
+/* ===================== Paneles v1.6 ===================== */
+.quickbar { display: flex; gap: 8px; margin: 8px 12px 0; }
+.quickbar button {
+  flex: 1; min-height: 44px; padding: 6px 8px; border-radius: 12px; cursor: pointer;
+  font-family: var(--font-ui); font-size: 15px; font-weight: 600; color: var(--cyan-2);
+  background: rgba(0,229,255,.06); border: 1px solid var(--line-soft);
+}
+.quickbar button:active { background: rgba(0,229,255,.18); }
+.panel-tabs { display: flex; gap: 6px; padding: 2px 2px 0; }
+.panel-tab {
+  flex: 1; min-height: 44px; border-radius: 12px; cursor: pointer;
+  font-family: var(--font-ui); font-size: 16px; font-weight: 600; color: var(--muted);
+  background: transparent; border: 1px solid var(--line-soft);
+}
+.panel-tab.on { color: var(--cyan-ink); background: var(--cyan); border-color: var(--cyan); }
+.panel-body { display: flex; flex-direction: column; gap: 12px; }
+.add-form { display: flex; flex-direction: column; gap: 8px; }
+.form-row { display: flex; gap: 8px; }
+.form-row .field { flex: 1; min-width: 0; }
+.perm-box, .suggest-box, .digest-card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px;
+}
+.perm-box p, .suggest-box p { margin: 0 0 10px; font-family: var(--font-read); font-size: 15.5px; line-height: 1.4; color: var(--text); }
+.panel-note { margin: 0; }
+.empty-note { margin: 4px 0; font-family: var(--font-read); font-size: 15.5px; color: var(--muted); text-align: center; }
+.store-h { margin: 4px 0 0; font-family: var(--font-hud); font-size: 12px; letter-spacing: 1.5px; color: var(--cyan-2); }
+.item-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.item-row {
+  display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 8px 10px;
+  background: var(--panel); border: 1px solid var(--line-soft); border-radius: 12px;
+}
+.item-row.done .item-main strong { text-decoration: line-through; color: var(--muted); }
+.item-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.item-main strong { font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+.item-main small, .news-list small { font-family: var(--font-read); font-size: 13.5px; color: var(--muted); }
+.item-actions { display: flex; gap: 4px; flex: none; }
+.mini-btn {
+  min-height: 44px; padding: 0 10px; border-radius: 10px; cursor: pointer;
+  font-family: var(--font-ui); font-size: 14px; font-weight: 600; color: var(--text);
+  background: rgba(0,229,255,.06); border: 1px solid var(--line-soft);
+}
+.mini-btn.danger { color: var(--red); border-color: rgba(255,138,138,.45); }
+.check-btn {
+  width: 44px; height: 44px; flex: none; border-radius: 10px; cursor: pointer;
+  background: transparent; border: 1.5px solid var(--cyan); position: relative;
+}
+.check-btn[aria-pressed="true"]::after {
+  content: ""; position: absolute; left: 14px; top: 8px; width: 10px; height: 18px;
+  border: solid var(--cyan); border-width: 0 3px 3px 0; transform: rotate(45deg);
+}
+.digest-card h3 { margin: 10px 0 2px; font-family: var(--font-hud); font-size: 12px; letter-spacing: 1.5px; color: var(--cyan-2); }
+.digest-card h3:first-of-type { margin-top: 8px; }
+.digest-card p { margin: 0; font-family: var(--font-read); font-size: 15.5px; line-height: 1.45; }
+.news-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.news-list li { display: flex; flex-direction: column; }
+.news-list a { color: var(--cyan-2); font-size: 15.5px; line-height: 1.35; }
+.bubble a { color: var(--cyan-2); }
+.pdf-chip {
+  display: flex; align-items: flex-end; justify-content: flex-start; width: 100%; height: 100%; min-height: 60px;
+  padding: 22px 6px 6px; box-sizing: border-box; font-family: var(--font-read); font-size: 11.5px; line-height: 1.2;
+  color: var(--text); overflow: hidden; overflow-wrap: anywhere;
+  background: linear-gradient(180deg, rgba(255,138,138,.18), transparent 60%);
+}
+.pdf-chip::before { content: "PDF"; position: absolute; top: 5px; left: 6px; font-family: var(--font-hud); font-size: 10px; letter-spacing: 1px; color: var(--red); }
+.bubble-media .media-item .pdf-chip { min-width: 150px; min-height: 64px; font-size: 14px; padding-top: 24px; position: relative; }
+.bubble-media .media-item .pdf-chip::before { top: 6px; }
+.bubble { white-space: pre-line; }
+.add-form.editing { padding: 10px; border: 1px solid var(--cyan); border-radius: 14px; box-shadow: var(--glow); }

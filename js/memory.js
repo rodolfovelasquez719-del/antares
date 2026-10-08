@@ -46,6 +46,12 @@ export async function openVault(dek) {
     const rec = await idbGet("vault", k);
     data[k] = rec ? JSON.parse(await unseal(dek, k, rec)) : null;
   }
+  // Registros extra (recordatorios, compras, etc.) sellados con el prefijo antares.
+  for (const [k, rec] of await idbEntries("vault")) {
+    if (isExtraKey(k) && isSealed(rec)) {
+      try { data[k] = JSON.parse(await unseal(dek, k, rec)); } catch { /* registro ilegible: se omite */ }
+    }
+  }
   vaultMode = true;
   vault = { dek, data };
 }
@@ -149,6 +155,10 @@ function saveWithRoom(key, value) {
   return { ok: false, pruned: 0 };
 }
 
+export function isExtraKey(k) {
+  return typeof k === "string" && k.startsWith("antares.") && !DATA_KEYS.includes(k) && k !== "antares.pinOffer.v1" && k !== "antares.bdayOffer.v1";
+}
+
 export const memory = {
   // Migraciones (v1.3 guardaba las miniaturas dentro del historial en localStorage)
   async init() {
@@ -188,6 +198,9 @@ export const memory = {
     return drop.size;
   },
 
+  getData(key) { return load(key, null); },
+  saveData(key, value) { return saveWithRoom(key, value); },
+
   getConfig() { return { ...DEFAULT_CONFIG, ...load(K_CONFIG, {}) }; },
   saveConfig(cfg) { return saveWithRoom(K_CONFIG, cfg); },
 
@@ -198,9 +211,11 @@ export const memory = {
   // extra.media: [{kind, thumb(dataURL)}] -> la miniatura va a IndexedDB. Devuelve {ok, pruned, id}
   addMessage(role, content, extra = null) {
     const msg = { id: newId(), role, content, ts: new Date().toISOString() };
+    if (extra && Array.isArray(extra.sources) && extra.sources.length) msg.sources = extra.sources.slice(0, 8);
     if (extra && extra.media) {
       msg.media = extra.media.map((x) => {
         const out = { kind: x.kind };
+        if (x.name) out.name = x.name;
         if (x.thumb) { out.thumbId = newId(); thumbs.put(out.thumbId, x.thumb); }
         return out;
       });

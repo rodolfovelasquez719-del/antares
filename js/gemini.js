@@ -88,7 +88,7 @@ export const ERRORS = {
   network: ["Sin conexión", "No pude comunicarme con Gemini. Revise su conexión a internet e intente de nuevo."],
   blocked: ["Respuesta bloqueada", "Gemini no respondió a esto por sus filtros de seguridad. Intente reformular la pregunta."],
   empty: ["Sin respuesta", "Gemini no devolvió ninguna respuesta. Intente de nuevo."],
-  media: ["No pude procesar el archivo", "Gemini no pudo procesar el archivo adjunto. Pruebe con otra foto o con un video más corto."],
+  media: ["No pude procesar el archivo", "Gemini no pudo procesar el archivo adjunto. Pruebe con otro archivo o con uno más pequeño."],
   no_model: ["Sin modelos disponibles", "Ningún modelo de Gemini está disponible para su key en este momento."],
   unknown: ["Algo salió mal", "Gemini devolvió un error inesperado. Intente de nuevo; si sigue pasando, revise los detalles."],
 };
@@ -177,8 +177,8 @@ export class GeminiClient {
     if (search) system += "\n\nSi usa resultados de búsqueda, resúmalos con sus palabras en texto plano.";
     const hasMedia = !!(media && media.length);
     if (hasMedia) {
-      system += "\n\nEl usuario adjuntó fotos o videos: descríbalos o analícelos según lo que pida, " +
-        "con precisión y sin inventar detalles que no se vean.";
+      system += "\n\nEl usuario adjuntó fotos, videos o documentos: descríbalos o analícelos según lo que pida, " +
+        "con precisión y sin inventar detalles que no aparezcan.";
     }
     const messages = [...history, { role: "user", content: userMessage, media: hasMedia ? media : undefined }];
     return this.callApi(system, messages, {
