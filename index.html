@@ -2,134 +2,289 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-  <title>Antares</title>
-  <meta name="description" content="Antares, su asistente personal con Gemini.">
-  <meta name="theme-color" content="#16161a">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#03060b">
   <meta name="color-scheme" content="dark">
+  <meta name="description" content="Antares, su asistente personal con Gemini.">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Antares">
+  <title>Antares</title>
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+  <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preload" href="fonts/orbitron-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/rajdhani-600-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="styles.css">
 </head>
-<body>
-  <div id="app">
-    <!-- ===== Chat ===== -->
-    <section id="chat-view" class="view" aria-label="Chat">
-      <header class="topbar">
-        <div class="avatar" id="avatar" aria-hidden="true">A</div>
-        <div class="titles">
-          <h1 id="assistant-title">Antares</h1>
-          <p class="subtitle" id="status-line">Asistente personal</p>
+<body data-estado="reposo">
+<div class="app" id="app">
+
+  <!-- ===================== Vista principal ===================== -->
+  <section id="chat-view" class="view" aria-label="Asistente">
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo-mark" aria-hidden="true"></span>
+        <div><h1 id="assistant-title">ANTARES</h1><p id="status-line">Asistente personal</p></div>
+      </div>
+      <button class="icon-btn" type="button" id="toggle-chat" aria-label="Ver conversación" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v10H9.5L5 19.5v-4H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 9.5h8M8 12.5h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+      <button class="icon-btn" type="button" id="open-settings" aria-label="Configuración">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M10.3 2.8h3.4l.5 2.4 1.7.8 2.1-1.3 2.4 2.4-1.3 2.1.8 1.7 2.4.5v3.4l-2.4.5-.8 1.7 1.3 2.1-2.4 2.4-2.1-1.3-1.7.8-.5 2.4h-3.4l-.5-2.4-1.7-.8-2.1 1.3-2.4-2.4 1.3-2.1-.8-1.7-2.4-.5v-3.4l2.4-.5.8-1.7-1.3-2.1 2.4-2.4 2.1 1.3 1.7-.8z"/></svg>
+      </button>
+    </header>
+
+    <!-- Panel HUD -->
+    <section class="hud" id="hud" aria-label="Panel de estado">
+      <div>
+        <span class="hud-label">HORA</span>
+        <time class="hud-big" id="hora">--:--</time>
+        <span class="hud-sub" id="fecha"></span>
+      </div>
+      <div id="weather-cell" hidden>
+        <span class="hud-label">ALAJUELA</span>
+        <span class="hud-val" id="weather-temp"></span>
+        <span class="hud-sub" id="weather-desc"></span>
+      </div>
+      <div id="conn-cell">
+        <span class="hud-label">CONEXIÓN</span>
+        <span class="hud-val"><i class="dot"></i><span id="conn">En línea</span></span>
+        <span class="hud-sub" id="conn-sub"></span>
+      </div>
+    </section>
+
+    <!-- Escenario -->
+    <main class="stage" id="stage">
+      <div class="stage-center">
+        <div class="reactor-wrap" aria-hidden="true">
+          <span class="ripple"></span><span class="ripple r2"></span><span class="ripple r3"></span>
+          <svg class="reactor" viewBox="0 0 200 200">
+            <defs>
+              <radialGradient id="g-core" cx="50%" cy="50%" r="50%">
+                <stop offset="0" stop-color="#ffffff"/><stop offset=".45" stop-color="#c9fbff"/>
+                <stop offset=".75" stop-color="#00e5ff"/><stop offset="1" stop-color="#00e5ff" stop-opacity="0"/>
+              </radialGradient>
+              <radialGradient id="g-halo" cx="50%" cy="50%" r="50%">
+                <stop offset=".55" stop-color="#00e5ff" stop-opacity=".0"/><stop offset=".8" stop-color="#00e5ff" stop-opacity=".22"/>
+                <stop offset="1" stop-color="#00e5ff" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+            <circle class="halo" cx="100" cy="100" r="99" fill="url(#g-halo)"/>
+            <circle cx="100" cy="100" r="97" fill="none" stroke="#00e5ff" stroke-opacity=".35" stroke-width="1"/>
+            <g class="spin"><circle cx="100" cy="100" r="90" fill="none" stroke="#00e5ff" stroke-opacity=".7" stroke-width="6" stroke-dasharray="1.4 6.45"/></g>
+            <g class="spin-rev"><circle cx="100" cy="100" r="78" fill="none" stroke="#00e5ff" stroke-width="3" stroke-dasharray="46 10 12 10" stroke-linecap="round"/></g>
+            <circle cx="100" cy="100" r="68" fill="#031018" stroke="#5ff1ff" stroke-opacity=".55" stroke-width="1.2"/>
+            <g class="coil">
+              <circle cx="100" cy="100" r="52" fill="none" stroke="#00e5ff" stroke-opacity=".9" stroke-width="16" stroke-dasharray="25.5 7.17"/>
+              <circle cx="100" cy="100" r="52" fill="none" stroke="#e6fdff" stroke-opacity=".55" stroke-width="3" stroke-dasharray="25.5 7.17"/>
+            </g>
+            <circle cx="100" cy="100" r="40" fill="none" stroke="#5ff1ff" stroke-width="1.5"/>
+            <g class="core"><circle cx="100" cy="100" r="34" fill="url(#g-core)"/></g>
+            <circle cx="100" cy="100" r="16" fill="#ffffff" fill-opacity=".9"/>
+          </svg>
         </div>
-        <button class="icon-btn" id="open-settings" aria-label="Configuración">
-          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1.03Z"/></svg>
-        </button>
-      </header>
 
-      <main id="messages" class="messages" aria-live="polite"></main>
+        <div class="side-info">
+          <p class="state-label" id="state-label">EN ESPERA</p>
+          <div class="wave only escuchando hablando flex" id="wave" aria-hidden="true"></div>
+          <p class="hint-line side-hint" id="side-hint" hidden></p>
+        </div>
 
+        <p class="greeting home-only only reposo" id="saludo"></p>
+        <button class="link-btn home-only only reposo" type="button" id="open-chat" hidden>Ver la conversación anterior</button>
+
+        <p class="interim only escuchando" id="interim"><span class="q" id="interim-text"></span><span class="caret"></span></p>
+        <p class="hint-line only escuchando">Hable con naturalidad; enviaré al terminar.</p>
+
+        <p class="greeting only sinkey" id="saludo-sinkey"></p>
+        <div class="setup-card only sinkey" role="region" aria-labelledby="setup-t">
+          <h2 id="setup-t"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M11 12 20 3m-3 3 2 2m-5 1 2 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Configure su API key</h2>
+          <p>Para responderle necesito una API key gratuita de Google Gemini. Toma un minuto y se guarda solo en este dispositivo.</p>
+          <ol class="steps">
+            <li><span>Abra <b>aistudio.google.com/apikey</b> e inicie sesión.</span></li>
+            <li><span>Toque <b>«Create API key»</b> y cópiela.</span></li>
+            <li><span>Péguela en <b>Configuración</b> y toque <b>«Probar conexión»</b>.</span></li>
+          </ol>
+          <div class="btn-row">
+            <button class="btn primary" type="button" id="setup-open">Abrir Configuración</button>
+          </div>
+          <p class="more">¿Aún no tiene una? <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Obtenerla gratis ↗</a></p>
+        </div>
+      </div>
+
+      <!-- Conversación (historial siempre accesible) -->
+      <div class="chat" id="messages" role="log" aria-label="Conversación" aria-live="off" tabindex="-1"></div>
+      <div class="sr-only" id="announcer" aria-live="polite" aria-atomic="true"></div>
+    </main>
+
+    <!-- Micrófono y entrada -->
+    <footer class="dock">
       <div id="attachments" class="attachments" hidden></div>
-      <form id="composer" class="composer" autocomplete="off">
-        <div id="attach-menu" class="attach-menu" hidden role="menu">
+      <button class="stop-pill only hablando flex" type="button" id="stop-btn" aria-label="Detener la respuesta">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>Detener respuesta
+      </button>
+      <div class="mic-zone" id="mic-zone">
+        <button class="mic-big" id="mic-btn" type="button" aria-label="Hablar">
+          <svg class="ico-mic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <svg class="ico-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor"/></svg>
+        </button>
+        <span class="mic-hint" id="mic-hint">Toque para hablar</span>
+      </div>
+      <form class="composer" id="composer" autocomplete="off">
+        <div id="attach-menu" class="attach-menu" hidden role="menu" aria-label="Adjuntar">
           <button type="button" role="menuitem" data-pick="photo">
-            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
             Tomar foto</button>
           <button type="button" role="menuitem" data-pick="video">
-            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="3" y="6.5" width="12.5" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m15.5 10.5 5-3v9l-5-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6.5" width="12.5" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m15.5 10.5 5-3v9l-5-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
             Grabar video</button>
           <button type="button" role="menuitem" data-pick="gallery">
-            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="1.7" fill="currentColor"/><path d="m4.5 17.5 5-5 4 4 2.5-2.5 3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="1.7" fill="currentColor"/><path d="m4.5 17.5 5-5 4 4 2.5-2.5 3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
             Subir de la galería</button>
         </div>
         <input type="file" id="pick-photo" accept="image/*" capture="environment" hidden>
         <input type="file" id="pick-video" accept="video/*" capture="environment" hidden>
         <input type="file" id="pick-gallery" accept="image/*,video/*" multiple hidden>
         <div class="pill">
-          <button type="button" class="icon-btn attach" id="attach-btn" aria-label="Adjuntar foto o video" aria-haspopup="menu" aria-expanded="false">
-            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M20.5 11.5 12.4 19.6a5 5 0 0 1-7.07-7.07l8.13-8.13a3.33 3.33 0 0 1 4.71 4.71l-8.14 8.13a1.67 1.67 0 0 1-2.36-2.36l7.43-7.42" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <button class="icon-btn" type="button" id="attach-btn" aria-label="Adjuntar foto o video" aria-haspopup="menu" aria-expanded="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 11.5 12.4 19.6a5 5 0 0 1-7.07-7.07l8.13-8.13a3.33 3.33 0 0 1 4.71 4.71l-8.14 8.13a1.67 1.67 0 0 1-2.36-2.36l7.43-7.42" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
-          <textarea id="msg-input" rows="1" placeholder="Escríbale a Antares..." enterkeyhint="send" aria-label="Mensaje"></textarea>
-          <button type="button" class="icon-btn mic" id="mic-btn" aria-label="Hablar" hidden>
-            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          </button>
+          <textarea id="msg-input" rows="1" placeholder="Escríbale a Antares…" aria-label="Mensaje" enterkeyhint="send"></textarea>
         </div>
-        <button type="submit" class="send-btn" id="send-btn" aria-label="Enviar">
-          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <button class="send" type="submit" id="send-btn" aria-label="Enviar">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
       </form>
-    </section>
+    </footer>
+  </section>
 
-    <!-- ===== Configuración ===== -->
-    <section id="settings-view" class="view settings" aria-label="Configuración" hidden>
-      <header class="topbar">
-        <button class="icon-btn" id="close-settings" aria-label="Volver">
-          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <div class="titles"><h1>Configuración</h1></div>
-      </header>
+  <!-- ===================== Configuración ===================== -->
+  <section id="settings-view" class="view ajustes" aria-labelledby="settings-title" hidden>
+    <header class="topbar">
+      <button class="icon-btn" type="button" id="close-settings" aria-label="Volver al asistente">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <h1 class="page-title" id="settings-title" tabindex="-1">CONFIGURACIÓN</h1>
+    </header>
 
-      <div class="settings-body">
-        <label class="field-label" for="api-key">API key de Gemini (Google AI Studio)</label>
-        <p class="hint">Consígala gratis en <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. Se guarda solo en este navegador.</p>
-        <input id="api-key" class="field" type="text" placeholder="Pegue aquí su API key de Gemini"
-               autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
-        <div class="row">
-          <button type="button" class="pill-btn" id="toggle-key">Ocultar</button>
-          <button type="button" class="pill-btn" id="paste-key">Pegar</button>
-          <button type="button" class="pill-btn" id="clear-key">Borrar</button>
+    <main class="settings-scroll" id="settings-scroll">
+      <!-- Conexión -->
+      <section class="panel" id="api" aria-labelledby="h-api">
+        <h2 id="h-api">CONEXIÓN CON GEMINI</h2>
+        <label class="field-label" for="api-key">API key de Gemini</label>
+        <div class="key-field">
+          <input id="api-key" class="field" type="password" placeholder="Pegue aquí su API key"
+                 autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+          <button class="icon-btn" type="button" id="toggle-key" aria-label="Mostrar la key" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+          </button>
         </div>
-        <button type="button" class="pill-btn wide" id="test-conn">Probar conexión</button>
+        <p class="hint">Se guarda solo en este dispositivo y únicamente se envía a Google.</p>
+        <div class="btn-row" style="margin-top:10px">
+          <button class="btn" type="button" id="paste-key">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="4" width="10" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 6H5v15h14V6h-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>Pegar</button>
+          <button class="btn" type="button" id="test-conn" style="flex:1.6">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3M18 3v4h-4M6 21v-4h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Probar conexión</button>
+        </div>
+        <div class="status-box" id="conn-status" role="status" hidden>
+          <svg class="ico-ok" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5 10 17 19 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg class="ico-warn" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v6m0 3.5v.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+          <span id="conn-status-text"></span>
+          <button class="link-btn" type="button" id="conn-details" hidden>Ver detalles</button>
+        </div>
+        <p class="hint">¿No tiene una? Consígala gratis en <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.</p>
+      </section>
 
+      <!-- Perfil -->
+      <section class="panel" aria-labelledby="h-perfil">
+        <h2 id="h-perfil">PERFIL</h2>
         <label class="field-label" for="assistant-name">Nombre del asistente</label>
-        <input id="assistant-name" class="field" type="text" placeholder="Antares" maxlength="40">
+        <input id="assistant-name" class="field" type="text" maxlength="40" placeholder="Antares">
+        <label class="field-label" for="user-name">¿Cómo debo llamarlo?</label>
+        <input id="user-name" class="field" type="text" maxlength="40" placeholder="Ej.: señor Freddy">
+        <label class="field-label" for="personality">Personalidad (opcional)</label>
+        <textarea id="personality" class="field" rows="3" placeholder="Ej.: formal y directo, como un mayordomo; me ayuda con programación"></textarea>
+      </section>
 
-        <label class="field-label" for="user-name">Su nombre (cómo lo va a llamar)</label>
-        <input id="user-name" class="field" type="text" placeholder="Ej: Freddy" maxlength="40">
+      <!-- Voz -->
+      <section class="panel" aria-labelledby="h-voz">
+        <h2 id="h-voz">VOZ</h2>
+        <label class="switch-row">
+          <span class="txt">Leer las respuestas en voz alta<small>Apagado por defecto para no sorprenderlo</small></span>
+          <input class="switch" type="checkbox" role="switch" id="speak-replies">
+        </label>
+        <label class="field-label" for="speech-lang">Idioma del dictado</label>
+        <select id="speech-lang" class="field">
+          <option value="es-CR">Español (Costa Rica)</option>
+          <option value="es-MX">Español (México)</option>
+          <option value="es-US">Español (Estados Unidos)</option>
+        </select>
+        <p class="hint">En iPhone, el dictado necesita Siri y Dictado activados en Ajustes (General › Teclado › Activar dictado). Si un idioma no está disponible, probaré con el siguiente.</p>
+        <p class="hint" id="voice-unsupported" hidden>Este navegador no permite dictado por voz; puede usar el micrófono del teclado.</p>
+      </section>
 
-        <label class="field-label" for="personality">Personalidad / descripción (opcional)</label>
-        <textarea id="personality" class="field area" rows="4" placeholder="Ej: Bromista, fan del fútbol, me ayuda con programación"></textarea>
+      <!-- Búsqueda -->
+      <section class="panel" aria-labelledby="h-busq">
+        <h2 id="h-busq">BÚSQUEDA</h2>
+        <label class="switch-row">
+          <span class="txt">Buscar en Google cuando haga falta información actual<small>Clima, noticias, tipo de cambio…</small></span>
+          <input class="switch" type="checkbox" role="switch" id="web-search">
+        </label>
+      </section>
 
-        <label class="switch-row"><input type="checkbox" id="speak-replies"> <span>Leer las respuestas en voz alta</span></label>
-        <label class="switch-row"><input type="checkbox" id="web-search"> <span>Buscar en Google cuando haga falta info actual</span></label>
-
-        <button type="button" class="pill-btn wide primary" id="save-settings">Guardar</button>
-        <p class="status" id="settings-status" role="status"></p>
-
-        <h2 class="section-title">Memoria</h2>
-        <label class="switch-row"><input type="checkbox" id="auto-learn"> <span>Aprender datos sobre mí automáticamente</span></label>
-        <p class="hint">Lo que Antares recuerda de usted. Se guarda solo en este navegador.</p>
-        <ul id="facts-list" class="facts-list"></ul>
+      <!-- Memoria -->
+      <section class="panel" aria-labelledby="h-mem">
+        <h2 id="h-mem">MEMORIA</h2>
+        <label class="switch-row">
+          <span class="txt">Aprender datos sobre mí automáticamente<small>Siempre podrá deshacer o borrar cada dato</small></span>
+          <input class="switch" type="checkbox" role="switch" id="auto-learn">
+        </label>
+        <ul class="facts" id="facts-list" aria-label="Datos guardados"></ul>
         <p class="hint" id="facts-count"></p>
-
+        <div class="meter" id="storage-meter">
+          <div class="row"><span>Almacenamiento usado</span><b id="storage-text">—</b></div>
+          <div class="bar" role="progressbar" aria-label="Almacenamiento usado" aria-valuemin="0" aria-valuemax="100" id="storage-bar"><i id="storage-fill"></i></div>
+        </div>
+        <p class="hint">Si instaló Antares en la pantalla de inicio del iPhone, esa app guarda sus datos aparte de Safari: la key, el historial y la memoria no se comparten entre ambas. En Safari, iOS puede borrar los datos de este sitio si no lo abre durante 7 días.</p>
         <div class="danger-zone">
-          <div class="row">
-            <button type="button" class="pill-btn" id="clear-history">Borrar conversación</button>
-            <button type="button" class="pill-btn" id="clear-facts">Borrar toda la memoria</button>
-          </div>
+          <button class="btn danger" type="button" id="clear-history">Borrar conversación</button>
+          <button class="btn danger" type="button" id="clear-facts">Borrar toda la memoria</button>
         </div>
-        <p class="hint small" id="app-version"></p>
-      </div>
-    </section>
+      </section>
 
-    <!-- ===== Diagnóstico ===== -->
-    <div id="modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="modal-title">
-      <div class="modal-card">
-        <h2 id="modal-title">Diagnóstico de conexión</h2>
-        <pre id="modal-body"></pre>
-        <div class="row">
-          <button type="button" class="pill-btn" id="modal-copy">Copiar</button>
-          <button type="button" class="pill-btn primary" id="modal-close">Cerrar</button>
-        </div>
-      </div>
+      <p class="foot" id="app-version"></p>
+    </main>
+
+    <div class="save-bar">
+      <span class="unsaved" id="unsaved" hidden><i class="dot"></i>Cambios sin guardar</span>
+      <span class="saved-msg" id="settings-status" role="status"></span>
+      <button class="btn primary" type="button" id="save-settings">Guardar</button>
+    </div>
+  </section>
+</div>
+
+<!-- Diálogo (detalles técnicos / confirmaciones) -->
+<div class="modal" id="modal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1">
+    <h2 id="modal-title">Detalles</h2>
+    <pre class="modal-body" id="modal-body"></pre>
+    <div class="btn-row">
+      <button type="button" class="btn" id="modal-copy">Copiar</button>
+      <button type="button" class="btn primary" id="modal-close">Cerrar</button>
     </div>
   </div>
+</div>
 
-  <noscript>Antares necesita JavaScript activado.</noscript>
-  <script type="module" src="js/app.js"></script>
+<!-- Aviso de versión nueva -->
+<div class="toast" id="update-toast" role="status" hidden>
+  <span>Nueva versión disponible</span>
+  <button type="button" class="btn primary" id="update-btn">Actualizar</button>
+  <button type="button" class="icon-btn" id="update-dismiss" aria-label="Cerrar aviso">×</button>
+</div>
+
+<noscript><p style="padding:20px;color:#e6f8ff">Antares necesita JavaScript activado.</p></noscript>
+<script type="module" src="js/app.js"></script>
 </body>
 </html>

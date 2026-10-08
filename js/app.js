@@ -1,40 +1,53 @@
-// Antares Web - lógica de la interfaz.
+// Antares Web - lógica de la interfaz (estilo "Jarvis").
 import { GeminiClient, DEFAULT_ASSISTANT_NAME, needsSearch } from "./gemini.js";
-import { memory, requestPersistence } from "./memory.js";
+import { memory, thumbs, requestPersistence, LS_LIMIT } from "./memory.js";
 import { looksLikeImportantFact, buildConfirmationQuestion } from "./facts.js";
 import { Voice } from "./voice.js";
 import { prepareFile, toGeminiMedia, formatBytes, MAX_ATTACHMENTS } from "./media.js";
+import { fetchWeather } from "./weather.js";
 
-const APP_VERSION = "1.3.0";
+const APP_VERSION = "1.4.0";
 const DEFAULT_MEDIA_PROMPT = "Describa lo que ve.";
 const $ = (id) => document.getElementById(id);
+const body = document.body;
 
 const els = {
-  app: $("app"),
-  chatView: $("chat-view"), settingsView: $("settings-view"),
-  avatar: $("avatar"), title: $("assistant-title"), status: $("status-line"),
-  messages: $("messages"), form: $("composer"), input: $("msg-input"),
-  mic: $("mic-btn"), send: $("send-btn"),
-  openSettings: $("open-settings"), closeSettings: $("close-settings"),
-  apiKey: $("api-key"), toggleKey: $("toggle-key"), pasteKey: $("paste-key"), clearKey: $("clear-key"),
-  testConn: $("test-conn"), assistantName: $("assistant-name"), userName: $("user-name"),
-  personality: $("personality"), speakReplies: $("speak-replies"), webSearch: $("web-search"),
-  autoLearn: $("auto-learn"), factsList: $("facts-list"),
-  save: $("save-settings"), settingsStatus: $("settings-status"),
-  factsCount: $("facts-count"), clearHistory: $("clear-history"), clearFacts: $("clear-facts"),
-  version: $("app-version"),
-  attachBtn: $("attach-btn"), attachMenu: $("attach-menu"), attachments: $("attachments"),
+  app: $("app"), chatView: $("chat-view"), settingsView: $("settings-view"),
+  title: $("assistant-title"), status: $("status-line"), toggleChat: $("toggle-chat"), openSettings: $("open-settings"),
+  hud: $("hud"), hora: $("hora"), fecha: $("fecha"), weatherCell: $("weather-cell"), weatherTemp: $("weather-temp"), weatherDesc: $("weather-desc"),
+  connCell: $("conn-cell"), conn: $("conn"), connSub: $("conn-sub"),
+  stateLabel: $("state-label"), wave: $("wave"), sideHint: $("side-hint"), saludo: $("saludo"), openChat: $("open-chat"),
+  interimText: $("interim-text"), saludoSinkey: $("saludo-sinkey"), setupOpen: $("setup-open"),
+  messages: $("messages"), announcer: $("announcer"),
+  attachments: $("attachments"), stop: $("stop-btn"), micZone: $("mic-zone"), mic: $("mic-btn"), micHint: $("mic-hint"),
+  form: $("composer"), input: $("msg-input"), send: $("send-btn"),
+  attachBtn: $("attach-btn"), attachMenu: $("attach-menu"),
   pickPhoto: $("pick-photo"), pickVideo: $("pick-video"), pickGallery: $("pick-gallery"),
-  modal: $("modal"), modalBody: $("modal-body"), modalCopy: $("modal-copy"), modalClose: $("modal-close"),
+  // configuración
+  closeSettings: $("close-settings"), settingsTitle: $("settings-title"), settingsScroll: $("settings-scroll"),
+  apiKey: $("api-key"), toggleKey: $("toggle-key"), pasteKey: $("paste-key"), testConn: $("test-conn"),
+  connStatus: $("conn-status"), connStatusText: $("conn-status-text"), connDetails: $("conn-details"),
+  assistantName: $("assistant-name"), userName: $("user-name"), personality: $("personality"),
+  speakReplies: $("speak-replies"), speechLang: $("speech-lang"), voiceUnsupported: $("voice-unsupported"),
+  webSearch: $("web-search"), autoLearn: $("auto-learn"), factsList: $("facts-list"), factsCount: $("facts-count"),
+  storageMeter: $("storage-meter"), storageText: $("storage-text"), storageBar: $("storage-bar"), storageFill: $("storage-fill"),
+  clearHistory: $("clear-history"), clearFacts: $("clear-facts"), version: $("app-version"),
+  unsaved: $("unsaved"), settingsStatus: $("settings-status"), save: $("save-settings"),
+  modal: $("modal"), modalTitle: $("modal-title"), modalBody: $("modal-body"), modalCopy: $("modal-copy"), modalClose: $("modal-close"),
+  toast: $("update-toast"), updateBtn: $("update-btn"), updateDismiss: $("update-dismiss"),
 };
 
 let config = memory.getConfig();
-// v1.2.0: nuevo orden de modelos (3.5-flash-lite primero) -> olvidar el modelo preferido viejo una vez
-if (config.modelOrderRev !== 2) { config.geminiModel = ""; config.modelOrderRev = 2; memory.saveConfig(config); }
 let client = null;
-let pendingFact = null;
-let pendingCount = 0;
 const voice = new Voice();
+let estado = "reposo";
+let vista = "inicio";           // "inicio" (reactor grande) o "chat" (conversación visible)
+let busy = false;               // hay una respuesta en curso: no se puede enviar otra
+let abortCtrl = null;
+let attachments = [];
+let pendingConfirm = null;
+let rateUntil = 0;              // fin de la pausa por límite de consultas
+let lastModelShort = "";
 
 // ---------- Cliente Gemini ----------
 function makeClient(apiKey = config.geminiApiKey) {
@@ -44,27 +57,125 @@ function makeClient(apiKey = config.geminiApiKey) {
     userName: config.userName,
     personality: config.personality,
     preferredModel: config.geminiModel,
-    authMethod: config.authMethod,
     noGrounding: config.noGrounding,
-    onModelOk: ({ model, authMethod, noGrounding }) => {
+    onModelOk: ({ model, noGrounding }) => {
       if (model) config.geminiModel = model;
-      if (authMethod) config.authMethod = authMethod;
       if (noGrounding) config.noGrounding = { ...noGrounding };
       memory.saveConfig(config);
     },
   });
 }
+const assistantName = () => (config.assistantName || "").trim() || DEFAULT_ASSISTANT_NAME;
+const shortModel = (m) => (m || "").replace(/^gemini-/, "");
+const baseEstado = () => (client && client.isConfigured() ? "reposo" : "sinkey");
 
-function assistantName() {
-  return (config.assistantName || "").trim() || DEFAULT_ASSISTANT_NAME;
+// ---------- Estados de la interfaz ----------
+const STATE_TEXT = { reposo: "EN ESPERA", escuchando: "ESCUCHANDO…", hablando: "RESPONDIENDO…", error: "EN PAUSA", sinkey: "SIN CONFIGURAR" };
+
+function setEstado(e) {
+  estado = e;
+  body.dataset.estado = e;
+  els.stateLabel.textContent = STATE_TEXT[e] || "";
+  els.stateLabel.classList.toggle("warn", e === "error" || e === "sinkey");
+  if (e !== "error") { els.sideHint.hidden = true; els.sideHint.textContent = ""; }
+  updateMic();
+  updateComposer();
+  updateConn();
+  updateLayout();
 }
 
-function applyProfileToUI() {
-  const name = assistantName();
-  els.title.textContent = name;
-  els.avatar.textContent = (name[0] || "A").toUpperCase();
-  els.input.placeholder = `Escríbale a ${name}...`;
-  document.title = name;
+function setVista(v) {
+  vista = v;
+  updateLayout();
+}
+
+function hasMessages() { return !!els.messages.querySelector(".msg, .error-card"); }
+
+function updateLayout() {
+  const compact = estado === "hablando" || estado === "error" || (estado === "reposo" && vista === "chat");
+  body.classList.toggle("compact", compact);
+  const showingChat = compact;
+  els.toggleChat.setAttribute("aria-pressed", String(showingChat));
+  els.toggleChat.setAttribute("aria-label", showingChat ? "Ocultar la conversación" : "Ver conversación");
+  els.toggleChat.hidden = estado === "sinkey" && !hasMessages();
+  els.openChat.hidden = !(estado === "reposo" && vista === "inicio" && hasMessages());
+  if (showingChat) scrollToBottom(false);
+}
+
+function updateMic() {
+  const hints = { reposo: "Toque para hablar", escuchando: "Toque para terminar", sinkey: "Disponible al configurar su key", error: "Toque para hablar", hablando: "" };
+  els.micHint.textContent = voice.canListen ? hints[estado] : (estado === "sinkey" ? hints.sinkey : "Use el micrófono del teclado");
+  els.mic.disabled = estado === "sinkey" || estado === "hablando";
+  els.mic.setAttribute("aria-label", estado === "escuchando" ? "Terminar de hablar" : "Hablar");
+}
+
+function updateComposer() {
+  const noKey = estado === "sinkey";
+  els.input.disabled = noKey;
+  els.input.placeholder = noKey ? "Primero configure su API key" : `Escríbale a ${assistantName()}…`;
+  els.send.disabled = noKey || busy;
+  els.attachBtn.disabled = noKey;
+  els.send.setAttribute("aria-label", busy ? "Enviar (espere a que termine la respuesta)" : "Enviar");
+}
+
+function updateConn() {
+  let main = "En línea", sub = lastModelShort || shortModel(config.geminiModel) || "Gemini", cls = "";
+  const wait = Math.ceil((rateUntil - Date.now()) / 1000);
+  if (!navigator.onLine) { main = "Sin conexión"; sub = "Revise su internet"; cls = "off"; }
+  else if (!client || !client.isConfigured()) { main = "Sin key"; sub = "Por configurar"; cls = "warn"; }
+  else if (wait > 0) { main = "Límite"; sub = `Vuelve en ${wait} s`; cls = "warn"; }
+  else if (estado === "escuchando") sub = "Escuchando";
+  else if (estado === "hablando") sub = "Respondiendo…";
+  els.conn.textContent = main;
+  els.connSub.textContent = sub;
+  els.connCell.classList.toggle("warn", cls === "warn");
+  els.connCell.classList.toggle("off", cls === "off");
+}
+
+// ---------- Reloj, saludo y clima ----------
+const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+function saludoHora(h) { return h >= 5 && h < 12 ? "Buenos días" : h >= 12 && h < 19 ? "Buenas tardes" : "Buenas noches"; }
+
+function renderGreeting() {
+  const d = new Date();
+  const s = saludoHora(d.getHours());
+  const name = (config.userName || "").trim();
+  els.saludo.replaceChildren();
+  if (name) {
+    const strong = document.createElement("strong");
+    strong.textContent = name;
+    els.saludo.append(`${s}, `, strong, ".", document.createElement("br"), "¿En qué le puedo ayudar?");
+  } else {
+    els.saludo.append(`${s}.`, document.createElement("br"), "¿En qué le puedo ayudar?");
+  }
+  const st = document.createElement("strong");
+  st.textContent = assistantName();
+  els.saludoSinkey.replaceChildren(`${s}. Soy `, st, ",", document.createElement("br"), "su asistente personal.");
+}
+
+function tick() {
+  const d = new Date();
+  els.hora.textContent = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  els.hora.dateTime = d.toISOString();
+  els.fecha.textContent = `${DIAS[d.getDay()]}, ${d.getDate()} de ${MESES[d.getMonth()]}`;
+  renderGreeting();
+  updateConn();
+}
+
+let weatherAt = 0;
+async function refreshWeather() {
+  const w = navigator.onLine ? await fetchWeather() : null;
+  if (w) {
+    weatherAt = Date.now();
+    els.weatherTemp.textContent = `${w.temp}°C`;
+    els.weatherDesc.textContent = w.desc || "Clima actual";
+    els.weatherCell.hidden = false;
+    els.weatherCell.setAttribute("aria-label", `Alajuela: ${w.temp} grados, ${w.desc}`);
+  } else if (Date.now() - weatherAt > 60 * 60 * 1000) {
+    els.weatherCell.hidden = true; // nunca se muestran datos inventados ni viejos
+  }
+  els.hud.classList.toggle("no-weather", els.weatherCell.hidden);
 }
 
 // ---------- Teclado móvil: la app ocupa solo el área visible ----------
@@ -72,296 +183,463 @@ function syncViewport() {
   const vv = window.visualViewport;
   const h = vv ? vv.height : window.innerHeight;
   const top = vv ? vv.offsetTop : 0;
-  const nearBottom = isNearBottom();
+  const near = isNearBottom();
   document.documentElement.style.setProperty("--app-h", `${Math.round(h)}px`);
   els.app.style.top = `${Math.round(top)}px`;
-  document.body.classList.toggle("kb-open", window.innerHeight - h > 120);
-  if (nearBottom) scrollToBottom(false);
+  body.classList.toggle("kb-open", window.innerHeight - h > 120);
+  if (near) scrollToBottom(false);
 }
 if (window.visualViewport) {
   window.visualViewport.addEventListener("resize", syncViewport);
   window.visualViewport.addEventListener("scroll", syncViewport);
 }
 window.addEventListener("resize", syncViewport);
-// iOS a veces desplaza la página al enfocar: la devolvemos arriba
 window.addEventListener("scroll", () => { if (window.scrollY) window.scrollTo(0, 0); });
 
 // ---------- Render del chat ----------
 function isNearBottom() {
   const m = els.messages;
-  return m.scrollHeight - m.scrollTop - m.clientHeight < 120;
+  return m.scrollHeight - m.scrollTop - m.clientHeight < 140;
 }
 function scrollToBottom(smooth = true) {
-  requestAnimationFrame(() => {
-    els.messages.scrollTo({ top: els.messages.scrollHeight, behavior: smooth ? "smooth" : "auto" });
-  });
+  requestAnimationFrame(() => els.messages.scrollTo({ top: els.messages.scrollHeight, behavior: smooth ? "smooth" : "auto" }));
+}
+function announce(text) {
+  els.announcer.textContent = "";
+  setTimeout(() => { els.announcer.textContent = text; }, 60);
 }
 
 function appendLinkified(parent, text) {
-  const re = /(https?:\/\/[^\s<>()]+[^\s<>().,;:!?¿¡"'])/g;
+  const re = /(https:\/\/[^\s<>()]+[^\s<>().,;:!?¿¡"'])/g; // solo enlaces https
   let last = 0, m;
   while ((m = re.exec(text))) {
     if (m.index > last) parent.appendChild(document.createTextNode(text.slice(last, m.index)));
     const a = document.createElement("a");
-    a.href = m[0]; a.textContent = m[0]; a.target = "_blank"; a.rel = "noopener";
+    a.href = m[0]; a.textContent = m[0]; a.target = "_blank"; a.rel = "noopener noreferrer";
     parent.appendChild(a);
     last = m.index + m[0].length;
   }
   if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
 }
 
-// media: [{kind: "image"|"video", url?, thumb?}] (url = archivo completo de esta sesión; thumb = miniatura guardada)
+function safeHttps(uri) {
+  try { const u = new URL(uri); return u.protocol === "https:" ? u.href : ""; } catch { return ""; }
+}
+
 function renderMedia(b, media) {
   const grid = document.createElement("div");
   grid.className = "bubble-media" + (media.length === 1 ? " single" : "");
   for (const m of media) {
     const item = document.createElement("div");
     item.className = "media-item";
+    const label = m.kind === "video" ? "Video adjunto" : "Foto adjunta";
     if (m.kind === "video" && m.url) {
       const v = document.createElement("video");
       v.src = m.url; v.controls = true; v.playsInline = true; v.preload = "metadata"; v.muted = true;
+      v.setAttribute("aria-label", label);
       if (m.thumb) v.poster = m.thumb;
       item.appendChild(v);
-    } else if (m.url || m.thumb) {
-      const img = document.createElement("img");
-      img.src = m.url || m.thumb; img.alt = m.kind === "video" ? "Video adjunto" : "Foto adjunta";
-      item.appendChild(img);
-      if (m.kind === "video") { const bd = document.createElement("span"); bd.className = "badge"; bd.textContent = "▶ video"; item.appendChild(bd); }
     } else {
+      const img = document.createElement("img");
+      img.alt = label;
+      const src = m.url || m.thumb;
+      if (src) item.appendChild(img), (img.src = src);
+      else if (m.thumbId) {
+        thumbs.get(m.thumbId).then((t) => { if (t) { img.src = t; item.prepend(img); ph.remove(); } });
+      }
       const ph = document.createElement("div");
       ph.className = "ph"; ph.textContent = m.kind === "video" ? "[video]" : "[foto]";
-      item.appendChild(ph);
+      if (!src) item.appendChild(ph);
+    }
+    if (m.kind === "video" && !m.url) {
+      const bd = document.createElement("span"); bd.className = "badge"; bd.textContent = "VIDEO"; item.appendChild(bd);
+    } else if (m.kind !== "video") {
+      const bd = document.createElement("span"); bd.className = "badge"; bd.textContent = "FOTO"; item.appendChild(bd);
     }
     grid.appendChild(item);
   }
   b.appendChild(grid);
 }
 
-function renderBubble(role, text, { error = false, sources = [], meta = "", media = null } = {}) {
+function renderUser(text, media = null) {
   const wrap = document.createElement("div");
-  wrap.className = `msg ${role === "user" ? "user" : "assistant"}${error ? " error" : ""}`;
+  wrap.className = "msg user";
   const b = document.createElement("div");
   b.className = "bubble";
   if (media && media.length) {
+    b.classList.add("has-media");
     renderMedia(b, media);
     if (!text) b.classList.add("media-only");
   }
-  if (text) appendLinkified(b, text);
-  wrap.appendChild(b);
-  if (sources && sources.length) {
-    const s = document.createElement("div");
-    s.className = "sources";
-    for (const src of sources) {
-      const a = document.createElement("a");
-      a.href = src.uri; a.target = "_blank"; a.rel = "noopener";
-      a.textContent = src.title;
-      s.appendChild(a);
-    }
-    wrap.appendChild(s);
+  if (text) {
+    const t = document.createElement("span");
+    t.className = "t";
+    appendLinkified(t, text);
+    b.appendChild(t);
   }
-  if (meta) addMeta(wrap, meta);
+  wrap.appendChild(b);
   els.messages.appendChild(wrap);
   scrollToBottom();
   return wrap;
 }
 
-function addMeta(wrap, text) {
-  const m = document.createElement("div");
-  m.className = "meta";
-  m.textContent = text;
-  wrap.appendChild(m);
+function renderBot(text, { sources = [], meta = "" } = {}) {
+  const wrap = document.createElement("div");
+  wrap.className = "msg bot";
+  const b = document.createElement("div");
+  b.className = "bubble";
+  appendLinkified(b, text);
+  wrap.appendChild(b);
+  const links = (sources || []).map((s) => ({ ...s, uri: safeHttps(s.uri) })).filter((s) => s.uri);
+  if (links.length) {
+    const s = document.createElement("div");
+    s.className = "sources";
+    for (const src of links) {
+      const a = document.createElement("a");
+      a.href = src.uri; a.target = "_blank"; a.rel = "noopener noreferrer";
+      a.textContent = src.title || new URL(src.uri).hostname;
+      s.appendChild(a);
+    }
+    wrap.appendChild(s);
+  }
+  if (meta) {
+    const m = document.createElement("div");
+    m.className = "meta";
+    m.textContent = meta;
+    wrap.appendChild(m);
+  }
+  els.messages.appendChild(wrap);
+  scrollToBottom();
+  return wrap;
 }
 
 function formatMeta(r, uploadMs = 0) {
-  const secs = ((r.ms + uploadMs) / 1000).toFixed(1);
-  const model = (r.model || "").replace(/^gemini-/, "");
-  const up = uploadMs >= 1000 ? ` (incl. ${(uploadMs / 1000).toFixed(1)} s de subida)` : "";
-  return `${secs} s${up}${model ? " · " + model : ""}`;
+  const secs = ((r.ms + uploadMs) / 1000).toFixed(1).replace(".", ",");
+  const up = uploadMs >= 1000 ? ` (incl. ${(uploadMs / 1000).toFixed(1).replace(".", ",")} s de subida)` : "";
+  return `${secs} s${up}${r.model ? " · " + shortModel(r.model) : ""}${r.stopped ? " · detenida" : ""}`;
 }
 
-// Burbuja que se va llenando mientras llega el streaming
-function createStreamingBubble(typingNode) {
+const ICON_CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5 10 17 19 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_WARN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20L12 3Zm0 6v5m0 3v.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+// Nota pequeña dentro de la conversación (memoria, avisos de almacenamiento, etc.)
+function showNote(text, { warn = false, bold = "", action = null } = {}) {
+  const note = document.createElement("div");
+  note.className = "memory-note" + (warn ? " warn" : "");
+  note.setAttribute("role", "status");
+  note.innerHTML = warn ? ICON_WARN : ICON_CHECK;
+  const txt = document.createElement("span");
+  txt.className = "txt";
+  if (bold) { const b = document.createElement("b"); b.textContent = bold; txt.append(b, " "); }
+  txt.append(text);
+  note.appendChild(txt);
+  if (action) {
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "link-btn"; btn.textContent = action.label;
+    btn.onclick = () => action.run(note, txt, btn);
+    note.appendChild(btn);
+  }
+  const near = isNearBottom();
+  els.messages.appendChild(note);
+  if (near) scrollToBottom();
+  return note;
+}
+
+let noticeTimer = null;
+function chatNotice(text) {
+  els.status.textContent = text;
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => { els.status.textContent = "Asistente personal"; }, 4000);
+}
+
+// Tarjeta de error amigable: mensaje corto, Reintentar y "Ver detalles" con el texto técnico
+function renderError(r, retry) {
+  const card = document.createElement("div");
+  card.className = "error-card";
+  card.setAttribute("role", "alert");
+  const h = document.createElement("h3");
+  h.innerHTML = ICON_WARN;
+  h.append(r.title || "Algo salió mal");
+  const p = document.createElement("p");
+  p.textContent = r.text;
+  const row = document.createElement("div");
+  row.className = "btn-row";
+  const keyProblem = ["missing_key", "key_invalid", "key_expired", "key_restricted", "service_disabled", "permission"].includes(r.kind);
+  if (keyProblem) {
+    const cfg = document.createElement("button");
+    cfg.type = "button"; cfg.className = "btn retry"; cfg.textContent = "Abrir Configuración";
+    cfg.onclick = () => openSettings({ focusKey: true });
+    row.appendChild(cfg);
+  } else if (retry) {
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "btn retry";
+    const until = r.retryAfter ? Date.now() + r.retryAfter * 1000 : 0;
+    const paint = () => {
+      const left = Math.ceil((until - Date.now()) / 1000);
+      if (until && left > 0) { btn.textContent = `Reintentar · ${left} s`; btn.disabled = true; return true; }
+      btn.textContent = "Reintentar"; btn.disabled = false; return false;
+    };
+    if (paint()) {
+      const iv = setInterval(() => { if (!paint() || !card.isConnected) clearInterval(iv); }, 1000);
+    }
+    btn.onclick = () => { if (busy) return; card.remove(); retry(); };
+    row.appendChild(btn);
+  }
+  if (r.details) {
+    const det = document.createElement("button");
+    det.type = "button"; det.className = "btn"; det.textContent = "Ver detalles";
+    det.onclick = () => openModal("Detalles técnicos", r.details, det);
+    row.appendChild(det);
+  }
+  card.append(h, p);
+  if (row.children.length) card.appendChild(row);
+  els.messages.appendChild(card);
+  scrollToBottom();
+  return card;
+}
+
+// Burbuja que se va llenando con el streaming (aria-live apagado: se anuncia al terminar)
+function createStreamingBubble() {
   const wrap = document.createElement("div");
-  wrap.className = "msg assistant streaming";
+  wrap.className = "msg bot";
   const b = document.createElement("div");
-  b.className = "bubble";
+  b.className = "bubble streaming";
   wrap.appendChild(b);
-  if (typingNode && typingNode.parentNode) typingNode.replaceWith(wrap);
-  else els.messages.appendChild(wrap);
+  els.messages.appendChild(wrap);
   return { wrap, bubble: b };
 }
 
 // ---------- Memoria automática ----------
-function showMemoryNote(items) {
-  const note = document.createElement("div");
-  note.className = "memory-note";
-  const txt = document.createElement("span");
-  txt.className = "txt";
-  txt.textContent = "Guardé: " + items.map((i) => i.fact).join(" · ");
-  const undo = document.createElement("button");
-  undo.className = "link-btn";
-  undo.textContent = "Deshacer";
-  undo.onclick = () => {
-    for (const i of items) memory.deleteFact(i.id);
-    txt.textContent = "Listo, no lo guardé.";
-    note.classList.add("undone");
-    undo.remove();
-    if (!els.settingsView.hidden) renderFactsList();
-  };
-  note.append(txt, undo);
-  const near = isNearBottom();
-  els.messages.appendChild(note);
-  if (near) scrollToBottom();
-}
-
 async function autoLearn(userText, assistantText) {
   try {
     if (!config.autoLearn || !client.isConfigured()) return;
-    const extractor = new GeminiClient({ apiKey: config.geminiApiKey, authMethod: config.authMethod });
+    const extractor = new GeminiClient({ apiKey: config.geminiApiKey });
     const facts = await extractor.extractFacts(userText, assistantText, memory.getFacts());
     if (!facts.length) return;
-    const saved = facts.map((fact) => ({ fact, id: memory.saveFact(fact, { auto: true }) }));
-    showMemoryNote(saved);
+    const saved = [], failed = [];
+    for (const fact of facts) {
+      const r = memory.saveFact(fact, { auto: true });
+      if (r.id) saved.push({ fact, id: r.id }); else failed.push(fact);
+    }
+    if (saved.length) {
+      showNote(saved.map((i) => i.fact).join(" · "), {
+        bold: "Guardé:",
+        action: {
+          label: "Deshacer",
+          run: (note, txt, btn) => {
+            for (const i of saved) memory.deleteFact(i.id);
+            txt.textContent = "Listo, no lo guardé.";
+            note.classList.add("undone");
+            btn.remove();
+            if (!els.settingsView.hidden) renderFactsList();
+          },
+        },
+      });
+    }
+    if (failed.length) storageFullNote("No pude guardar lo que aprendí");
   } catch (e) {
     console.warn("Antares memoria:", e);
   }
 }
 
+function storageFullNote(prefix) {
+  showNote(`${prefix}: el almacenamiento de este navegador está lleno. Borre la conversación o datos viejos en Configuración › Memoria.`, {
+    warn: true, action: { label: "Abrir", run: () => openSettings({ scrollTo: "storage-meter" }) },
+  });
+}
+function handleSave(r, what) {
+  if (!r.ok) storageFullNote(`No pude guardar ${what}`);
+  else if (r.pruned) showNote(`Liberé espacio borrando ${r.pruned} mensajes antiguos de la conversación.`, { warn: true });
+}
+
 function renderConfirm(factText) {
-  const wrap = document.createElement("div");
-  wrap.className = "msg assistant confirm-card";
-  const b = document.createElement("div");
-  b.className = "bubble";
-  b.textContent = buildConfirmationQuestion(factText);
-  const actions = document.createElement("div");
-  actions.className = "confirm-actions";
+  const card = document.createElement("div");
+  card.className = "confirm-card";
+  const p = document.createElement("p");
+  p.textContent = buildConfirmationQuestion(factText);
+  const row = document.createElement("div");
+  row.className = "btn-row";
   const yes = document.createElement("button");
-  yes.className = "pill-btn primary"; yes.textContent = "Sí, guárdelo";
+  yes.type = "button"; yes.className = "btn primary"; yes.textContent = "Sí, guárdelo";
   const no = document.createElement("button");
-  no.className = "pill-btn"; no.textContent = "No";
+  no.type = "button"; no.className = "btn"; no.textContent = "No";
   const done = (accepted) => {
-    actions.remove();
-    const fact = pendingFact; pendingFact = null;
-    if (!fact) return;
-    if (accepted) { memory.saveFact(fact); renderBubble("assistant", "Listo, lo guardé para recordarlo."); }
-    else renderBubble("assistant", "Entendido, no lo guardo.");
+    card.remove();
+    if (!pendingConfirm) return;
+    const fact = pendingConfirm; pendingConfirm = null;
+    if (!accepted) return;
+    const r = memory.saveFact(fact);
+    if (r.id) showNote(fact, { bold: "Guardé:" }); else storageFullNote("No pude guardar el dato");
   };
   yes.onclick = () => done(true);
   no.onclick = () => done(false);
-  actions.append(yes, no);
-  b.appendChild(actions);
-  wrap.appendChild(b);
-  els.messages.appendChild(wrap);
+  row.append(yes, no);
+  card.append(p, row);
+  els.messages.appendChild(card);
   scrollToBottom();
-}
-
-function showTyping() {
-  const wrap = document.createElement("div");
-  wrap.className = "msg assistant typing";
-  wrap.innerHTML = '<div class="bubble"><span class="typing-dots"><span></span><span></span><span></span></span></div>';
-  els.messages.appendChild(wrap);
-  els.status.textContent = `${assistantName()} está escribiendo…`;
-  els.status.classList.add("typing");
-  scrollToBottom();
-  return wrap;
-}
-function hideTyping(node) {
-  if (node) node.remove();
-  if (!els.messages.querySelector(".msg.typing")) {
-    els.status.textContent = "Asistente personal";
-    els.status.classList.remove("typing");
-  }
 }
 
 // ---------- Envío ----------
 function autosize() {
   els.input.style.height = "auto";
-  els.input.style.height = Math.min(els.input.scrollHeight, 132) + "px";
+  els.input.style.height = Math.min(els.input.scrollHeight, 120) + "px";
 }
 
-async function sendMessage(text, items = []) {
-  text = (text || "").trim();
-  items = items || [];
-  if (!text && !items.length) return;
-  const label = items.map((i) => (i.kind === "video" ? "[video]" : "[foto]")).join(" ");
-  const prompt = text || (items.length ? DEFAULT_MEDIA_PROMPT : "");
-  // la burbuja aparece antes de llamar a la API
-  renderBubble("user", text, { media: items.map((i) => ({ kind: i.kind, url: i.url, thumb: i.thumb })) });
-  let typing = null, stream = null;
+// job: {text, items, prompt, history, facts}; en un reintento se reutiliza el mismo job (y los archivos ya subidos)
+async function runJob(job) {
+  if (busy) return;
+  busy = true;
+  abortCtrl = new AbortController();
+  setVista("chat");
+  setEstado("hablando");
+  let stream = null, uploadMs = 0;
   try {
-    // al modelo solo le mandamos el texto del historial (las miniaturas guardadas no)
-    const history = memory.getHistory(20).map(({ role, content }) => ({ role, content }));
-    const facts = memory.getFacts();
-    // En el historial solo guardamos texto + miniaturas pequeñas, nunca el archivo completo
-    const thumbs = items.map((i) => ({ kind: i.kind, thumb: i.thumb && i.thumb.length < 16000 ? i.thumb : "" }));
-    memory.addMessage("user", [label, prompt].filter(Boolean).join(" "), items.length ? { media: thumbs } : undefined);
-    if (text && !config.autoLearn && looksLikeImportantFact(text)) { pendingFact = text; renderConfirm(text); }
-
-    typing = showTyping();
-    pendingCount++;
-    let media = null, uploadMs = 0;
-    if (items.length && client.isConfigured()) {
+    let media = null;
+    if (job.items.length && client.isConfigured()) {
       const tUp = performance.now();
       try {
-        const res = await toGeminiMedia(config.geminiApiKey, items, {
-          onProgress: (st) => { els.status.textContent = st === "subiendo" ? "Subiendo video…" : "Gemini está procesando el video…"; },
+        const res = await toGeminiMedia(config.geminiApiKey, job.items, {
+          onProgress: (st) => { els.connSub.textContent = st === "subiendo" ? "Subiendo video…" : "Procesando video…"; },
         });
         media = res.media;
-        uploadMs = Math.round(performance.now() - tUp);
+        uploadMs = res.uploaded ? Math.round(performance.now() - tUp) : 0;
       } catch (e) {
         console.warn("Antares media:", e);
-        hideTyping(typing); typing = null;
-        renderBubble("assistant", `No pude enviar ${items.length > 1 ? "los archivos" : (items[0].kind === "video" ? "el video" : "la foto")}: ${e.message || e}. ` +
-          "Revise su conexión e intente de nuevo, o pruebe con un video más corto.", { error: true });
+        const what = job.items.length > 1 ? "los archivos" : (job.items[0].kind === "video" ? "el video" : "la foto");
+        renderError({ kind: "media", title: "No pude enviar el archivo", text: `No pude subir ${what}. Revise su conexión e intente de nuevo, o pruebe con un video más corto.`, details: String(e.message || e) }, () => runJob(job));
+        setEstado("error");
         return;
-      } finally {
-        if (typing) els.status.textContent = `${assistantName()} está escribiendo…`;
       }
     }
-    const search = !media && !!config.webSearch && needsSearch(prompt);
-    const r = await client.ask(prompt, history, facts, {
-      search, media,
+    if (abortCtrl.signal.aborted) { showNote("Respuesta detenida."); setEstado(baseEstado()); return; }
+    const search = !media && !!config.webSearch && needsSearch(job.prompt);
+    const r = await client.ask(job.prompt, job.history, job.facts, {
+      search, media, signal: abortCtrl.signal,
       onChunk: (partial) => {
-        if (!stream) { stream = createStreamingBubble(typing); typing = null; }
+        if (!stream) stream = createStreamingBubble();
         const near = isNearBottom();
         stream.bubble.textContent = partial;
         if (near) scrollToBottom(false);
       },
     });
-    hideTyping(typing); typing = null;
-    if (stream) {
-      // reemplazamos la burbuja parcial por la final (con links y fuentes)
-      const final = renderBubble("assistant", r.text, { error: !r.ok, sources: r.sources, meta: r.ok ? formatMeta(r, uploadMs) : "" });
-      stream.wrap.replaceWith(final);
-    } else {
-      renderBubble("assistant", r.text, { error: !r.ok, sources: r.sources, meta: r.ok ? formatMeta(r, uploadMs) : "" });
-    }
-    hideTyping(null);
+    if (stream) stream.wrap.remove();
     if (r.ok) {
-      memory.addMessage("assistant", r.text); // los errores no se guardan en el historial
-      if (config.speakReplies) voice.speak(r.text);
-      if (text) autoLearn(text, r.text); // en segundo plano, no bloquea
+      lastModelShort = shortModel(r.model);
+      renderBot(r.text, { sources: r.sources, meta: formatMeta(r, uploadMs) });
+      announce(`${assistantName()}: ${r.text}`);
+      handleSave(memory.addMessage("assistant", r.text), "la respuesta");
+      if (config.speakReplies && !r.stopped) voice.speak(r.text);
+      if (job.text && looksLikeImportantFact(job.text)) {
+        if (config.autoLearn) autoLearn(job.text, r.text); // en segundo plano, no bloquea
+        else { pendingConfirm = job.text; renderConfirm(job.text); }
+      }
+      setEstado(baseEstado());
+    } else if (r.stopped) {
+      showNote("Respuesta detenida.");
+      setEstado(baseEstado());
+    } else {
+      if (r.kind === "rate" && r.retryAfter) rateUntil = Date.now() + r.retryAfter * 1000;
+      renderError(r, () => runJob(job));
+      announce(`${r.title}. ${r.text}`);
+      setEstado("error");
+      if (r.kind === "rate" && r.retryAfter) startRateCountdown();
     }
   } catch (e) {
     console.error(e);
-    hideTyping(typing);
     if (stream) stream.wrap.remove();
-    renderBubble("assistant", `Error interno: ${e && e.name ? e.name + ": " : ""}${e && e.message ? e.message : e}`, { error: true });
+    renderError({ kind: "unknown", title: "Algo salió mal", text: "Ocurrió un error inesperado en la app. Intente de nuevo.", details: `${e && e.name ? e.name + ": " : ""}${e && e.message ? e.message : e}` }, () => runJob(job));
+    setEstado("error");
   } finally {
-    pendingCount = Math.max(0, pendingCount - 1);
+    busy = false;
+    abortCtrl = null;
+    updateComposer();
   }
 }
 
-// ---------- Adjuntar fotos y videos ----------
-let noticeTimer = null;
-function chatNotice(text) {
-  els.status.textContent = text;
-  clearTimeout(noticeTimer);
-  noticeTimer = setTimeout(() => { if (!pendingCount) els.status.textContent = "Asistente personal"; }, 3500);
+let rateTimer = null;
+function startRateCountdown() {
+  clearInterval(rateTimer);
+  const paint = () => {
+    const left = Math.ceil((rateUntil - Date.now()) / 1000);
+    updateConn();
+    if (estado === "error") {
+      els.sideHint.hidden = left <= 0;
+      els.sideHint.textContent = left > 0 ? `Podrá seguir en ${left} s.` : "";
+    }
+    if (left <= 0) clearInterval(rateTimer);
+  };
+  paint();
+  rateTimer = setInterval(paint, 1000);
 }
 
-let attachments = []; // [{id, loading, kind, mime, blob, size, thumb, url, name}]
+function sendMessage(text, items = []) {
+  text = (text || "").trim();
+  if (busy || (!text && !items.length)) return false;
+  if (!client.isConfigured()) { setEstado("sinkey"); return false; }
+  const label = items.map((i) => (i.kind === "video" ? "[video]" : "[foto]")).join(" ");
+  const prompt = text || DEFAULT_MEDIA_PROMPT;
+  // al modelo solo le mandamos el texto del historial (las miniaturas no)
+  const history = memory.getHistory(20).map(({ role, content }) => ({ role, content }));
+  const facts = memory.getFacts();
+  setVista("chat");
+  renderUser(text, items.map((i) => ({ kind: i.kind, url: i.url, thumb: i.thumb })));
+  const thumbsToKeep = items.map((i) => ({ kind: i.kind, thumb: i.thumb && i.thumb.length < 16000 ? i.thumb : "" }));
+  handleSave(memory.addMessage("user", [label, prompt].filter(Boolean).join(" "), items.length ? { media: thumbsToKeep } : null), "el mensaje");
+  runJob({ text, items, prompt, history, facts });
+  return true;
+}
 
+els.form.addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  voice.unlock(); // gesto del usuario: habilita la voz en iOS
+  if (busy) { chatNotice("Espere a que termine la respuesta o tóquela para detenerla."); return; }
+  if (attachments.some((a) => a.loading)) { chatNotice("Espere un momento, todavía estoy preparando los archivos…"); return; }
+  const text = els.input.value;
+  const items = attachments;
+  if (!text.trim() && !items.length) return;
+  if (sendMessage(text, items)) {
+    els.input.value = "";
+    attachments = [];
+    renderAttachments();
+    autosize();
+  }
+});
+els.input.addEventListener("input", autosize);
+els.input.addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) {
+    ev.preventDefault();
+    if (busy) return;
+    els.form.requestSubmit ? els.form.requestSubmit() : els.form.dispatchEvent(new Event("submit", { cancelable: true }));
+  }
+});
+els.input.addEventListener("focus", () => setTimeout(() => scrollToBottom(false), 300));
+
+// Detener la respuesta en curso
+function stopResponse() {
+  voice.stop();
+  if (abortCtrl) abortCtrl.abort();
+}
+els.stop.addEventListener("click", stopResponse);
+
+// ---------- Micrófono ----------
+els.mic.addEventListener("click", () => {
+  voice.unlock();
+  if (estado === "hablando") { stopResponse(); return; }
+  if (!voice.canListen) { showNote("Este navegador no permite dictado por voz. Use el micrófono del teclado.", { warn: true }); setVista("chat"); return; }
+  if (busy) return;
+  voice.listen({
+    lang: config.speechLang || "es-CR",
+    onState: (on) => {
+      if (on) { els.interimText.textContent = ""; setEstado("escuchando"); }
+      else if (estado === "escuchando") setEstado(baseEstado());
+    },
+    onInterim: (t) => { els.interimText.textContent = t ? `“${t}` : ""; },
+    onFinal: (t) => { els.interimText.textContent = ""; sendMessage(t); },
+    onError: (code, msg) => { if (msg) { setVista("chat"); showNote(msg, { warn: true }); } },
+  });
+});
+
+// ---------- Adjuntar fotos y videos ----------
 function renderAttachments() {
   els.attachments.hidden = attachments.length === 0;
   els.attachments.replaceChildren();
@@ -371,7 +649,7 @@ function renderAttachments() {
     if (!a.loading) {
       if (a.thumb || a.kind === "image") {
         const img = document.createElement("img");
-        img.src = a.thumb || a.url; img.alt = a.kind === "video" ? "Video" : "Foto";
+        img.src = a.thumb || a.url; img.alt = a.kind === "video" ? "Video adjunto" : "Foto adjunta";
         box.appendChild(img);
       } else box.append("video");
       if (a.kind === "video") {
@@ -380,7 +658,8 @@ function renderAttachments() {
       }
     }
     const rm = document.createElement("button");
-    rm.type = "button"; rm.className = "rm"; rm.textContent = "×"; rm.setAttribute("aria-label", "Quitar");
+    rm.type = "button"; rm.className = "rm"; rm.setAttribute("aria-label", a.kind === "video" ? "Quitar el video" : "Quitar la foto");
+    rm.innerHTML = '<span aria-hidden="true">×</span>';
     rm.onclick = () => {
       attachments = attachments.filter((x) => x !== a);
       if (a.url) URL.revokeObjectURL(a.url);
@@ -397,23 +676,24 @@ async function addFiles(fileList) {
   const free = MAX_ATTACHMENTS - attachments.length;
   if (free <= 0) { chatNotice(`Puede adjuntar máximo ${MAX_ATTACHMENTS} archivos por mensaje.`); return; }
   if (files.length > free) chatNotice(`Solo se agregaron ${free}: el máximo es ${MAX_ATTACHMENTS} por mensaje.`);
-  const tasks = files.slice(0, free).map(async (f) => {
+  await Promise.all(files.slice(0, free).map(async (f) => {
     const slot = { loading: true };
     attachments.push(slot); renderAttachments();
     try {
       Object.assign(slot, await prepareFile(f), { loading: false });
     } catch (e) {
       attachments = attachments.filter((x) => x !== slot);
-      renderBubble("assistant", `No pude usar "${f.name || "el archivo"}": ${e.message || e}`, { error: true });
+      setVista("chat");
+      showNote(`No pude usar "${f.name || "el archivo"}": ${e.message || e}`, { warn: true });
     }
     renderAttachments();
-  });
-  await Promise.all(tasks);
+  }));
 }
 
 function setMenu(open) {
   els.attachMenu.hidden = !open;
   els.attachBtn.setAttribute("aria-expanded", String(open));
+  if (open) els.attachMenu.querySelector("button").focus();
 }
 els.attachBtn.addEventListener("click", () => setMenu(els.attachMenu.hidden));
 document.addEventListener("click", (ev) => {
@@ -426,209 +706,335 @@ els.attachMenu.addEventListener("click", (ev) => {
   setMenu(false);
   pickers[btn.dataset.pick].click();
 });
+els.attachMenu.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape") { setMenu(false); els.attachBtn.focus(); }
+});
 for (const input of Object.values(pickers)) {
   input.addEventListener("change", () => { addFiles(input.files); input.value = ""; });
 }
 
-els.form.addEventListener("submit", (ev) => {
-  ev.preventDefault();
-  voice.unlock(); // gesto del usuario: habilita la voz en iOS
-  const text = els.input.value;
-  if (attachments.some((a) => a.loading)) { chatNotice("Espere un momento, todavía estoy preparando los archivos…"); return; }
-  const items = attachments;
-  if (!text.trim() && !items.length) return;
-  els.input.value = "";
-  attachments = [];
-  renderAttachments();
-  autosize();
-  sendMessage(text, items);
-});
-els.input.addEventListener("input", autosize);
-els.input.addEventListener("keydown", (ev) => {
-  if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) {
-    ev.preventDefault();
-    els.form.requestSubmit ? els.form.requestSubmit() : els.form.dispatchEvent(new Event("submit", { cancelable: true }));
-  }
-});
-els.input.addEventListener("focus", () => setTimeout(() => scrollToBottom(false), 300));
-
-// ---------- Micrófono ----------
-if (voice.canListen) {
-  els.mic.hidden = false;
-  els.mic.addEventListener("click", () => {
-    voice.unlock();
-    voice.listen({
-      onState: (on) => { els.mic.classList.toggle("listening", on); els.mic.setAttribute("aria-label", on ? "Detener" : "Hablar"); },
-      onInterim: (t) => { els.input.value = t; autosize(); },
-      onFinal: (t) => { els.input.value = ""; autosize(); sendMessage(t); },
-      onError: (err) => {
-        if (err === "not-allowed" || err === "service-not-allowed") {
-          renderBubble("assistant", "No tengo permiso para usar el micrófono. Habilítelo en los ajustes del navegador.", { error: true });
-        }
-      },
-    });
-  });
-}
+// ---------- Vista de conversación ----------
+els.toggleChat.addEventListener("click", () => setVista(body.classList.contains("compact") ? "inicio" : "chat"));
+els.openChat.addEventListener("click", () => setVista("chat"));
+els.setupOpen.addEventListener("click", () => openSettings({ focusKey: true }));
 
 // ---------- Configuración ----------
-function setKeyVisible(visible) {
-  els.apiKey.type = visible ? "text" : "password";
-  els.toggleKey.textContent = visible ? "Ocultar" : "Mostrar";
-}
-function renderFactsList() {
-  const items = memory.getFactItems();
-  els.factsList.innerHTML = "";
-  for (const it of items) {
-    const li = document.createElement("li");
-    const span = document.createElement("span");
-    span.textContent = it.fact;
-    const del = document.createElement("button");
-    del.className = "del";
-    del.setAttribute("aria-label", "Borrar dato");
-    del.textContent = "×";
-    del.onclick = () => { memory.deleteFact(it.id); renderFactsList(); };
-    li.append(span, del);
-    els.factsList.appendChild(li);
-  }
-  els.factsCount.textContent = items.length ? `${items.length} dato${items.length === 1 ? "" : "s"} guardado${items.length === 1 ? "" : "s"}` : "Todavía no recuerdo nada sobre usted.";
-}
-const updateFactsCount = renderFactsList;
+let snapshot = null;
+let settingsOpener = null;
+let historyPushed = false;
 
-function openSettings() {
-  config = memory.getConfig();
-  els.apiKey.value = config.geminiApiKey || "";
-  setKeyVisible(true);
-  els.assistantName.value = assistantName();
-  els.userName.value = config.userName || "";
-  els.personality.value = config.personality || "";
-  els.speakReplies.checked = !!config.speakReplies;
-  els.webSearch.checked = !!config.webSearch;
-  els.autoLearn.checked = !!config.autoLearn;
-  els.settingsStatus.textContent = "";
-  els.settingsStatus.classList.remove("err");
-  updateFactsCount();
-  els.chatView.hidden = true;
-  els.settingsView.hidden = false;
+function formValues() {
+  return {
+    geminiApiKey: els.apiKey.value.replace(/\s+/g, ""),
+    assistantName: els.assistantName.value.trim(),
+    userName: els.userName.value.trim(),
+    personality: els.personality.value.trim(),
+    speakReplies: els.speakReplies.checked,
+    speechLang: els.speechLang.value,
+    webSearch: els.webSearch.checked,
+    autoLearn: els.autoLearn.checked,
+  };
 }
-function closeSettings() {
-  els.settingsView.hidden = true;
-  els.chatView.hidden = false;
-  scrollToBottom(false);
+const isDirty = () => !!snapshot && JSON.stringify(formValues()) !== JSON.stringify(snapshot);
+function updateDirty() {
+  const dirty = isDirty();
+  els.unsaved.hidden = !dirty;
+  els.save.disabled = !dirty;
+  if (dirty) setSettingsStatus("");
 }
-function setStatus(text, isError = false) {
+function setSettingsStatus(text, isError = false) {
   els.settingsStatus.textContent = text;
   els.settingsStatus.classList.toggle("err", isError);
 }
+function setConnStatus(kind, text, details = "") {
+  els.connStatus.hidden = !kind;
+  els.connStatus.classList.toggle("pending", kind === "pending");
+  els.connStatus.classList.toggle("err", kind === "err");
+  els.connStatusText.textContent = text;
+  els.connDetails.hidden = !details;
+  els.connDetails.onclick = details ? () => openModal("Diagnóstico de conexión", details, els.connDetails) : null;
+}
 
-els.openSettings.addEventListener("click", openSettings);
+function fillSettings() {
+  els.apiKey.value = config.geminiApiKey || "";
+  setKeyVisible(false);
+  els.assistantName.value = config.assistantName || DEFAULT_ASSISTANT_NAME;
+  els.userName.value = config.userName || "";
+  els.personality.value = config.personality || "";
+  els.speakReplies.checked = !!config.speakReplies;
+  els.speechLang.value = config.speechLang || "es-CR";
+  els.webSearch.checked = !!config.webSearch;
+  els.autoLearn.checked = !!config.autoLearn;
+  els.voiceUnsupported.hidden = voice.canListen;
+  if (config.geminiApiKey) setConnStatus("ok", "Key guardada en este dispositivo. Toque «Probar conexión» para verificarla.");
+  else setConnStatus("pending", "Todavía no hay una key guardada");
+  snapshot = formValues();
+  setSettingsStatus("");
+  updateDirty();
+  renderFactsList();
+  renderStorage();
+}
+
+function openSettings({ focusKey = false, scrollTo = "" } = {}) {
+  settingsOpener = document.activeElement;
+  fillSettings();
+  els.chatView.hidden = true;
+  els.settingsView.hidden = false;
+  if (!historyPushed) { history.pushState({ antares: "settings" }, ""); historyPushed = true; }
+  requestAnimationFrame(() => {
+    if (focusKey) { els.apiKey.focus(); $("api").scrollIntoView({ block: "start" }); }
+    else if (scrollTo) { $(scrollTo).scrollIntoView({ block: "center" }); els.settingsTitle.focus(); }
+    else { els.settingsScroll.scrollTop = 0; els.settingsTitle.focus(); }
+  });
+}
+
+function confirmDiscard() {
+  return !isDirty() || confirm("Tiene cambios sin guardar. ¿Desea salir sin guardarlos?");
+}
+function hideSettings() {
+  els.settingsView.hidden = true;
+  els.chatView.hidden = false;
+  snapshot = null;
+  setEstado(busy ? "hablando" : (estado === "error" ? "error" : baseEstado()));
+  if (settingsOpener && settingsOpener.isConnected && !settingsOpener.disabled) settingsOpener.focus();
+}
+function closeSettings() {
+  if (!confirmDiscard()) return;
+  snapshot = null; // ya confirmado: el popstate no vuelve a preguntar
+  if (historyPushed) { historyPushed = false; history.back(); }
+  hideSettings();
+}
+window.addEventListener("popstate", () => {
+  if (els.settingsView.hidden) { historyPushed = false; return; }
+  historyPushed = false;
+  if (!confirmDiscard()) { history.pushState({ antares: "settings" }, ""); historyPushed = true; return; }
+  hideSettings();
+});
+window.addEventListener("beforeunload", (ev) => {
+  if (!els.settingsView.hidden && isDirty()) { ev.preventDefault(); ev.returnValue = ""; }
+});
+
+els.openSettings.addEventListener("click", () => openSettings());
 els.closeSettings.addEventListener("click", closeSettings);
+els.settingsView.addEventListener("input", updateDirty);
+els.settingsView.addEventListener("change", updateDirty);
+
+function setKeyVisible(visible) {
+  els.apiKey.type = visible ? "text" : "password";
+  els.toggleKey.setAttribute("aria-pressed", String(visible));
+  els.toggleKey.setAttribute("aria-label", visible ? "Ocultar la key" : "Mostrar la key");
+}
 els.toggleKey.addEventListener("click", () => setKeyVisible(els.apiKey.type === "password"));
-els.clearKey.addEventListener("click", () => { els.apiKey.value = ""; els.apiKey.focus(); });
 els.pasteKey.addEventListener("click", async () => {
   try {
-    const t = (await navigator.clipboard.readText()) || "";
-    const clean = t.replace(/\s+/g, "");
-    if (clean) { els.apiKey.value = clean; setStatus(""); }
-    else setStatus("El portapapeles está vacío", true);
+    const t = await navigator.clipboard.readText();
+    const clean = (t || "").replace(/\s+/g, "");
+    if (clean) { els.apiKey.value = clean; updateDirty(); setConnStatus("pending", "Key pegada. Toque «Probar conexión» para verificarla y guardarla."); }
+    else setConnStatus("pending", "El portapapeles está vacío");
   } catch {
-    els.apiKey.focus();
-    setStatus("Su navegador no deja pegar con el botón: mantenga presionado el campo y elija Pegar.", true);
+    setConnStatus("pending", "Su navegador no deja pegar con el botón: mantenga presionado el campo y elija Pegar.");
   }
 });
-els.apiKey.addEventListener("blur", () => { els.apiKey.value = els.apiKey.value.replace(/\s+/g, ""); });
+
+function applyConfig() {
+  client = makeClient();
+  els.title.textContent = assistantName().toUpperCase();
+  document.title = assistantName();
+  renderGreeting();
+}
 
 els.save.addEventListener("click", () => {
-  const key = els.apiKey.value.replace(/\s+/g, "");
-  els.apiKey.value = key;
-  config.geminiApiKey = key;
-  config.assistantName = els.assistantName.value.trim() || DEFAULT_ASSISTANT_NAME;
-  config.userName = els.userName.value.trim();
-  config.personality = els.personality.value.trim();
-  config.speakReplies = els.speakReplies.checked;
-  config.webSearch = els.webSearch.checked;
-  config.autoLearn = els.autoLearn.checked;
-  if (!memory.saveConfig(config)) { setStatus("No se pudo guardar (¿almacenamiento lleno o modo privado?)", true); return; }
-  client = makeClient();
-  applyProfileToUI();
-  document.activeElement && document.activeElement.blur();
-  setStatus("Guardado");
-  setTimeout(closeSettings, 900);
+  const v = formValues();
+  const next = { ...config, ...v, assistantName: v.assistantName || DEFAULT_ASSISTANT_NAME };
+  const r = memory.saveConfig(next);
+  if (!r.ok) { setSettingsStatus("No se pudo guardar: el almacenamiento está lleno o el navegador está en modo privado.", true); return; }
+  config = next;
+  applyConfig();
+  snapshot = formValues();
+  updateDirty();
+  setSettingsStatus("Cambios guardados");
+  renderStorage();
 });
 
+// "Probar conexión": si funciona, la key se guarda de una vez
 els.testConn.addEventListener("click", async () => {
   const key = els.apiKey.value.replace(/\s+/g, "");
-  els.apiKey.value = key;
+  if (!key) { setConnStatus("pending", "Primero pegue su API key"); els.apiKey.focus(); return; }
   els.testConn.disabled = true;
-  setStatus("Probando conexión…");
+  setConnStatus("pending", "Probando conexión…");
   try {
-    const c = makeClient(key);
-    const { report, ok } = await c.testConnection();
-    setStatus(ok ? "Conexión OK" : "La prueba falló", !ok);
-    showModal(report);
+    const tester = makeClient(key);
+    const t = await tester.testConnection();
+    if (t.ok) {
+      config.geminiApiKey = key;
+      if (t.model) config.geminiModel = t.model;
+      const r = memory.saveConfig(config);
+      if (snapshot) snapshot.geminiApiKey = key;
+      updateDirty();
+      applyConfig();
+      setConnStatus("ok", `Conexión verificada · ${(t.ms / 1000).toFixed(1).replace(".", ",")} s · ${shortModel(t.model)}${r.ok ? " · key guardada" : " · no se pudo guardar la key"}`, t.report);
+    } else {
+      setConnStatus("err", `${t.r.title}: ${t.r.text}`, t.report);
+    }
   } catch (e) {
-    setStatus("La prueba falló", true);
-    showModal(`Error interno al probar: ${e && e.message ? e.message : e}`);
+    setConnStatus("err", "La prueba falló por un error inesperado.", String(e && e.message ? e.message : e));
   } finally {
     els.testConn.disabled = false;
   }
 });
 
-// El interruptor de memoria se aplica al instante (está debajo de "Guardar")
-els.autoLearn.addEventListener("change", () => {
-  config.autoLearn = els.autoLearn.checked;
-  memory.saveConfig(config);
-  setStatus(config.autoLearn ? "Aprendizaje automático activado" : "Aprendizaje automático desactivado");
-});
+function renderFactsList() {
+  const items = memory.getFactItems();
+  els.factsList.replaceChildren();
+  for (const it of items) {
+    const li = document.createElement("li");
+    const span = document.createElement("span");
+    span.textContent = it.fact;
+    const del = document.createElement("button");
+    del.type = "button"; del.className = "icon-btn"; del.textContent = "×";
+    del.setAttribute("aria-label", `Borrar: ${it.fact}`);
+    del.onclick = () => {
+      const next = li.nextElementSibling || li.previousElementSibling;
+      memory.deleteFact(it.id);
+      renderFactsList();
+      renderStorage();
+      const target = next && els.factsList.contains(next) ? next.querySelector("button") : els.autoLearn;
+      if (target) target.focus();
+    };
+    li.append(span, del);
+    els.factsList.appendChild(li);
+  }
+  els.factsCount.textContent = items.length
+    ? `${items.length} dato${items.length === 1 ? "" : "s"} guardado${items.length === 1 ? "" : "s"}`
+    : "Todavía no recuerdo nada sobre usted.";
+}
+
+const mb = (n) => (n / 1024 / 1024).toFixed(n < 1024 * 1024 ? 2 : 1).replace(".", ",");
+async function renderStorage() {
+  const u = await memory.usage();
+  const pct = Math.min(100, Math.round((u.ls / LS_LIMIT) * 100));
+  els.storageText.textContent = `${mb(u.ls)} MB de ~5 MB`;
+  els.storageFill.style.width = Math.max(pct, u.ls ? 2 : 0) + "%";
+  els.storageBar.setAttribute("aria-valuenow", String(pct));
+  els.storageBar.setAttribute("aria-valuetext", `${pct} % usado`);
+  els.storageMeter.classList.toggle("high", pct >= 80);
+}
 
 els.clearHistory.addEventListener("click", () => {
   if (!confirm("¿Borrar toda la conversación de este dispositivo?")) return;
   memory.clearHistory();
-  els.messages.innerHTML = "";
-  welcome();
-  setStatus("Conversación borrada");
+  els.messages.replaceChildren();
+  vista = "inicio";
+  setSettingsStatus("Conversación borrada");
+  renderStorage();
 });
 els.clearFacts.addEventListener("click", () => {
   if (!confirm("¿Borrar todo lo que Antares recuerda de usted?")) return;
   memory.clearFacts();
-  updateFactsCount();
-  setStatus("Memoria borrada");
+  renderFactsList();
+  renderStorage();
+  setSettingsStatus("Memoria borrada");
 });
 
-// ---------- Modal de diagnóstico ----------
-function showModal(text) {
+// ---------- Diálogo accesible ----------
+let modalOpener = null;
+function openModal(title, text, opener = document.activeElement) {
+  modalOpener = opener;
+  els.modalTitle.textContent = title;
   els.modalBody.textContent = text;
   els.modal.hidden = false;
+  els.modalClose.focus();
 }
-els.modalClose.addEventListener("click", () => { els.modal.hidden = true; });
-els.modal.addEventListener("click", (ev) => { if (ev.target === els.modal) els.modal.hidden = true; });
+function closeModal() {
+  els.modal.hidden = true;
+  if (modalOpener && modalOpener.isConnected) modalOpener.focus();
+  modalOpener = null;
+}
+els.modalClose.addEventListener("click", closeModal);
+els.modal.addEventListener("click", (ev) => { if (ev.target === els.modal) closeModal(); });
+els.modal.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape") { ev.preventDefault(); closeModal(); return; }
+  if (ev.key === "Tab") { // mantener el foco dentro del diálogo
+    const f = [els.modalBody, els.modalCopy, els.modalClose];
+    const i = f.indexOf(document.activeElement);
+    if (ev.shiftKey && i <= 0) { ev.preventDefault(); f[f.length - 1].focus(); }
+    else if (!ev.shiftKey && i === f.length - 1) { ev.preventDefault(); f[0].focus(); }
+  }
+});
+els.modalBody.tabIndex = 0;
 els.modalCopy.addEventListener("click", async () => {
   try { await navigator.clipboard.writeText(els.modalBody.textContent); els.modalCopy.textContent = "Copiado"; }
   catch { els.modalCopy.textContent = "No se pudo copiar"; }
   setTimeout(() => { els.modalCopy.textContent = "Copiar"; }, 1500);
 });
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Escape" || !els.modal.hidden) return;
+  if (!els.attachMenu.hidden) { setMenu(false); els.attachBtn.focus(); }
+  else if (estado === "hablando") stopResponse();
+  else if (estado === "escuchando") voice.stopListening();
+});
 
-// ---------- Inicio ----------
-function welcome() {
-  renderBubble("assistant", `¡Hola! Soy ${assistantName()}. ¿En qué le puedo ayudar hoy?`);
+// ---------- Conexión ----------
+window.addEventListener("online", () => { updateConn(); refreshWeather(); });
+window.addEventListener("offline", updateConn);
+
+// ---------- Service worker y aviso de versión nueva ----------
+function setupServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  const hadController = !!navigator.serviceWorker.controller;
+  let shown = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || shown) return; // primera instalación: no hace falta avisar
+    shown = true;
+    els.toast.hidden = false;
+  });
+  navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((reg) => {
+    if (reg.waiting && hadController) els.toast.hidden = false;
+    let lastCheck = Date.now();
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && Date.now() - lastCheck > 30 * 60 * 1000) { lastCheck = Date.now(); reg.update().catch(() => {}); }
+    });
+  }).catch((e) => console.warn("Antares: service worker no registrado", e));
+  els.updateBtn.addEventListener("click", async () => {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg && reg.waiting) reg.waiting.postMessage("SKIP_WAITING");
+    } catch { /* */ }
+    location.reload();
+  });
+  els.updateDismiss.addEventListener("click", () => { els.toast.hidden = true; });
 }
 
-function init() {
-  client = makeClient();
-  applyProfileToUI();
-  els.version.textContent = `Antares Web ${APP_VERSION} · sus datos y su key se guardan solo en este navegador`;
-  const history = memory.getHistory(40);
-  for (const m of history) renderBubble(m.role, m.content, { media: m.media });
-  if (!history.length) welcome();
-  syncViewport();
-  scrollToBottom(false);
-  requestPersistence();
-
-  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
-    navigator.serviceWorker.register("sw.js").catch((e) => console.warn("Antares: service worker no registrado", e));
+// ---------- Inicio ----------
+function buildWave() {
+  for (let i = 0; i < 22; i++) {
+    const b = document.createElement("i");
+    b.style.setProperty("--h", (0.35 + Math.abs(Math.sin(i * 1.7)) * 0.65).toFixed(2));
+    b.style.animationDelay = (-(i * 0.083)).toFixed(2) + "s";
+    b.style.animationDuration = (0.7 + (i % 5) * 0.12).toFixed(2) + "s";
+    els.wave.appendChild(b);
   }
 }
 
+async function init() {
+  await memory.init().catch((e) => console.warn("Antares: migración", e));
+  config = memory.getConfig();
+  buildWave();
+  applyConfig();
+  els.version.textContent = `Antares Web ${APP_VERSION} · sus datos y su key se guardan solo en este navegador`;
+  for (const m of memory.getHistory(40)) {
+    if (m.role === "user") {
+      const text = String(m.content || "").replace(/^(\[(foto|video)\]\s*)+/, "").replace(/^Describa lo que ve\.$/, "");
+      renderUser(m.media ? text : m.content, m.media);
+    } else renderBot(m.content);
+  }
+  setEstado(baseEstado());
+  tick();
+  setTimeout(() => { tick(); setInterval(tick, 60000); }, (60 - new Date().getSeconds()) * 1000 + 50);
+  refreshWeather();
+  setInterval(refreshWeather, 15 * 60 * 1000);
+  syncViewport();
+  requestPersistence();
+  setupServiceWorker();
+}
 init();
-
-// para pruebas automáticas
-window.__antares = { sendMessage, get client() { return client; }, memory };

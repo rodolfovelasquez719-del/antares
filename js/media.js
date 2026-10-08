@@ -3,7 +3,8 @@ const GEMINI_UPLOAD_URL = "https://generativelanguage.googleapis.com/upload/v1be
 const GEMINI_FILES_URL = "https://generativelanguage.googleapis.com/v1beta";
 
 export const MAX_ATTACHMENTS = 4;
-export const INLINE_LIMIT = 18 * 1024 * 1024;   // tamaño máximo (base64) para enviar dentro de la petición
+export const INLINE_LIMIT = 18 * 1024 * 1024;   // tamaño máximo total (base64) dentro de la petición
+export const FILES_API_FROM = 4 * 1024 * 1024;  // cada archivo de más de 4 MB va por la Files API
 export const MAX_VIDEO_BYTES = 500 * 1024 * 1024; // límite práctico para subir desde el celular
 const MAX_SIDE = 1600, JPEG_QUALITY = 0.85, THUMB_SIDE = 160;
 
@@ -79,16 +80,33 @@ function videoThumb(url) {
   });
 }
 
+// Tipo MIME que Gemini acepta. Los .MOV del iPhone llegan como video/quicktime (o sin tipo).
+const EXT_MIME = { mov: "video/mov", mp4: "video/mp4", m4v: "video/mp4", webm: "video/webm", "3gp": "video/3gpp",
+  avi: "video/avi", mpeg: "video/mpeg", mpg: "video/mpg", wmv: "video/wmv", flv: "video/x-flv" };
+export function videoMime(file) {
+  const t = (file.type || "").toLowerCase();
+  if (t === "video/quicktime") return "video/mov";
+  if (t.startsWith("video/")) return t;
+  const ext = ((file.name || "").split(".").pop() || "").toLowerCase();
+  return EXT_MIME[ext] || "video/mp4";
+}
+function isVideoFile(file) {
+  const t = (file.type || "").toLowerCase();
+  if (t.startsWith("video/")) return true;
+  const ext = ((file.name || "").split(".").pop() || "").toLowerCase();
+  return !t && ext in EXT_MIME;
+}
+
 async function prepareVideo(file) {
   const url = URL.createObjectURL(file);
   const thumb = await videoThumb(url);
-  return { kind: "video", mime: file.type || "video/mp4", blob: file, size: file.size, thumb, url, name: file.name };
+  return { kind: "video", mime: videoMime(file), blob: file, size: file.size, thumb, url, name: file.name };
 }
 
 export async function prepareFile(file) {
   const type = file.type || "";
   if (type.startsWith("image/")) return prepareImage(file);
-  if (type.startsWith("video/")) {
+  if (isVideoFile(file)) {
     if (file.size > MAX_VIDEO_BYTES) {
       throw new Error(`El video pesa ${formatBytes(file.size)}; el máximo es ${formatBytes(MAX_VIDEO_BYTES)}. Por favor grabe uno más corto.`);
     }
@@ -139,21 +157,31 @@ export async function uploadToFilesApi(apiKey, item, { onProgress = null, timeou
   return { mime: file.mimeType || item.mime, fileUri: file.uri };
 }
 
-// Convierte los adjuntos en partes para Gemini: inline si caben, Files API si no.
+// Convierte los adjuntos en partes para Gemini: inline si son pequeños, Files API si pesan más de 4 MB
+// (o si juntos no caben). El resultado queda guardado en cada adjunto (it.part), así un reintento
+// reutiliza el mismo fileUri / base64 sin volver a subir ni a codificar nada.
 export async function toGeminiMedia(apiKey, items, { onProgress = null } = {}) {
+  const viaFiles = new Set(items.filter((it) => it.size > FILES_API_FROM));
   let total = 0;
-  for (const it of items) total += base64Size(it.size);
-  // Los más grandes van a la Files API hasta que el resto quepa inline
-  const order = [...items].sort((a, b) => b.size - a.size);
-  const viaFiles = new Set();
-  for (const it of order) {
+  for (const it of items) if (!viaFiles.has(it)) total += base64Size(it.size);
+  for (const it of [...items].sort((a, b) => b.size - a.size)) {
     if (total <= INLINE_LIMIT) break;
-    viaFiles.add(it); total -= base64Size(it.size);
+    if (!viaFiles.has(it)) { viaFiles.add(it); total -= base64Size(it.size); }
   }
   const out = [];
+  let uploaded = 0;
   for (const it of items) {
-    if (viaFiles.has(it)) out.push(await uploadToFilesApi(apiKey, it, { onProgress }));
-    else out.push({ mime: it.mime, data: await blobToBase64(it.blob) });
+    const fresh = it.part && (!it.part.fileUri || Date.now() < (it.part.expires || 0));
+    if (!fresh) {
+      if (viaFiles.has(it)) {
+        // Los archivos de la Files API duran 48 h; se reutilizan por un margen menor
+        it.part = { ...(await uploadToFilesApi(apiKey, it, { onProgress })), expires: Date.now() + 40 * 3600 * 1000 };
+        uploaded++;
+      } else {
+        it.part = { mime: it.mime, data: await blobToBase64(it.blob) };
+      }
+    }
+    out.push(it.part.fileUri ? { mime: it.part.mime, fileUri: it.part.fileUri } : { mime: it.part.mime, data: it.part.data });
   }
-  return { media: out, uploaded: viaFiles.size };
+  return { media: out, uploaded };
 }

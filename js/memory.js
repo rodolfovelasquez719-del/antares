@@ -1,21 +1,28 @@
 // Antares Web - Memoria local (solo en este navegador): historial, datos guardados y configuración.
+// Texto y configuración en localStorage (~5 MB); las miniaturas de fotos/videos en IndexedDB.
 const K_HISTORY = "antares.history.v1";
 const K_FACTS = "antares.facts.v1";
 const K_CONFIG = "antares.config.v1";
 const MAX_HISTORY = 300;
+const MAX_THUMBS = 60;               // miniaturas que se conservan (las más recientes)
+export const LS_LIMIT = 5 * 1024 * 1024;
+const CONFIG_REV = 4;
 
 export const DEFAULT_CONFIG = {
   geminiApiKey: "",
   assistantName: "Antares",
   userName: "",
   personality: "",
-  speakReplies: true,
+  speakReplies: false,   // leer en voz alta: apagado por defecto
+  speechLang: "es-CR",   // idioma del dictado (con respaldo es-MX -> es-US)
   webSearch: true,
-  autoLearn: true,   // aprender datos del usuario automáticamente
-  geminiModel: "",   // último modelo que respondió bien
-  authMethod: "",    // forma de enviar la key que funcionó
-  noGrounding: {},   // modelos donde la búsqueda de Google no está disponible
+  autoLearn: true,       // aprender datos del usuario automáticamente
+  geminiModel: "",       // último modelo que respondió bien
+  noGrounding: {},       // modelos donde la búsqueda de Google no está disponible
+  configRev: CONFIG_REV,
 };
+
+const isQuota = (e) => e && (e.name === "QuotaExceededError" || e.code === 22 || e.code === 1014 || /quota/i.test(e.message || ""));
 
 function load(key, fallback) {
   try {
@@ -23,47 +30,187 @@ function load(key, fallback) {
     return raw ? JSON.parse(raw) : fallback;
   } catch { return fallback; }
 }
-function save(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); return true; }
-  catch (e) { console.warn("Antares: no se pudo guardar", key, e); return false; }
+// Devuelve {ok, quota}
+function rawSave(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); return { ok: true }; }
+  catch (e) { console.warn("Antares: no se pudo guardar", key, e && e.name); return { ok: false, quota: isQuota(e) }; }
+}
+
+// ---------- Miniaturas en IndexedDB ----------
+let dbPromise = null;
+function db() {
+  if (!("indexedDB" in window)) return Promise.reject(new Error("sin IndexedDB"));
+  if (!dbPromise) {
+    dbPromise = new Promise((resolve, reject) => {
+      const req = indexedDB.open("antares", 1);
+      req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains("thumbs")) req.result.createObjectStore("thumbs"); };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    }).catch((e) => { dbPromise = null; throw e; });
+  }
+  return dbPromise;
+}
+async function tx(mode, fn) {
+  const d = await db();
+  return new Promise((resolve, reject) => {
+    const t = d.transaction("thumbs", mode);
+    const store = t.objectStore("thumbs");
+    const out = fn(store);
+    t.oncomplete = () => resolve(out && "result" in out ? out.result : undefined);
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error);
+  });
+}
+export const thumbs = {
+  async put(id, dataUrl) { try { await tx("readwrite", (s) => s.put(dataUrl, id)); return true; } catch { return false; } },
+  async get(id) { try { return await tx("readonly", (s) => s.get(id)); } catch { return ""; } },
+  async remove(ids) { if (!ids.length) return; try { await tx("readwrite", (s) => { for (const id of ids) s.delete(id); }); } catch { /* */ } },
+  async clear() { try { await tx("readwrite", (s) => s.clear()); } catch { /* */ } },
+  async count() { try { return await tx("readonly", (s) => s.count()); } catch { return 0; } },
+};
+
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const thumbIdsOf = (msgs) => msgs.flatMap((m) => (m.media || []).map((x) => x.thumbId).filter(Boolean));
+
+// Guarda el historial; si no cabe, borra los mensajes más viejos hasta que quepa.
+function saveHistory(h) {
+  let pruned = 0;
+  for (let i = 0; i < 8; i++) {
+    const r = rawSave(K_HISTORY, h);
+    if (r.ok) return { ok: true, pruned, history: h };
+    if (!r.quota || h.length <= 2) return { ok: false, pruned, history: h };
+    const cut = Math.max(2, Math.ceil(h.length / 4));
+    thumbs.remove(thumbIdsOf(h.slice(0, cut)));
+    h = h.slice(cut);
+    pruned += cut;
+  }
+  return { ok: false, pruned, history: h };
+}
+
+// Guarda otra clave; si el espacio está lleno, libera historial viejo y reintenta una vez.
+function saveWithRoom(key, value) {
+  let r = rawSave(key, value);
+  if (r.ok || !r.quota) return { ok: r.ok, pruned: 0 };
+  const h = load(K_HISTORY, []);
+  if (h.length > 10) {
+    const cut = Math.ceil(h.length / 3);
+    thumbs.remove(thumbIdsOf(h.slice(0, cut)));
+    rawSave(K_HISTORY, h.slice(cut));
+    r = rawSave(key, value);
+    return { ok: r.ok, pruned: r.ok ? cut : 0 };
+  }
+  return { ok: false, pruned: 0 };
 }
 
 export const memory = {
+  // Migraciones (v1.3 guardaba las miniaturas dentro del historial en localStorage)
+  async init() {
+    const cfg = load(K_CONFIG, null);
+    if (cfg && (cfg.configRev || 0) < CONFIG_REV) {
+      cfg.speakReplies = false;      // leer en voz alta pasa a estar apagado por defecto
+      delete cfg.authMethod;         // la key ahora solo se envía por encabezado
+      delete cfg.modelOrderRev;
+      cfg.configRev = CONFIG_REV;
+      rawSave(K_CONFIG, cfg);
+    }
+    const h = load(K_HISTORY, []);
+    let changed = false;
+    for (const m of h) {
+      if (!m.id) { m.id = newId(); changed = true; }
+      for (const x of m.media || []) {
+        if (x.thumb) {
+          const id = newId();
+          if (await thumbs.put(id, x.thumb)) x.thumbId = id;
+          delete x.thumb;
+          changed = true;
+        }
+      }
+    }
+    if (changed) saveHistory(h);
+    await this.pruneThumbs(h);
+  },
+
+  async pruneThumbs(h = load(K_HISTORY, [])) {
+    const ids = thumbIdsOf(h);
+    if (ids.length <= MAX_THUMBS) return 0;
+    const drop = new Set(ids.slice(0, ids.length - MAX_THUMBS));
+    for (const m of h) for (const x of m.media || []) if (drop.has(x.thumbId)) delete x.thumbId;
+    saveHistory(h);
+    await thumbs.remove([...drop]);
+    return drop.size;
+  },
+
   getConfig() { return { ...DEFAULT_CONFIG, ...load(K_CONFIG, {}) }; },
-  saveConfig(cfg) { return save(K_CONFIG, cfg); },
+  saveConfig(cfg) { return saveWithRoom(K_CONFIG, cfg); },
 
   getHistory(limit = 0) {
     const h = load(K_HISTORY, []);
     return limit ? h.slice(-limit) : h;
   },
-  addMessage(role, content, extra) {
-    const h = load(K_HISTORY, []);
-    h.push({ role, content, ts: new Date().toISOString(), ...(extra || {}) });
-    save(K_HISTORY, h.slice(-MAX_HISTORY));
+  // extra.media: [{kind, thumb(dataURL)}] -> la miniatura va a IndexedDB. Devuelve {ok, pruned, id}
+  addMessage(role, content, extra = null) {
+    const msg = { id: newId(), role, content, ts: new Date().toISOString() };
+    if (extra && extra.media) {
+      msg.media = extra.media.map((x) => {
+        const out = { kind: x.kind };
+        if (x.thumb) { out.thumbId = newId(); thumbs.put(out.thumbId, x.thumb); }
+        return out;
+      });
+    }
+    let h = load(K_HISTORY, []);
+    h.push(msg);
+    if (h.length > MAX_HISTORY) {
+      thumbs.remove(thumbIdsOf(h.slice(0, h.length - MAX_HISTORY)));
+      h = h.slice(-MAX_HISTORY);
+    }
+    const r = saveHistory(h);
+    if (msg.media) this.pruneThumbs();
+    return { ok: r.ok, pruned: r.pruned, id: msg.id };
   },
-  clearHistory() { save(K_HISTORY, []); },
+  clearHistory() { thumbs.clear(); return rawSave(K_HISTORY, []).ok; },
 
   getFactItems() {
     return load(K_FACTS, []).map((f, i) => ({ id: f.id || f.ts || String(i), fact: f.fact, ts: f.ts, auto: !!f.auto }));
   },
   getFacts() { return this.getFactItems().map((f) => f.fact); },
+  // Devuelve {id} si se guardó, o {id: null, error} si no hubo espacio
   saveFact(fact, { auto = false } = {}) {
     const f = load(K_FACTS, []);
-    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    const id = newId();
     f.push({ id, fact, ts: new Date().toISOString(), auto });
-    save(K_FACTS, f);
-    return id;
+    const r = saveWithRoom(K_FACTS, f);
+    return r.ok ? { id, pruned: r.pruned } : { id: null, error: "quota" };
   },
   deleteFact(id) {
     const items = this.getFactItems().filter((f) => f.id !== id);
-    save(K_FACTS, items.map(({ id: i, fact, ts, auto }) => ({ id: i, fact, ts, auto })));
+    return rawSave(K_FACTS, items.map(({ id: i, fact, ts, auto }) => ({ id: i, fact, ts, auto }))).ok;
   },
-  clearFacts() { save(K_FACTS, []); },
+  clearFacts() { return rawSave(K_FACTS, []).ok; },
+
+  // Uso de almacenamiento: localStorage de Antares (límite ~5 MB) + total del sitio si el navegador lo informa
+  async usage() {
+    let ls = 0;
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        ls += (k.length + (localStorage.getItem(k) || "").length) * 2; // UTF-16
+      }
+    } catch { /* */ }
+    let total = null, quota = null;
+    try {
+      if (navigator.storage && navigator.storage.estimate) {
+        const e = await navigator.storage.estimate();
+        total = e.usage; quota = e.quota;
+      }
+    } catch { /* */ }
+    return { ls, lsLimit: LS_LIMIT, total, quota, thumbs: await thumbs.count() };
+  },
 };
 
 // Pide al navegador que no borre estos datos automáticamente (si lo permite)
 export async function requestPersistence() {
   try {
-    if (navigator.storage && navigator.storage.persist) await navigator.storage.persist();
+    if (navigator.storage && navigator.storage.persist) return await navigator.storage.persist();
   } catch { /* opcional */ }
+  return false;
 }

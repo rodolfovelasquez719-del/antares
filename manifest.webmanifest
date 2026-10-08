@@ -1,7 +1,7 @@
 {
   "name": "Antares - Asistente personal",
   "short_name": "Antares",
-  "description": "Su asistente personal con Gemini, en español de Costa Rica.",
+  "description": "Antares, su asistente personal por voz con Gemini: respuestas en español formal, memoria local, fotos y videos.",
   "lang": "es",
   "dir": "ltr",
   "id": "./",
@@ -9,12 +9,46 @@
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#121214",
-  "theme_color": "#16161a",
-  "categories": ["productivity", "utilities"],
+  "background_color": "#03060b",
+  "theme_color": "#03060b",
+  "categories": [
+    "productivity",
+    "utilities"
+  ],
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "screenshots/reposo.png",
+      "sizes": "786x1746",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Pantalla principal de Antares en espera"
+    },
+    {
+      "src": "screenshots/ajustes.png",
+      "sizes": "786x1746",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Configuración de Antares"
+    }
   ]
 }
