@@ -167,9 +167,10 @@ export class GeminiClient {
   // ---------- API pública ----------
   // onChunk(textoAcumulado) se llama a medida que llega la respuesta (streaming).
   // media: [{mime, data}] (inline base64) o [{mime, fileUri}] (Files API). signal: AbortSignal (botón Detener).
-  async ask(userMessage, history, knownFacts, { search = false, onChunk = null, media = null, signal = null } = {}) {
+  async ask(userMessage, history, knownFacts, { search = false, onChunk = null, media = null, signal = null, extraSystem = "" } = {}) {
     if (!this.isConfigured()) return this.errorResult("missing_key", 0, "");
     let system = this.systemPrompt;
+    if (extraSystem) system += "\n\n" + extraSystem;
     if (knownFacts && knownFacts.length) {
       system += "\n\nLo que sabe del usuario (úselo con naturalidad cuando sea relevante, " +
         "sin repetirlo en cada mensaje):\n" + knownFacts.map((f) => `- ${f}`).join("\n");
@@ -185,6 +186,12 @@ export class GeminiClient {
       search: search && !hasMedia, onChunk, stream: !!onChunk, signal,
       ...(hasMedia ? { timeoutMs: 120000, budgetMs: 240000, maxModels: MAX_MODELS_MEDIA, retries: false } : {}),
     });
+  }
+
+  // Consulta que debe responder solo JSON (trivia y su verificación). Sin historial ni datos personales.
+  async askJson(system, content, { signal = null, maxTokens = 2048 } = {}) {
+    if (!this.isConfigured()) return this.errorResult("missing_key", 0, "");
+    return this.callApi(system, [{ role: "user", content }], { json: true, maxTokens, signal, budgetMs: 60000, maxModels: 3, models: this.modelOrder() });
   }
 
   // Extrae datos personales duraderos del usuario (memoria automática). Devuelve solo los nuevos.

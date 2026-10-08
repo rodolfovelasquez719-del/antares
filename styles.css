@@ -613,3 +613,146 @@ body.booting #app { visibility: hidden; }
 .msg-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .msg-actions .mini-btn { color: var(--cyan-2); }
 #ml-body { min-height: 220px; line-height: 1.45; }
+
+/* ===================== v1.8: modos, ocio, robótica ===================== */
+/* Botones de modo bajo el HUD */
+.mode-row { display: flex; gap: 8px; margin: 8px 12px 0; flex: none; }
+.mode-btn {
+  flex: 1; min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 4px 10px;
+  border-radius: 12px; cursor: pointer; font-family: var(--font-ui); font-size: 15px; font-weight: 600;
+  color: var(--muted); background: rgba(0,229,255,.03); border: 1px solid var(--line-soft); min-width: 0;
+}
+.mode-btn span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mode-btn svg { width: 22px; height: 22px; flex: none; }
+.mode-btn[aria-pressed="true"] { color: var(--cyan-2); border-color: var(--line); background: rgba(0,229,255,.1); }
+#drive-btn[aria-pressed="true"] { color: var(--amber); border-color: rgba(255,196,87,.55); background: rgba(255,196,87,.1); }
+.wake-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; border: 1.5px solid currentColor; }
+#wake-btn[data-state="listening"] .wake-dot { background: var(--ok); border-color: var(--ok); box-shadow: 0 0 10px var(--ok); animation: wakePulse 1.6s ease-in-out infinite; }
+#wake-btn[data-state="listening"] { color: var(--ok); border-color: rgba(77,255,184,.5); background: rgba(77,255,184,.08); }
+#wake-btn[data-state="command"] { color: var(--cyan-ink); background: var(--cyan); border-color: var(--cyan); }
+#wake-btn[data-state="command"] .wake-dot { background: var(--cyan-ink); border-color: var(--cyan-ink); animation: wakePulse .7s ease-in-out infinite; }
+#wake-btn[data-state="paused"] .wake-dot, #wake-btn[data-state="idle"] .wake-dot { background: var(--amber); border-color: var(--amber); }
+#wake-btn[data-state="idle"] { color: var(--amber); border-color: rgba(255,196,87,.5); }
+@keyframes wakePulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.35); opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { #wake-btn .wake-dot { animation: none !important; } }
+body.kb-open .mode-row { display: none; }
+
+.quickbar .qrow.ocio button { font-size: 14px; color: var(--ok); border-color: rgba(77,255,184,.26); background: rgba(77,255,184,.05); }
+
+/* Chip del modo tutor */
+.tutor-chip { width: 100%; display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 12px; border-radius: 12px;
+  border: 1px solid rgba(77,255,184,.45); background: rgba(77,255,184,.07); font-family: var(--font-read); font-size: 14px; color: var(--text); }
+.tutor-chip span { flex: 1; min-width: 0; }
+.tutor-chip b { color: var(--ok); }
+.tutor-chip[hidden] { display: none; }
+body.tutor .pill { border-color: rgba(77,255,184,.5); }
+
+/* Modo conducción: botones grandes y lo mínimo en pantalla */
+body.driving[data-estado] .quickbar.only, body.driving #weather-cell, body.driving .hud-sub, body.driving #attach-btn,
+body.driving[data-estado] .greeting.only, body.driving[data-estado] #open-chat.only { display: none !important; }
+body.driving .mode-btn { min-height: 60px; font-size: 18px; }
+body.driving .mic-big { width: 116px; height: 116px; }
+body.driving .mic-big svg { width: 46px; height: 46px; }
+body.driving.compact[data-estado="reposo"] .mic-big { width: 96px; height: 96px; }
+body.driving.compact[data-estado="reposo"] .mic-big svg { width: 40px; height: 40px; }
+body.driving .mic-hint { font-size: 18px; display: block !important; }
+body.driving .stop-pill { min-height: 60px; font-size: 19px; padding: 0 26px; }
+body.driving .send { width: 56px; height: 56px; }
+body.driving .bubble { font-size: 20px; line-height: 1.45; }
+body.driving .state-label { font-size: 18px; }
+body.driving .hud-big { font-size: 28px; }
+
+/* Tamaño de letra */
+html[data-fs="2"] .bubble { font-size: 18.5px; }
+html[data-fs="3"] .bubble { font-size: 21px; }
+html[data-fs="2"] .field, html[data-fs="2"] #msg-input { font-size: 18px; }
+html[data-fs="3"] .field, html[data-fs="3"] #msg-input { font-size: 20px; }
+html[data-fs="2"] .btn, html[data-fs="2"] .panel-tab, html[data-fs="2"] .quickbar button, html[data-fs="2"] .mode-btn, html[data-fs="2"] .opt, html[data-fs="2"] .pick { font-size: 17.5px; }
+html[data-fs="3"] .btn, html[data-fs="3"] .panel-tab, html[data-fs="3"] .quickbar button, html[data-fs="3"] .mode-btn, html[data-fs="3"] .opt, html[data-fs="3"] .pick { font-size: 19.5px; }
+html[data-fs="2"] .hint, html[data-fs="2"] .item-main small, html[data-fs="2"] .switch-row small, html[data-fs="2"] .rb-step small { font-size: 16px; }
+html[data-fs="3"] .hint, html[data-fs="3"] .item-main small, html[data-fs="3"] .switch-row small, html[data-fs="3"] .rb-step small { font-size: 18px; }
+html[data-fs="2"] .item-main strong, html[data-fs="2"] .switch-row .txt, html[data-fs="2"] .rb-step b, html[data-fs="2"] .tv-q, html[data-fs="2"] .greeting { font-size: 19px; }
+html[data-fs="3"] .item-main strong, html[data-fs="3"] .switch-row .txt, html[data-fs="3"] .rb-step b, html[data-fs="3"] .tv-q, html[data-fs="3"] .greeting { font-size: 22px; }
+html[data-fs="2"] .msg-actions .mini-btn, html[data-fs="2"] .sources a, html[data-fs="2"] .meta { font-size: 16px; }
+html[data-fs="3"] .msg-actions .mini-btn, html[data-fs="3"] .sources a, html[data-fs="3"] .meta { font-size: 18px; }
+
+/* Grupos de paneles con 3 segmentos */
+.panel-groups .seg { letter-spacing: 1px; padding: 0 4px; }
+.panel-groups .seg[data-group="ocio"].on { background: rgba(77,255,184,.1); color: var(--ok); box-shadow: inset 0 -2px 0 var(--ok); }
+.panel-tabs.ocio .panel-tab { font-size: 15px; padding: 0 4px; }
+
+/* Botones de elección (dificultad, tema) */
+.picks, .seg-mini { display: flex; flex-wrap: wrap; gap: 6px; }
+.pick { min-height: 44px; padding: 0 14px; border-radius: 22px; cursor: pointer; font-family: var(--font-ui); font-size: 15px; font-weight: 600;
+  color: var(--muted); background: transparent; border: 1px solid var(--line-soft); }
+.pick.on { color: var(--cyan-ink); background: var(--cyan); border-color: var(--cyan); }
+
+/* Damas chinas */
+.cc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.cc-score { margin: 0; font-family: var(--font-hud); font-size: 13px; letter-spacing: 1px; color: var(--muted); }
+.cc-status { margin: 0; min-height: 1.4em; font-family: var(--font-read); font-size: 16px; color: var(--text); }
+.cc-status.done { color: var(--ok); font-weight: 600; }
+.cc-wrap { display: flex; justify-content: center; }
+.cc-board { width: 100%; max-width: 440px; height: auto; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+.cc-board .star { fill: rgba(0,229,255,.035); stroke: rgba(0,229,255,.28); stroke-width: .08; stroke-linejoin: round; }
+.cc-board .hole { fill: #0a1c27; stroke: rgba(0,229,255,.38); stroke-width: .07; }
+.cc-board .goal-h .hole { stroke: rgba(0,229,255,.75); fill: rgba(0,229,255,.1); }
+.cc-board .goal-a .hole { stroke: rgba(255,196,87,.7); fill: rgba(255,196,87,.08); }
+.cc-board .cell { cursor: pointer; }
+.cc-board .peg { stroke-width: .1; }
+.cc-board .peg.p1 { fill: var(--cyan); stroke: #c9fbff; filter: drop-shadow(0 0 .25px rgba(0,229,255,.9)); }
+.cc-board .peg.p2 { fill: var(--amber); stroke: #ffe7b0; }
+.cc-board .sel .peg { stroke: #fff; stroke-width: .22; filter: drop-shadow(0 0 .5px #fff); }
+.cc-board .dest .hole { fill: rgba(77,255,184,.35); stroke: var(--ok); stroke-width: .12; }
+.cc-board .last-to .peg { stroke: #fff; stroke-width: .16; }
+.cc-board .last-from .hole { stroke: rgba(255,255,255,.55); stroke-dasharray: .2 .15; }
+.cc-board .last-path { fill: none; stroke-width: .12; stroke-dasharray: .35 .2; stroke-linejoin: round; opacity: .8; }
+.cc-board .last-path.p2 { stroke: var(--amber); }
+.cc-board .last-path.p1 { stroke: var(--cyan-2); }
+.cc-legend { margin: 0; font-family: var(--font-read); font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+.cc-legend .dot { display: inline-block; width: 10px; height: 10px; margin: 0 4px 0 0; vertical-align: -1px; box-shadow: none; }
+.cc-legend .dot.p1 { background: var(--cyan); }
+.cc-legend .dot.p2 { background: var(--amber); }
+.howto { border: 1px solid var(--line-soft); border-radius: 12px; padding: 0 12px; }
+.howto summary, .rb-level summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 600; color: var(--cyan-2); list-style: none; }
+.howto summary::-webkit-details-marker, .rb-level summary::-webkit-details-marker { display: none; }
+.howto p { margin: 0 0 10px; font-family: var(--font-read); font-size: 14.5px; line-height: 1.45; color: var(--text); }
+
+/* Trivia */
+.kpis b small { font-size: 12px; color: var(--muted); font-weight: 500; }
+.trivia-card { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel-2); }
+.tv-topic { margin: 0; font-family: var(--font-hud); font-size: 11px; letter-spacing: 1.5px; color: var(--muted); text-transform: uppercase; }
+.tv-q { margin: 0; font-family: var(--font-read); font-size: 17.5px; line-height: 1.4; color: var(--text); font-weight: 600; }
+.opts { display: flex; flex-direction: column; gap: 8px; }
+.opt { min-height: 48px; display: flex; align-items: center; gap: 10px; padding: 8px 12px; text-align: left; border-radius: 12px; cursor: pointer;
+  font-family: var(--font-read); font-size: 16px; color: var(--text); background: rgba(0,229,255,.04); border: 1px solid var(--line-soft); }
+.opt b { flex: none; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); font-family: var(--font-hud); font-size: 12px; color: var(--cyan-2); }
+.opt.right { border-color: var(--ok); background: rgba(77,255,184,.12); }
+.opt.right b { background: var(--ok); color: #002417; border-color: var(--ok); }
+.opt.wrong { border-color: var(--red); background: rgba(255,138,138,.1); }
+.opt.wrong b { background: var(--red); color: #2a0000; border-color: var(--red); }
+.opt.dim { opacity: .6; }
+.opt[aria-disabled="true"] { cursor: default; }
+.tv-result p { margin: 0 0 6px; font-family: var(--font-read); font-size: 15px; line-height: 1.45; color: var(--text); }
+.tv-result.ok strong { color: var(--ok); }
+.tv-result.ko strong { color: var(--amber); }
+
+/* Robótica */
+.rb-hero { padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(77,255,184,.35); background: rgba(77,255,184,.05); }
+.rb-dream { margin: 0 0 8px; font-family: var(--font-hud); font-size: 13px; letter-spacing: 1.2px; color: var(--ok); text-transform: uppercase; }
+.rb-hero .bar i { display: block; height: 100%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+.rb-level { border: 1px solid var(--line-soft); border-radius: 12px; padding: 0 12px; background: rgba(0,229,255,.02); }
+.rb-level summary { gap: 8px; flex-wrap: wrap; padding: 6px 0; }
+.rb-level summary strong { flex: 1 1 60%; color: var(--text); font-size: 16.5px; }
+.rb-level summary small { font-family: var(--font-read); font-size: 13px; color: var(--muted); font-weight: 400; }
+.rb-lv { font-family: var(--font-hud); font-size: 11px; letter-spacing: 1.4px; color: var(--ok); }
+.rb-steps { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.rb-step { display: flex; gap: 12px; align-items: flex-start; min-height: 44px; padding: 8px 0; cursor: pointer; border-top: 1px solid var(--line-soft); }
+.rb-step input { flex: none; width: 24px; height: 24px; margin: 2px 0 0; accent-color: var(--ok); }
+.rb-step span { display: flex; flex-direction: column; gap: 2px; }
+.rb-step b { font-size: 16px; color: var(--text); }
+.rb-step small { font-family: var(--font-read); font-size: 14px; line-height: 1.4; color: var(--muted); }
+.rb-step input:checked + span b { color: var(--ok); }
+.rb-projects h4 { margin: 8px 0 4px; font-family: var(--font-hud); font-size: 12px; letter-spacing: 1.3px; color: var(--cyan-2); }
+.rb-projects ul { margin: 0; padding-left: 20px; font-family: var(--font-read); font-size: 15px; line-height: 1.5; color: var(--text); }
+.tutor-chip .mini-btn { min-height: 44px; min-width: 64px; }

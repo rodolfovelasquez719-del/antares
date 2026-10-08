@@ -67,20 +67,44 @@ export class Voice {
     } catch (e) { console.warn("Antares voz (unlock):", e); }
   }
 
+  // Devuelve una promesa que se cumple al terminar de hablar (o si falla). onSpeaking(true/false) avisa a la app
+  // (el modo «Hey Antares» deja de escuchar mientras Antares habla, para no oírse a sí mismo).
   speak(text) {
-    if (!this.synth || !text) return;
-    try {
-      this.synth.cancel();
-      const u = new SpeechSynthesisUtterance(text.slice(0, 4000));
-      if (this.voice) { u.voice = this.voice; u.lang = this.voice.lang; } else { u.lang = "es-CR"; }
-      u.rate = 0.95;  // pausado
-      u.pitch = 0.9;  // un poco más grave
-      u.onerror = (e) => console.warn("Antares voz:", e.error || e);
-      this.synth.speak(u);
-    } catch (e) { console.warn("Antares voz:", e); }
+    if (!this.synth || !text) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      let done = false, guard = null;
+      const token = (this.utterId = (this.utterId || 0) + 1);
+      const finish = (ok) => {
+        if (done) return; done = true; clearTimeout(guard);
+        if (this.utterId === token && this.speaking) {
+          this.speaking = false;
+          try { this.onSpeaking && this.onSpeaking(false); } catch { /* */ }
+        }
+        resolve(ok);
+      };
+      try {
+        this.synth.cancel();
+        const clean = String(text).replace(/https?:\/\/\S+/g, "").replace(/[*_#`>]+/g, " ").slice(0, 4000);
+        const u = new SpeechSynthesisUtterance(clean);
+        if (this.voice) { u.voice = this.voice; u.lang = this.voice.lang; } else { u.lang = "es-CR"; }
+        u.rate = this.rate || 0.95;  // pausado
+        u.pitch = 0.9;  // un poco más grave
+        u.onend = () => finish(true);
+        u.onerror = (e) => { console.warn("Antares voz:", e.error || e); finish(false); };
+        this.speaking = true;
+        try { this.onSpeaking && this.onSpeaking(true); } catch { /* */ }
+        // por si el navegador nunca avisa el final: tiempo máximo según el largo del texto
+        guard = setTimeout(() => finish(true), 4000 + clean.length * 90);
+        this.synth.speak(u);
+      } catch (e) { console.warn("Antares voz:", e); finish(false); }
+    });
   }
 
-  stop() { try { this.synth && this.synth.cancel(); } catch { /* */ } }
+  stop() {
+    this.utterId = (this.utterId || 0) + 1;
+    try { this.synth && this.synth.cancel(); } catch { /* */ }
+    if (this.speaking) { this.speaking = false; try { this.onSpeaking && this.onSpeaking(false); } catch { /* */ } }
+  }
 
   stopListening() { if (this.listening && this.recognition) { try { this.recognition.stop(); } catch { /* */ } } }
 

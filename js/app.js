@@ -4,7 +4,9 @@ import { memory, thumbs, requestPersistence, LS_LIMIT, flushWrites, isVaultMode,
 import * as Lock from "./lock.js";
 import { showLock, runPinFlow, isShowing as lockShowing } from "./lockui.js";
 import { looksLikeImportantFact, buildConfirmationQuestion } from "./facts.js";
-import { Voice } from "./voice.js";
+import { Voice, isIOS, speechErrorMessage } from "./voice.js";
+import { WakeWord } from "./wake.js";
+import * as Robotics from "./robotics.js";
 import { prepareFile, toGeminiMedia, formatBytes, MAX_ATTACHMENTS } from "./media.js";
 import { fetchWeather } from "./weather.js";
 import * as Reminders from "./reminders.js";
@@ -17,7 +19,7 @@ import * as Cubic from "./cubic.js";
 import * as Mail from "./mail.js";
 import * as Logbook from "./logbook.js";
 
-const APP_VERSION = "1.7.0";
+const APP_VERSION = "1.8.0";
 const DEFAULT_MEDIA_PROMPT = "Describa lo que ve.";
 const DEFAULT_PDF_PROMPT = "Resuma este documento: puntos clave, fechas, montos y lo que usted deba hacer.";
 const $ = (id) => document.getElementById(id);
@@ -53,6 +55,10 @@ const els = {
   secStatus: $("sec-status"), secStatusText: $("sec-status-text"), secOffRow: $("sec-off-row"), secOn: $("sec-on"),
   pinCreate: $("pin-create"), pinChange: $("pin-change"), lockNow: $("lock-now"), pinRemove: $("pin-remove"),
   passkeySwitch: $("passkey-switch"), passkeyNote: $("passkey-note"), lockOnHide: $("lock-on-hide"), idleLock: $("idle-lock"),
+  // modos (1.8)
+  wakeBtn: $("wake-btn"), wakeLabel: $("wake-label"), driveBtn: $("drive-btn"), driveLabel: $("drive-label"),
+  tutorChip: $("tutor-chip"), tutorExit: $("tutor-exit"),
+  wakeWord: $("wake-word"), wakeIdle: $("wake-idle"), wakeNote: $("wake-note"), drivingMode: $("driving-mode"), fontSize: $("font-size"),
 };
 
 let config = memory.getConfig();
@@ -67,6 +73,9 @@ let pendingConfirm = null;
 let rateUntil = 0;              // fin de la pausa por límite de consultas
 let lastModelShort = "";
 let lockEpoch = 0;              // cambia al bloquear: lo que termine después se descarta
+let currentJob = null;          // promesa de la respuesta en curso (la usa el modo «Hey Antares»)
+let tutorMode = false;          // modo tutor de robótica en el chat (solo esta sesión)
+let wake = null;                // escucha continua «Hey Antares»
 
 // ---------- Cliente Gemini ----------
 function makeClient(apiKey = config.geminiApiKey) {
@@ -126,12 +135,13 @@ function updateMic() {
   els.micHint.textContent = voice.canListen ? hints[estado] : (estado === "sinkey" ? hints.sinkey : "Use el micrófono del teclado");
   els.mic.disabled = estado === "sinkey" || estado === "hablando";
   els.mic.setAttribute("aria-label", estado === "escuchando" ? "Terminar de hablar" : "Hablar");
+  if (voice.speaking && (estado === "reposo" || estado === "error")) { els.micHint.textContent = "Toque para callar"; els.mic.setAttribute("aria-label", "Callar la lectura"); }
 }
 
 function updateComposer() {
   const noKey = estado === "sinkey";
   els.input.disabled = noKey;
-  els.input.placeholder = noKey ? "Primero configure su API key" : `Escríbale a ${assistantName()}…`;
+  els.input.placeholder = noKey ? "Primero configure su API key" : tutorMode ? "Pregúntele al tutor de robótica…" : `Escríbale a ${assistantName()}…`;
   els.send.disabled = noKey || busy;
   els.attachBtn.disabled = noKey;
   els.send.setAttribute("aria-label", busy ? "Enviar (espere a que termine la respuesta)" : "Enviar");
@@ -543,7 +553,7 @@ async function runJob(job) {
     if (abortCtrl.signal.aborted) { showNote("Respuesta detenida."); setEstado(baseEstado()); return; }
     const search = !media && !!config.webSearch && needsSearch(job.prompt);
     const r = await client.ask(job.prompt, job.history, job.facts, {
-      search, media, signal: abortCtrl.signal,
+      search, media, signal: abortCtrl.signal, extraSystem: job.extraSystem || "",
       onChunk: (partial) => {
         if (!stream) stream = createStreamingBubble();
         const near = isNearBottom();
@@ -559,7 +569,7 @@ async function runJob(job) {
       if (job.kind === "mail") addMailActions(botWrap, r.text);
       announce(`${assistantName()}: ${r.text}`);
       handleSave(memory.addMessage("assistant", r.text), "la respuesta");
-      if (config.speakReplies && !r.stopped) voice.speak(r.text);
+      if ((wantsVoice() || job.speak) && !r.stopped) voice.speak(r.text);
       if (job.kind !== "mail" && job.text && looksLikeImportantFact(job.text)) {
         if (config.autoLearn) autoLearn(job.text, r.text); // en segundo plano, no bloquea
         else { pendingConfirm = job.text; renderConfirm(job.text); }
@@ -585,6 +595,7 @@ async function runJob(job) {
     busy = false;
     abortCtrl = null;
     updateComposer();
+    setTimeout(maybeResumeWake, 50);
   }
 }
 
@@ -763,20 +774,47 @@ async function handleLocal(kind, text) {
   return false;
 }
 
-function sendMessage(text, items = []) {
+const wantsVoice = () => !!(config.speakReplies || config.drivingMode);
+// Lee en voz alta la última respuesta local (recordatorios, rutas…) cuando corresponde
+function speakLastBot() {
+  const b = [...els.messages.querySelectorAll(".msg.bot .bubble")].pop();
+  if (b && b.textContent.trim()) voice.speak(b.textContent.trim());
+}
+
+function sendMessage(text, items = [], opts = {}) {
   text = (text || "").trim();
   if (busy || (!text && !items.length)) return false;
   if (!client.isConfigured()) { setEstado("sinkey"); return false; }
+  const speak = !!opts.speak;
+  // modo tutor de robótica: activar / salir por chat
+  if (!items.length && (tutorMode ? Robotics.looksLikeTutorOff(text) : Robotics.looksLikeTutorOn(text))) {
+    setVista("chat");
+    renderUser(text);
+    handleSave(memory.addMessage("user", text), "el mensaje");
+    setTutor(!tutorMode, { note: false });
+    const reply = tutorMode
+      ? "Modo tutor de robótica activado. Pregúnteme lo que quiera sobre Arduino, ESP32, sensores, motores o ROS 2. Para volver al asistente normal diga «salir del modo tutor»."
+      : "Salí del modo tutor de robótica. Sigo a sus órdenes como siempre.";
+    renderBot(reply); handleSave(memory.addMessage("assistant", reply), "la respuesta");
+    if (speak || wantsVoice()) speakLastBot();
+    currentJob = Promise.resolve();
+    return true;
+  }
   const intent = items.length ? null : localIntent(text);
   if (intent === "mail") {
     const history = memory.getHistory(10).map(({ role, content }) => ({ role, content }));
     setVista("chat");
     renderUser(text);
     handleSave(memory.addMessage("user", text), "el mensaje");
-    runJob({ text, items: [], prompt: Mail.mailPrompt(text, Mail.detectTemplate(text)), history, facts: memory.getFacts(), kind: "mail" });
+    currentJob = runJob({ text, items: [], prompt: Mail.mailPrompt(text, Mail.detectTemplate(text)), history, facts: memory.getFacts(), kind: "mail", speak });
     return true;
   }
-  if (intent) { handleLocal(intent, text).catch((e) => { console.warn("Antares local:", e); showNote("No pude completar eso. Intente de nuevo.", { warn: true }); }); return true; }
+  if (intent) {
+    currentJob = handleLocal(intent, text)
+      .then(() => { if (speak || wantsVoice()) speakLastBot(); })
+      .catch((e) => { console.warn("Antares local:", e); showNote("No pude completar eso. Intente de nuevo.", { warn: true }); });
+    return true;
+  }
   const label = items.map((i) => (i.kind === "video" ? "[video]" : i.kind === "pdf" ? "[pdf]" : "[foto]")).join(" ");
   const prompt = text || (items.some((i) => i.kind === "pdf") ? DEFAULT_PDF_PROMPT : DEFAULT_MEDIA_PROMPT);
   // al modelo solo le mandamos el texto del historial (las miniaturas no)
@@ -786,7 +824,7 @@ function sendMessage(text, items = []) {
   renderUser(text, items.map((i) => ({ kind: i.kind, url: i.url, thumb: i.thumb, name: i.name })));
   const thumbsToKeep = items.map((i) => ({ kind: i.kind, thumb: i.thumb && i.thumb.length < 16000 ? i.thumb : "", ...(i.kind === "pdf" ? { name: String(i.name || "").slice(0, 80) } : {}) }));
   handleSave(memory.addMessage("user", [label, prompt].filter(Boolean).join(" "), items.length ? { media: thumbsToKeep } : null), "el mensaje");
-  runJob({ text, items, prompt, history, facts });
+  currentJob = runJob({ text, items, prompt, history, facts, speak, extraSystem: tutorMode ? Robotics.TUTOR_SYSTEM : "" });
   return true;
 }
 
@@ -826,13 +864,15 @@ els.stop.addEventListener("click", stopResponse);
 els.mic.addEventListener("click", () => {
   voice.unlock();
   if (estado === "hablando") { stopResponse(); return; }
+  if (voice.speaking) { voice.stop(); return; } // callar la lectura en voz alta
   if (!voice.canListen) { showNote("Este navegador no permite dictado por voz. Use el micrófono del teclado.", { warn: true }); setVista("chat"); return; }
   if (busy) return;
+  if (wake && wake.enabled && !voice.listening) wake.pause("dictado");
   voice.listen({
     lang: config.speechLang || "es-CR",
     onState: (on) => {
       if (on) { els.interimText.textContent = ""; setEstado("escuchando"); }
-      else if (estado === "escuchando") setEstado(baseEstado());
+      else { if (estado === "escuchando") setEstado(baseEstado()); setTimeout(maybeResumeWake, 300); }
     },
     onInterim: (t) => { els.interimText.textContent = t ? `“${t}` : ""; },
     onFinal: (t) => { els.interimText.textContent = ""; sendMessage(t); },
@@ -963,7 +1003,37 @@ initPanels(els.panelRoot, (what) => { if (what === "reminders" || what === "noti
     const r = await client.ask(prompt, [], memory.getFacts(), { signal, onChunk });
     return epoch === lockEpoch ? r : { ok: false, stopped: true };
   },
+}, {
+  hasKey: () => !!(client && client.isConfigured()),
+  // trivia: preguntas en JSON y su verificación; se descarta si se bloquea a mitad
+  askJson: async (system, content, { signal } = {}) => {
+    const epoch = lockEpoch;
+    const r = await client.askJson(system, content, { signal });
+    return epoch === lockEpoch ? r : { ok: false, stopped: true };
+  },
+  askTutor: (q) => {
+    if (!client.isConfigured()) { hidePanelNow(); setEstado("sinkey"); return; }
+    setTutor(true, { note: false });
+    hidePanelNow();
+    if (busy) { chatNotice("Espere a que termine la respuesta en curso."); return; }
+    sendMessage(q);
+  },
+  setTutor: (on) => { setTutor(on); hidePanelNow(); },
 });
+function hidePanelNow() { if (panelPushed) { panelPushed = false; history.back(); } else hidePanel(); setVista("chat"); }
+
+// ---------- Modo tutor de robótica ----------
+function setTutor(on, { note = true } = {}) {
+  tutorMode = !!on;
+  els.tutorChip.hidden = !tutorMode;
+  body.classList.toggle("tutor", tutorMode);
+  updateComposer();
+  if (note) {
+    setVista("chat");
+    showNote(tutorMode ? "Modo tutor de robótica activado: sus preguntas van al tutor. Toque «Salir» para volver al asistente normal." : "Salió del modo tutor de robótica.");
+  }
+}
+els.tutorExit.addEventListener("click", () => setTutor(false));
 
 // Botones pequeños bajo una respuesta (copiar, abrir panel…)
 function addActions(wrap, actions) {
@@ -1084,6 +1154,141 @@ function maybeOfferBirthday() {
 }
 
 
+// ---------- Modos: «Hey Antares», conducción y tamaño de letra ----------
+function applyModes() {
+  body.classList.toggle("driving", !!config.drivingMode);
+  els.driveBtn.setAttribute("aria-pressed", String(!!config.drivingMode));
+  els.driveLabel.textContent = config.drivingMode ? "Conducción: sí" : "Conducción";
+  document.documentElement.dataset.fs = String(config.fontSize || 1);
+  paintWake();
+}
+function saveModes() {
+  const r = memory.saveConfig(config);
+  if (r && r.ok === false) storageFullNote("No pude guardar el cambio");
+}
+els.driveBtn.addEventListener("click", () => {
+  voice.unlock();
+  config.drivingMode = !config.drivingMode;
+  saveModes(); applyModes();
+  const msg = config.drivingMode
+    ? "Modo conducción activado: botones grandes y respuestas en voz alta." + (voice.canListen && !config.wakeWord ? " Si quiere usarme sin tocar, active «Hey Antares»." : "")
+    : "Modo conducción desactivado.";
+  announce(msg);
+  chatNotice(config.drivingMode ? "Modo conducción activado" : "Modo conducción desactivado");
+  if (config.drivingMode) voice.speak(config.wakeWord ? "Modo conducción activado. Diga «Antares» y su pregunta." : "Modo conducción activado.");
+});
+
+function wakeNoteText() {
+  if (!voice.canListen) return "Este navegador no permite la escucha por voz. «Hey Antares» funciona con la app abierta en Chrome para Android (también en Chrome de computadora).";
+  if (isIOS()) return "En iPhone funciona solo con Antares abierto y la pantalla encendida, y Safari puede cortar la escucha; para manos libres es mejor Chrome en Android. Se pausa al bloquear, al cambiar de app o mientras Antares habla.";
+  return "Solo funciona con Antares abierto y en pantalla: se pausa al bloquear, al cambiar de app o mientras Antares habla. Funciona mejor en Chrome para Android.";
+}
+const WAKE_TEXT = { off: "Hey Antares", listening: "Escuchando «Antares»", command: "Le escucho…", paused: "Hey Antares · en pausa", idle: "En pausa: toque para seguir", error: "Hey Antares" };
+function paintWake() {
+  const st = config.wakeWord ? (wake ? wake.state : "paused") : "off";
+  const shown = st === "off" && config.wakeWord ? "paused" : st;
+  els.wakeBtn.dataset.state = shown;
+  els.wakeBtn.setAttribute("aria-pressed", String(!!config.wakeWord));
+  els.wakeLabel.textContent = WAKE_TEXT[shown] || WAKE_TEXT.off;
+  body.dataset.wake = shown;
+}
+let audioCtx = null;
+function chime() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.frequency.value = 880; g.gain.value = 0.0001;
+    o.connect(g); g.connect(audioCtx.destination);
+    const t = audioCtx.currentTime;
+    g.gain.exponentialRampToValueAtTime(0.08, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+    o.start(t); o.stop(t + 0.2);
+  } catch { /* sin sonido */ }
+}
+function wakeAllowed() {
+  return !!config.wakeWord && voice.canListen && isUnlocked() && !lockShowing() && document.visibilityState === "visible";
+}
+// Arranca, pausa o reanuda la escucha según el estado de la app
+function syncWake() {
+  if (!wakeAllowed()) { if (wake && wake.enabled && !config.wakeWord) wake.stop("off"); paintWake(); return; }
+  if (!wake || (!wake.enabled && wake.state !== "idle")) startWake();
+  else maybeResumeWake();
+  paintWake();
+}
+function startWake() {
+  if (wake) wake.stop("off");
+  wake = new WakeWord({
+    SR: voice.SR, lang: config.speechLang || "es-CR", name: assistantName(),
+    idleMs: (Number(config.wakeIdleMin) || 10) * 60 * 1000,
+    onState: (st, info) => {
+      if (st !== "command" && estado === "escuchando" && !voice.listening) { els.interimText.textContent = ""; setEstado(baseEstado()); }
+      if (st === "idle") { chatNotice("«Hey Antares» en pausa"); showNote(`«Hey Antares» en pausa: no me llamó en ${Number(config.wakeIdleMin) || 10} minutos y dejé de escuchar para ahorrar batería. Toque el botón para seguir.`); }
+      paintWake();
+    },
+    onWake: () => {
+      chime();
+      if (panelOpen) hidePanelNow();
+      els.interimText.textContent = "Le escucho…";
+      if (estado !== "hablando") setEstado("escuchando");
+    },
+    onInterim: (t) => { if (estado === "escuchando" && !voice.listening) els.interimText.textContent = t ? `“${t}` : "Le escucho…"; },
+    onCommand: handleWakeCommand,
+    onError: (code) => {
+      config.wakeWord = false; saveModes(); paintWake();
+      setVista("chat");
+      showNote(code === "unsupported" ? wakeNoteText() : (speechErrorMessage(code) || "No pude activar la escucha.") + " Desactivé «Hey Antares».", { warn: true });
+    },
+  });
+  wake.start();
+  if (busy || voice.speaking || voice.listening || !els.settingsView.hidden) wake.pause("ocupado");
+}
+function maybeResumeWake() {
+  if (!wake || !wake.enabled || !wake.paused) return;
+  if (busy || voice.speaking || voice.listening || !wakeAllowed() || !els.settingsView.hidden) return;
+  wake.resume();
+  paintWake();
+}
+function handleWakeCommand(text) {
+  els.interimText.textContent = "";
+  if (estado === "escuchando" && !voice.listening) setEstado(baseEstado());
+  const t = text.trim();
+  if (/^(?:silencio|c[aá]llese|c[aá]llate|basta|pare|det[eé]ngase|detente)\b/i.test(t)) { stopResponse(); return; }
+  if (/\b(?:deje de escuchar|desactive (?:el )?modo hey|apague (?:el )?(?:micr[oó]fono|modo hey))\b/i.test(t)) {
+    config.wakeWord = false; saveModes(); if (wake) wake.stop("off"); paintWake();
+    showNote("Desactivé «Hey Antares». Puede volver a activarlo con el botón."); voice.speak("Listo, dejé de escuchar.");
+    return;
+  }
+  if (busy) { chatNotice("Espere a que termine la respuesta en curso."); return; }
+  if (panelOpen) hidePanelNow();
+  if (!els.settingsView.hidden) return;
+  if (wake) wake.pause("respondiendo");
+  if (!sendMessage(t, [], { speak: true })) { setVista("chat"); if (!client.isConfigured()) voice.speak("Primero configure su API key."); setTimeout(maybeResumeWake, 600); return; }
+  Promise.resolve(currentJob).finally(() => setTimeout(maybeResumeWake, 300));
+}
+voice.onSpeaking = (on) => {
+  updateMic();
+  if (on) { if (wake && wake.enabled) wake.pause("hablando"); }
+  else setTimeout(maybeResumeWake, 500); // pequeña espera para no oír el final de su propia voz
+};
+els.wakeBtn.addEventListener("click", () => {
+  voice.unlock();
+  try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume && audioCtx.resume(); } catch { /* */ }
+  if (config.wakeWord && wake && wake.state === "idle") { startWake(); paintWake(); chatNotice("Sigo escuchando"); return; }
+  if (!config.wakeWord && !voice.canListen) { setVista("chat"); showNote(wakeNoteText(), { warn: true }); return; }
+  config.wakeWord = !config.wakeWord;
+  saveModes();
+  if (config.wakeWord) {
+    syncWake();
+    const msg = "«Hey Antares» activado: diga «Antares» y su pregunta. Solo escucho con la app abierta.";
+    chatNotice("«Hey Antares» activado");
+    announce(msg);
+    if (isIOS()) { setVista("chat"); showNote(wakeNoteText(), { warn: true }); }
+  } else {
+    if (wake) wake.stop("off");
+    paintWake();
+    chatNotice("«Hey Antares» desactivado.");
+  }
+});
+
 // ---------- Configuración ----------
 let snapshot = null;
 let settingsOpener = null;
@@ -1099,6 +1304,10 @@ function formValues() {
     speechLang: els.speechLang.value,
     webSearch: els.webSearch.checked,
     autoLearn: els.autoLearn.checked,
+    wakeWord: els.wakeWord.checked,
+    wakeIdleMin: Number(els.wakeIdle.value) || 10,
+    drivingMode: els.drivingMode.checked,
+    fontSize: Number(els.fontSize.value) || 1,
     ...(Lock.hasPin() ? { lockOnHide: els.lockOnHide.checked, idleMin: Number(els.idleLock.value) } : {}),
   };
 }
@@ -1132,6 +1341,12 @@ function fillSettings() {
   els.speechLang.value = config.speechLang || "es-CR";
   els.webSearch.checked = !!config.webSearch;
   els.autoLearn.checked = !!config.autoLearn;
+  els.wakeWord.checked = !!config.wakeWord && voice.canListen;
+  els.wakeWord.disabled = !voice.canListen;
+  els.wakeIdle.value = String(config.wakeIdleMin || 10);
+  els.wakeNote.textContent = wakeNoteText();
+  els.drivingMode.checked = !!config.drivingMode;
+  els.fontSize.value = String(config.fontSize || 1);
   fillSecurity();
   els.voiceUnsupported.hidden = voice.canListen;
   if (config.geminiApiKey) setConnStatus("ok", "Key guardada en este dispositivo. Toque «Probar conexión» para verificarla.");
@@ -1146,6 +1361,7 @@ function fillSettings() {
 function openSettings({ focusKey = false, scrollTo = "" } = {}) {
   settingsOpener = document.activeElement;
   fillSettings();
+  if (wake && wake.enabled) wake.pause("ajustes");
   els.chatView.hidden = true;
   els.settingsView.hidden = false;
   if (!historyPushed) { history.pushState({ antares: "settings" }, ""); historyPushed = true; }
@@ -1166,6 +1382,7 @@ function hideSettings() {
   setEstado(busy ? "hablando" : (estado === "error" ? "error" : baseEstado()));
   if (settingsOpener && settingsOpener.isConnected && !settingsOpener.disabled) settingsOpener.focus();
   if (isUnlocked() && !lockShowing()) setTimeout(maybeOfferPin, 300);
+  setTimeout(syncWake, 100);
 }
 function closeSettings() {
   if (!confirmDiscard()) return;
@@ -1210,6 +1427,7 @@ function applyConfig() {
   els.title.textContent = assistantName().toUpperCase();
   document.title = assistantName();
   renderGreeting();
+  applyModes();
 }
 
 els.save.addEventListener("click", async () => {
@@ -1218,6 +1436,7 @@ els.save.addEventListener("click", async () => {
   const r = memory.saveConfig(next);
   const ok = r.ok && (await flushWrites()).ok && (!Lock.hasPin() || await Lock.savePrefs({ lockOnHide, idleMin }));
   if (!ok) { setSettingsStatus("No se pudo guardar: el almacenamiento está lleno o el navegador está en modo privado.", true); return; }
+  if (next.wakeWord && !config.wakeWord) voice.unlock();
   config = next;
   applyConfig();
   snapshot = formValues();
@@ -1504,6 +1723,9 @@ function lockApp(reason = "manual") {
   if (!Lock.hasPin() || !isUnlocked()) { if (Lock.hasPin() && !lockShowing()) showLock(afterUnlock); return; }
   lockEpoch++;
   stopResponse();
+  if (wake) wake.stop("lock");
+  paintWake();
+  setTutor(false, { note: false });
   if (estado === "escuchando") voice.stopListening();
   voice.stop();
   if (!els.modal.hidden) closeModal();
@@ -1552,6 +1774,7 @@ function afterUnlock() {
   syncReminders();
   reminderTick();
   openPanelFromUrl();
+  syncWake();
 }
 // Accesos directos del manifiesto: ?panel=recordatorios|compras|noticias (se usa una sola vez)
 function openPanelFromUrl() {
@@ -1597,8 +1820,9 @@ function onHidden() {
   if (Lock.prefs().lockOnHide) lockApp("salir");
 }
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden") onHidden();
+  if (document.visibilityState === "hidden") { if (wake && wake.enabled) wake.pause("oculta"); onHidden(); }
   else {
+    setTimeout(syncWake, 300);
     if (Lock.hasPin() && isUnlocked() && awayUntil && hiddenAt && Date.now() > awayUntil && Lock.prefs().lockOnHide) lockApp("salir");
     awayUntil = 0;
     checkIdle();
@@ -1653,6 +1877,7 @@ async function init() {
     syncReminders();
     reminderTick();
     openPanelFromUrl();
+    syncWake();
   }
   requestPersistence();
 }

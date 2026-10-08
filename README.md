@@ -103,6 +103,55 @@ Actualizar.
 - Funciona sin conexión para abrir la app (service worker "primero red" con espera de 3 s y
   respaldo en caché).
 
+## Novedades de la 1.8.0 (manos libres, juegos y robótica)
+
+### Modo «Hey Antares» (opcional, apagado por defecto)
+- Se activa con el botón **Hey Antares** bajo el HUD o en Configuración › Manos libres y comodidad.
+- Con la app abierta y en pantalla escucha de forma continua (Web Speech API) la palabra de activación:
+  «Antares», «Hey Antares» u «Oye Antares». Puede decir todo junto («Oye Antares, ¿cómo está el día?») o
+  primero «Antares», esperar el tono y luego el comando (8 s). La respuesta se lee en voz alta.
+- Indicador claro: punto verde pulsante «Escuchando «Antares»», «Le escucho…» al activarse, ámbar «en pausa».
+- Para no gastar batería ni oírse a sí mismo: se pausa al bloquear, al cambiar de app o apagar la pantalla,
+  mientras Antares habla, con el dictado manual y con Configuración abierta; si el reconocimiento falla reintenta
+  con espera creciente (0,5 s → 30 s) y se detiene solo tras 5, 10, 30 o 60 minutos sin oír «Antares»
+  (un toque lo reanuda). «Antares, deje de escuchar» lo apaga. Para cortar la lectura en voz alta, toque el micrófono («Toque para callar»).
+- La palabra solo cuenta al inicio de lo que dice o tras «hey/oye» (no se activa con «la estrella Antares…»).
+- **Límites honestos:** no hay escucha con la app cerrada o en segundo plano (ningún navegador lo permite a
+  una web). Funciona mejor en **Chrome para Android**; en Android, Chrome puede sonar un tono cada vez que
+  reinicia el micrófono. En iPhone/Safari la escucha continua es inestable y puede cortarse; Firefox no tiene
+  Web Speech. Si el navegador no lo admite, el botón lo explica en vez de activarse.
+
+### Juegos (panel Ocio)
+- **Damas chinas** contra Antares en el tablero de estrella de 121 casillas, 2 jugadores en puntas opuestas
+  (usted en cian, abajo; Antares en ámbar, arriba). Pasos a casillas vecinas y saltos encadenados sobre cualquier
+  ficha; una ficha que entró a su meta no sale; gana quien llene primero la punta contraria (con la regla
+  antibloqueo: meta llena con al menos una ficha suya). Resalta las jugadas legales y la última jugada de Antares,
+  **Deshacer**, **Nueva partida**, marcador, y la partida se guarda sola (cifrada si hay código).
+  Dificultad **Fácil** (avance codicioso con algo de azar) y **Normal** (busca la mejor respuesta del rival, 2 jugadas).
+  En 40 partidas de prueba, Normal le ganó todas a Fácil; cada jugada tarda menos de 25 ms.
+- **Trivia de historia y misterios** (Historia de Costa Rica, Esferas del Diquís, Misterios del mundo o Mezcla):
+  Gemini genera 5 preguntas de opción múltiple en JSON con la orden de usar solo hechos bien establecidos, y una
+  **segunda consulta independiente las verifica**; solo se muestran las que pasan (se avisa cuántas se descartaron),
+  y también se descartan las que traen opciones casi iguales. Cada respuesta muestra la explicación y el tipo de
+  fuente. Puntaje, racha y mejor racha guardados (cifrados si hay código); evita repetir preguntas recientes.
+  **Límite:** son preguntas generadas por IA; la verificación reduce errores pero no los elimina. Cada tanda tarda
+  unos 30 s (dos consultas).
+- Las damas comunes quedaron fuera de esta versión para priorizar la calidad de las damas chinas.
+
+### Modo Robótica
+- Panel **Robótica**: ruta de aprendizaje en 5 niveles (fundamentos y Arduino; sensores y motores; primer robot
+  móvil; ESP32, IoT y visión; ROS 2 y robots autónomos) con 27 pasos que se marcan (avance cifrado), ideas de
+  proyectos por nivel y notas de seguridad. Sin compras ni enlaces a tiendas.
+- **Tutor de robótica**: «Preguntar al tutor» desde el panel, «Activar modo tutor en el chat», o por chat
+  «Active el modo tutor de robótica» / «Salir del modo tutor». Mientras está activo, un aviso verde lo indica y
+  Gemini responde como tutor (paso a paso, código corto, conexiones pin a pin, advertencias de 3,3 V y baterías,
+  sin recomendar compras).
+
+### Comodidad
+- **Modo conducción** (botón bajo el HUD o en Configuración): botones grandes, micrófono de 116 px, letra grande,
+  sin accesos ni adjuntos, y todas las respuestas (también las locales) en voz alta. Combínelo con «Hey Antares».
+- **Tamaño de letra**: Normal, Grande o Muy grande (conversación, campos, botones y paneles).
+
 ## Novedades de la 1.7.0 (herramientas de trabajo)
 
 El botón de cuadrícula abre **Paneles** con dos grupos: **Personal** (Recordatorios, Compras, Noticias)
@@ -218,11 +267,16 @@ js/reminders.js        Recordatorios (datos y lectura de frases en español)
 js/shopping.js         Lista de compras por tienda
 js/digest.js           Resumen del día: dólar (Hacienda) y noticias (RSS vía rss2json)
 js/notify.js           Notificaciones locales y agenda para el service worker
-js/panels.js           Paneles (grupos Personal y Trabajo)
+js/panels.js           Paneles (grupos Personal, Trabajo y Ocio)
 js/workpanels.js       Paneles de Rutas, Cúbica, Correo y Bitácora
 js/routes.js           Lugares (Open-Meteo, Nominatim) y rutas (OSRM, vecino más cercano + 2-opt)
 js/cubic.js            Camiones y cálculo de cúbica
 js/mail.js             Plantillas y formato del redactor de correos
 js/logbook.js          Bitácora de rutas y exportación CSV/TXT
+js/ocio.js             Paneles de Damas chinas, Trivia y Robótica
+js/chinese-checkers.js Motor de damas chinas (tablero, jugadas legales, victoria, IA)
+js/trivia.js           Trivia: preguntas de Gemini, verificación y puntaje
+js/robotics.js         Ruta de robótica, proyectos y modo tutor
+js/wake.js             Modo «Hey Antares» (escucha continua y palabra de activación)
 icons/                 Íconos 192/512, maskable, apple-touch-icon, favicon
 ```

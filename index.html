@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#03060b">
   <meta name="color-scheme" content="dark">
-  <meta name="description" content="Antares, su asistente personal con Gemini: recordatorios, compras, noticias de Costa Rica y herramientas de rutas de distribución.">
+  <meta name="description" content="Antares, su asistente personal con Gemini: manos libres «Hey Antares», recordatorios, compras, noticias de Costa Rica, herramientas de rutas, damas chinas, trivia y robótica.">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -31,7 +31,7 @@
       <button class="icon-btn" type="button" id="toggle-chat" aria-label="Ver conversación" aria-pressed="false">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v10H9.5L5 19.5v-4H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 9.5h8M8 12.5h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       </button>
-      <button class="icon-btn" type="button" id="open-panel" aria-label="Paneles: recordatorios, compras, noticias, rutas, cúbica, correo y bitácora">
+      <button class="icon-btn" type="button" id="open-panel" aria-label="Paneles: personal, trabajo, juegos y robótica">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
       </button>
       <button class="icon-btn" type="button" id="open-settings" aria-label="Configuración">
@@ -58,6 +58,17 @@
       </div>
     </section>
 
+    <!-- Modos: manos libres y conducción -->
+    <div class="mode-row" id="mode-row" role="group" aria-label="Modos">
+      <button type="button" class="mode-btn" id="wake-btn" aria-pressed="false" aria-describedby="wake-label">
+        <i class="wake-dot" aria-hidden="true"></i><span id="wake-label">Hey Antares</span>
+      </button>
+      <button type="button" class="mode-btn" id="drive-btn" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 16.5V12l2-5h10l2 5v4.5M5 16.5h14M5 16.5V19h2.5v-2.5M16.5 16.5V19H19v-2.5M5.5 12h13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="8" cy="14.2" r="1" fill="currentColor"/><circle cx="16" cy="14.2" r="1" fill="currentColor"/></svg>
+        <span id="drive-label">Conducción</span>
+      </button>
+    </div>
+
     <nav class="quickbar home-only only reposo flex" id="quickbar" aria-label="Accesos">
       <div class="qrow">
         <button type="button" data-panel="noticias">Resumen del día</button>
@@ -69,6 +80,11 @@
         <button type="button" data-panel="cubica">Cúbica</button>
         <button type="button" data-panel="correo">Correo</button>
         <button type="button" data-panel="bitacora">Bitácora</button>
+      </div>
+      <div class="qrow ocio" aria-label="Ocio">
+        <button type="button" data-panel="damas">Damas chinas</button>
+        <button type="button" data-panel="trivia">Trivia</button>
+        <button type="button" data-panel="robotica">Robótica</button>
       </div>
     </nav>
 
@@ -139,6 +155,10 @@
     <!-- Micrófono y entrada -->
     <footer class="dock">
       <div id="attachments" class="attachments" hidden></div>
+      <div class="tutor-chip" id="tutor-chip" role="status" hidden>
+        <span><b>Tutor de robótica</b> activo: sus preguntas van al tutor.</span>
+        <button type="button" class="mini-btn" id="tutor-exit">Salir</button>
+      </div>
       <button class="stop-pill only hablando flex" type="button" id="stop-btn" aria-label="Detener la respuesta">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>Detener respuesta
       </button>
@@ -294,6 +314,33 @@
         </select>
         <p class="hint">En iPhone, el dictado necesita Siri y Dictado activados en Ajustes (General › Teclado › Activar dictado). Si un idioma no está disponible, probaré con el siguiente.</p>
         <p class="hint" id="voice-unsupported" hidden>Este navegador no permite dictado por voz; puede usar el micrófono del teclado.</p>
+      </section>
+
+      <!-- Manos libres y comodidad -->
+      <section class="panel" id="manos-libres" aria-labelledby="h-com">
+        <h2 id="h-com">MANOS LIBRES Y COMODIDAD</h2>
+        <label class="switch-row">
+          <span class="txt">Modo «Hey Antares»<small>Con la app abierta, escucha «Antares», «Hey Antares» u «Oye Antares» y responde en voz alta</small></span>
+          <input class="switch" type="checkbox" role="switch" id="wake-word">
+        </label>
+        <label class="field-label" for="wake-idle">Dejar de escuchar si no lo llamo en</label>
+        <select id="wake-idle" class="field">
+          <option value="5">5 minutos</option>
+          <option value="10">10 minutos</option>
+          <option value="30">30 minutos</option>
+          <option value="60">1 hora</option>
+        </select>
+        <p class="hint" id="wake-note">Solo funciona con Antares abierto y en pantalla: se pausa al bloquear, al cambiar de app o mientras Antares habla. Funciona mejor en Chrome para Android.</p>
+        <label class="switch-row sep">
+          <span class="txt">Modo conducción<small>Botones grandes, respuestas en voz alta y pantalla mínima</small></span>
+          <input class="switch" type="checkbox" role="switch" id="driving-mode">
+        </label>
+        <label class="field-label" for="font-size">Tamaño de letra</label>
+        <select id="font-size" class="field">
+          <option value="1">Normal</option>
+          <option value="2">Grande</option>
+          <option value="3">Muy grande</option>
+        </select>
       </section>
 
       <!-- Búsqueda -->

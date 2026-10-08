@@ -1,9 +1,10 @@
-// Paneles de Recordatorios, Lista de compras y Noticias del día.
+// Paneles: Personal (Recordatorios, Compras, Noticias), Trabajo (Rutas, Cúbica, Correo, Bitácora) y Ocio (Damas chinas, Trivia, Robótica).
 import * as R from "./reminders.js";
 import * as S from "./shopping.js";
 import * as D from "./digest.js";
 import * as Notify from "./notify.js";
 import * as W from "./workpanels.js";
+import * as O from "./ocio.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -17,23 +18,26 @@ const timeVal = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 const GROUPS = {
   personal: [["recordatorios", "Recordatorios"], ["compras", "Compras"], ["noticias", "Noticias"]],
   trabajo: [["rutas", "Rutas"], ["cubica", "Cúbica"], ["correo", "Correo"], ["bitacora", "Bitácora"]],
+  ocio: [["damas", "Damas chinas"], ["trivia", "Trivia"], ["robotica", "Robótica"]],
 };
-const ALL_TABS = [...GROUPS.personal, ...GROUPS.trabajo].map(([id]) => id);
-const groupOf = (t) => (GROUPS.trabajo.some(([id]) => id === t) ? "trabajo" : "personal");
-const lastInGroup = { personal: "recordatorios", trabajo: "rutas" };
+const GROUP_LABEL = { personal: "Personal", trabajo: "Trabajo", ocio: "Ocio" };
+const ALL_TABS = Object.values(GROUPS).flat().map(([id]) => id);
+const groupOf = (t) => Object.keys(GROUPS).find((g) => GROUPS[g].some(([id]) => id === t)) || "personal";
+const lastInGroup = { personal: "recordatorios", trabajo: "rutas", ocio: "damas" };
 
-export function initPanels(el, changeCb, workDeps = {}) {
+export function initPanels(el, changeCb, workDeps = {}, ocioDeps = {}) {
   root = el; onChange = changeCb || (() => {});
   W.initWork({ ...workDeps, onChange: (w) => onChange(w) }, () => render());
+  O.initOcio({ ...ocioDeps, onChange: (w) => onChange(w) }, () => { if (root && root.isConnected && root.dataset.tab && groupOf(root.dataset.tab) === "ocio" && root.childElementCount) render(); });
 }
-export function resetPanels() { W.resetWork(); editingId = null; }
+export function resetPanels() { W.resetWork(); O.resetOcio(); editingId = null; }
 
 export function currentTab() { return tab; }
 
 export function openPanel(name) {
   if (ALL_TABS.includes(name)) tab = name;
   editingId = null;
-  W.clearStatus();
+  W.clearStatus(); O.clearStatus();
   render();
 }
 
@@ -47,17 +51,17 @@ export function render() {
   const focusId = document.activeElement && root.contains(document.activeElement) ? document.activeElement.id : "";
   root.innerHTML = `
     <div class="panel-groups" role="group" aria-label="Tipo de panel">
-      <button type="button" class="seg${group === "personal" ? " on" : ""}" data-group="personal" aria-pressed="${group === "personal"}">Personal</button>
-      <button type="button" class="seg${group === "trabajo" ? " on" : ""}" data-group="trabajo" aria-pressed="${group === "trabajo"}">Trabajo</button>
+      ${Object.keys(GROUPS).map((g) => `<button type="button" class="seg${group === g ? " on" : ""}" data-group="${g}" aria-pressed="${group === g}">${GROUP_LABEL[g]}</button>`).join("")}
     </div>
-    <div class="panel-tabs${group === "trabajo" ? " four" : ""}" role="tablist" aria-label="Paneles">
+    <div class="panel-tabs${group === "trabajo" ? " four" : ""}${group === "ocio" ? " ocio" : ""}" role="tablist" aria-label="Paneles">
       ${GROUPS[group].map(([id, label]) => tabBtn(id, label)).join("")}
     </div>
     <div class="panel-body" id="panel-body" role="tabpanel" aria-label="${(GROUPS[group].find(([id]) => id === tab) || [, ""])[1]}">${body()}</div>`;
   root.dataset.tab = tab;
-  root.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => { tab = b.dataset.tab; editingId = null; W.clearStatus(); render(); }));
-  root.querySelectorAll("[data-group]").forEach((b) => b.addEventListener("click", () => { tab = lastInGroup[b.dataset.group]; editingId = null; W.clearStatus(); render(); }));
-  if (groupOf(tab) === "trabajo") W.bind(tab, root.querySelector("#panel-body"));
+  root.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => { tab = b.dataset.tab; editingId = null; W.clearStatus(); O.clearStatus(); render(); }));
+  root.querySelectorAll("[data-group]").forEach((b) => b.addEventListener("click", () => { tab = lastInGroup[b.dataset.group]; editingId = null; W.clearStatus(); O.clearStatus(); render(); }));
+  if (group === "trabajo") W.bind(tab, root.querySelector("#panel-body"));
+  else if (group === "ocio") O.bind(tab, root.querySelector("#panel-body"));
   else bind();
   scroller.scrollTop = keep;
   if (focusId) { const el = document.getElementById(focusId); if (el && root.contains(el)) el.focus({ preventScroll: true }); }
@@ -68,6 +72,7 @@ function tabBtn(id, label) {
 }
 function body() {
   if (groupOf(tab) === "trabajo") return W.html(tab);
+  if (groupOf(tab) === "ocio") return O.html(tab);
   if (tab === "compras") return shoppingHtml();
   if (tab === "noticias") return newsHtml();
   return remindersHtml();
