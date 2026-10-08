@@ -1,10 +1,14 @@
 // Antares Web - Memoria local (solo en este navegador): historial, datos guardados y configuración.
-// Texto y configuración en localStorage (~5 MB); las miniaturas de fotos/videos en IndexedDB.
-const K_HISTORY = "antares.history.v1";
-const K_FACTS = "antares.facts.v1";
-const K_CONFIG = "antares.config.v1";
+// Sin código de seguridad: texto y configuración en localStorage (~5 MB), miniaturas en IndexedDB.
+// Con código: todo cifrado con AES-GCM en IndexedDB; lo descifrado vive solo en memoria mientras está desbloqueado.
+import { tx, idbGet, idbEntries, seal, unseal, isSealed } from "./vault.js";
+
+export const K_HISTORY = "antares.history.v1";
+export const K_FACTS = "antares.facts.v1";
+export const K_CONFIG = "antares.config.v1";
 const MAX_HISTORY = 300;
 const MAX_THUMBS = 60;               // miniaturas que se conservan (las más recientes)
+export const DATA_KEYS = [K_CONFIG, K_HISTORY, K_FACTS];
 export const LS_LIMIT = 5 * 1024 * 1024;
 const CONFIG_REV = 4;
 
@@ -24,7 +28,46 @@ export const DEFAULT_CONFIG = {
 
 const isQuota = (e) => e && (e.name === "QuotaExceededError" || e.code === 22 || e.code === 1014 || /quota/i.test(e.message || ""));
 
+// ---------- Modo cifrado ----------
+let vaultMode = false;   // hay un código configurado (los datos viven cifrados en IndexedDB)
+let vault = null;        // {dek, data} mientras está desbloqueado
+let writeChain = Promise.resolve();
+let writeFailed = false;
+
+export function setVaultMode(on) { vaultMode = !!on; if (!on) vault = null; }
+export const isVaultMode = () => vaultMode;
+export const isUnlocked = () => !vaultMode || !!vault;
+export const currentDek = () => (vault ? vault.dek : null);
+
+// Descifra los registros con la clave de datos y los deja en memoria
+export async function openVault(dek) {
+  const data = {};
+  for (const k of DATA_KEYS) {
+    const rec = await idbGet("vault", k);
+    data[k] = rec ? JSON.parse(await unseal(dek, k, rec)) : null;
+  }
+  vaultMode = true;
+  vault = { dek, data };
+}
+// Bloquear: se descarta lo descifrado y la clave
+export function closeVault() { vault = null; }
+
+function queueSeal(key, json) {
+  const dek = vault.dek;
+  writeChain = writeChain
+    .then(async () => { const rec = await seal(dek, key, json); await tx("vault", "readwrite", (s) => { s.put(rec, key); }); })
+    .catch((e) => {
+      writeFailed = true;
+      console.warn("Antares: no se pudo guardar cifrado", key, e && e.name);
+      window.dispatchEvent(new CustomEvent("antares:save-error", { detail: { quota: isQuota(e) } }));
+    });
+}
+
 function load(key, fallback) {
+  if (vaultMode) {
+    const v = vault ? vault.data[key] : null;
+    return v == null ? fallback : JSON.parse(JSON.stringify(v));
+  }
   try {
     const raw = localStorage.getItem(key);
     return raw ? JSON.parse(raw) : fallback;
@@ -32,41 +75,45 @@ function load(key, fallback) {
 }
 // Devuelve {ok, quota}
 function rawSave(key, value) {
+  if (vaultMode) {
+    if (!vault) return { ok: false };
+    const json = JSON.stringify(value);
+    vault.data[key] = JSON.parse(json);
+    queueSeal(key, json);
+    return { ok: true };
+  }
   try { localStorage.setItem(key, JSON.stringify(value)); return { ok: true }; }
   catch (e) { console.warn("Antares: no se pudo guardar", key, e && e.name); return { ok: false, quota: isQuota(e) }; }
 }
+// Espera a que terminen las escrituras cifradas; {ok:false} si alguna falló desde la última vez
+export async function flushWrites() {
+  await writeChain;
+  const ok = !writeFailed;
+  writeFailed = false;
+  return { ok };
+}
 
-// ---------- Miniaturas en IndexedDB ----------
-let dbPromise = null;
-function db() {
-  if (!("indexedDB" in window)) return Promise.reject(new Error("sin IndexedDB"));
-  if (!dbPromise) {
-    dbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open("antares", 1);
-      req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains("thumbs")) req.result.createObjectStore("thumbs"); };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    }).catch((e) => { dbPromise = null; throw e; });
-  }
-  return dbPromise;
-}
-async function tx(mode, fn) {
-  const d = await db();
-  return new Promise((resolve, reject) => {
-    const t = d.transaction("thumbs", mode);
-    const store = t.objectStore("thumbs");
-    const out = fn(store);
-    t.oncomplete = () => resolve(out && "result" in out ? out.result : undefined);
-    t.onerror = () => reject(t.error);
-    t.onabort = () => reject(t.error);
-  });
-}
+// ---------- Miniaturas en IndexedDB (cifradas si hay código) ----------
 export const thumbs = {
-  async put(id, dataUrl) { try { await tx("readwrite", (s) => s.put(dataUrl, id)); return true; } catch { return false; } },
-  async get(id) { try { return await tx("readonly", (s) => s.get(id)); } catch { return ""; } },
-  async remove(ids) { if (!ids.length) return; try { await tx("readwrite", (s) => { for (const id of ids) s.delete(id); }); } catch { /* */ } },
-  async clear() { try { await tx("readwrite", (s) => s.clear()); } catch { /* */ } },
-  async count() { try { return await tx("readonly", (s) => s.count()); } catch { return 0; } },
+  async put(id, dataUrl) {
+    try {
+      let v = dataUrl;
+      if (vaultMode) { if (!vault) return false; v = await seal(vault.dek, "thumb:" + id, dataUrl); }
+      await tx("thumbs", "readwrite", (s) => { s.put(v, id); });
+      return true;
+    } catch { return false; }
+  },
+  async get(id) {
+    try {
+      const v = await idbGet("thumbs", id);
+      if (!isSealed(v)) return v || "";
+      return vault ? await unseal(vault.dek, "thumb:" + id, v) : "";
+    } catch { return ""; }
+  },
+  async remove(ids) { if (!ids.length) return; try { await tx("thumbs", "readwrite", (s) => { for (const id of ids) s.delete(id); }); } catch { /* */ } },
+  async clear() { try { await tx("thumbs", "readwrite", (s) => { s.clear(); }); } catch { /* */ } },
+  async count() { try { return await tx("thumbs", "readonly", (s) => s.count()); } catch { return 0; } },
+  entries() { return idbEntries("thumbs"); },
 };
 
 const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -105,6 +152,7 @@ function saveWithRoom(key, value) {
 export const memory = {
   // Migraciones (v1.3 guardaba las miniaturas dentro del historial en localStorage)
   async init() {
+    if (vaultMode) return; // con código: las migraciones se hicieron al crearlo
     const cfg = load(K_CONFIG, null);
     if (cfg && (cfg.configRev || 0) < CONFIG_REV) {
       cfg.speakReplies = false;      // leer en voz alta pasa a estar apagado por defecto
@@ -203,7 +251,11 @@ export const memory = {
         total = e.usage; quota = e.quota;
       }
     } catch { /* */ }
-    return { ls, lsLimit: LS_LIMIT, total, quota, thumbs: await thumbs.count() };
+    let vaultBytes = 0;
+    if (vaultMode) {
+      try { for (const [, v] of await idbEntries("vault")) if (isSealed(v)) vaultBytes += v.ct.byteLength; } catch { /* */ }
+    }
+    return { ls, lsLimit: LS_LIMIT, total, quota, thumbs: await thumbs.count(), vault: vaultMode, vaultBytes };
   },
 };
 

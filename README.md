@@ -6,8 +6,8 @@ formal (trato de usted), que funciona en Android (Chrome) y iPhone (Safari → C
 
 Archivos estáticos puros, sin build: se puede subir tal cual a GitHub Pages.
 
-Versión actual: **1.4.0** (interfaz estilo panel de control con reactor, HUD y correcciones de la
-revisión de código).
+Versión actual: **1.5.0** (código de seguridad opcional con datos cifrados, Face ID / huella).
+La 1.4.0 trajo la interfaz estilo panel de control con reactor y HUD.
 
 ## Probar en su computadora
 
@@ -26,9 +26,31 @@ Abra http://localhost:8000 (el service worker solo funciona en `https://` o `loc
    - iPhone/Safari: botón Compartir → "Agregar a inicio".
 
 Todas las rutas son relativas, así que funciona dentro de un subdirectorio.
-Al publicar una versión nueva, cambie `VERSION` en `sw.js` (por ejemplo `antares-v1.4.0`) y
+Al publicar una versión nueva, cambie `VERSION` en `sw.js` (por ejemplo `antares-v1.5.0`) y
 `APP_VERSION` en `js/app.js`. La app abierta mostrará "Nueva versión disponible" con el botón
 Actualizar.
+
+## Código de seguridad (opcional)
+
+- Se ofrece una vez al empezar y se puede crear, cambiar o quitar en Configuración › Seguridad.
+- Código de 6 dígitos. **El código no se guarda**: se deriva con PBKDF2-SHA-256 (sal aleatoria de
+  16 bytes, 600 000 iteraciones) a una clave que envuelve la clave de datos AES-GCM de 256 bits.
+  Con ella se cifran la API key, la configuración, la conversación, la memoria y las miniaturas
+  (IndexedDB, IV aleatorio por registro). Un código equivocado simplemente no logra descifrar.
+- Al crearlo, los datos que estaban en claro se cifran y se borran las copias de `localStorage`.
+- La app arranca bloqueada, se bloquea al salir de ella (si está activado) y tras la inactividad
+  elegida (1, 5, 15 o 60 minutos). Al bloquear se borran de la pantalla y de la memoria la
+  conversación y la key, y se cancela la respuesta en curso.
+- 5 intentos fallidos → espera de 30 s; luego 1 min, 5 min, 15 min y 1 h. La espera sobrevive a
+  recargar la página (es disuasiva: lo que protege de verdad es el cifrado).
+- Face ID / huella (passkey WebAuthn con verificación de usuario obligatoria): si el navegador
+  ofrece la extensión PRF, la passkey también descifra los datos. Si no, queda en **modo
+  comodidad**: solo desbloquea mientras la app sigue abierta y, al reabrirla, se pide el código.
+- "¿Olvidó su código?" borra, con doble confirmación, todos los datos de Antares en el
+  dispositivo (no hay forma de recuperarlos sin servidor). Después se vuelve a pegar la key.
+- Límites: un código de 6 dígitos se puede adivinar fuera de la app si alguien copia los datos
+  cifrados (PBKDF2 solo lo hace lento); no protege contra malware ni mientras la app está
+  desbloqueada. Limite su API key en Google AI Studio.
 
 ## Privacidad y almacenamiento
 
@@ -94,5 +116,8 @@ js/memory.js           Historial, datos y configuración (localStorage + Indexed
 js/facts.js            Detección de datos importantes
 js/voice.js            Voz (síntesis y reconocimiento)
 js/weather.js          Clima de Alajuela (Open-Meteo)
+js/vault.js            IndexedDB y cifrado (PBKDF2, AES-GCM, HKDF para la passkey)
+js/lock.js             Código, intentos, passkey, migración y borrado
+js/lockui.js           Pantalla de bloqueo y teclado
 icons/                 Íconos 192/512, maskable, apple-touch-icon, favicon
 ```

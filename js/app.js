@@ -1,12 +1,14 @@
 // Antares Web - lógica de la interfaz (estilo "Jarvis").
 import { GeminiClient, DEFAULT_ASSISTANT_NAME, needsSearch } from "./gemini.js";
-import { memory, thumbs, requestPersistence, LS_LIMIT } from "./memory.js";
+import { memory, thumbs, requestPersistence, LS_LIMIT, flushWrites, isVaultMode, isUnlocked } from "./memory.js";
+import * as Lock from "./lock.js";
+import { showLock, runPinFlow, isShowing as lockShowing } from "./lockui.js";
 import { looksLikeImportantFact, buildConfirmationQuestion } from "./facts.js";
 import { Voice } from "./voice.js";
 import { prepareFile, toGeminiMedia, formatBytes, MAX_ATTACHMENTS } from "./media.js";
 import { fetchWeather } from "./weather.js";
 
-const APP_VERSION = "1.4.0";
+const APP_VERSION = "1.5.0";
 const DEFAULT_MEDIA_PROMPT = "Describa lo que ve.";
 const $ = (id) => document.getElementById(id);
 const body = document.body;
@@ -35,6 +37,10 @@ const els = {
   unsaved: $("unsaved"), settingsStatus: $("settings-status"), save: $("save-settings"),
   modal: $("modal"), modalTitle: $("modal-title"), modalBody: $("modal-body"), modalCopy: $("modal-copy"), modalClose: $("modal-close"),
   toast: $("update-toast"), updateBtn: $("update-btn"), updateDismiss: $("update-dismiss"),
+  // seguridad
+  secStatus: $("sec-status"), secStatusText: $("sec-status-text"), secOffRow: $("sec-off-row"), secOn: $("sec-on"),
+  pinCreate: $("pin-create"), pinChange: $("pin-change"), lockNow: $("lock-now"), pinRemove: $("pin-remove"),
+  passkeySwitch: $("passkey-switch"), passkeyNote: $("passkey-note"), lockOnHide: $("lock-on-hide"), idleLock: $("idle-lock"),
 };
 
 let config = memory.getConfig();
@@ -48,6 +54,7 @@ let attachments = [];
 let pendingConfirm = null;
 let rateUntil = 0;              // fin de la pausa por límite de consultas
 let lastModelShort = "";
+let lockEpoch = 0;              // cambia al bloquear: lo que termine después se descarta
 
 // ---------- Cliente Gemini ----------
 function makeClient(apiKey = config.geminiApiKey) {
@@ -421,6 +428,8 @@ async function autoLearn(userText, assistantText) {
       const r = memory.saveFact(fact, { auto: true });
       if (r.id) saved.push({ fact, id: r.id }); else failed.push(fact);
     }
+    if (saved.length && !(await flushWrites()).ok) { failed.push(...saved.map((i) => i.fact)); saved.length = 0; }
+    if (!isUnlocked()) return; // se bloqueó mientras tanto
     if (saved.length) {
       showNote(saved.map((i) => i.fact).join(" · "), {
         bold: "Guardé:",
@@ -463,13 +472,14 @@ function renderConfirm(factText) {
   yes.type = "button"; yes.className = "btn primary"; yes.textContent = "Sí, guárdelo";
   const no = document.createElement("button");
   no.type = "button"; no.className = "btn"; no.textContent = "No";
-  const done = (accepted) => {
+  const done = async (accepted) => {
     card.remove();
     if (!pendingConfirm) return;
     const fact = pendingConfirm; pendingConfirm = null;
     if (!accepted) return;
     const r = memory.saveFact(fact);
-    if (r.id) showNote(fact, { bold: "Guardé:" }); else storageFullNote("No pude guardar el dato");
+    const ok = r.id && (await flushWrites()).ok;
+    if (ok) showNote(fact, { bold: "Guardé:" }); else storageFullNote("No pude guardar el dato");
   };
   yes.onclick = () => done(true);
   no.onclick = () => done(false);
@@ -489,6 +499,7 @@ function autosize() {
 async function runJob(job) {
   if (busy) return;
   busy = true;
+  const epoch = lockEpoch;
   abortCtrl = new AbortController();
   setVista("chat");
   setEstado("hablando");
@@ -504,6 +515,7 @@ async function runJob(job) {
         media = res.media;
         uploadMs = res.uploaded ? Math.round(performance.now() - tUp) : 0;
       } catch (e) {
+        if (epoch !== lockEpoch) return;
         console.warn("Antares media:", e);
         const what = job.items.length > 1 ? "los archivos" : (job.items[0].kind === "video" ? "el video" : "la foto");
         renderError({ kind: "media", title: "No pude enviar el archivo", text: `No pude subir ${what}. Revise su conexión e intente de nuevo, o pruebe con un video más corto.`, details: String(e.message || e) }, () => runJob(job));
@@ -523,6 +535,7 @@ async function runJob(job) {
       },
     });
     if (stream) stream.wrap.remove();
+    if (epoch !== lockEpoch) return; // se bloqueó mientras respondía: no se muestra ni se guarda nada
     if (r.ok) {
       lastModelShort = shortModel(r.model);
       renderBot(r.text, { sources: r.sources, meta: formatMeta(r, uploadMs) });
@@ -547,6 +560,7 @@ async function runJob(job) {
   } catch (e) {
     console.error(e);
     if (stream) stream.wrap.remove();
+    if (epoch !== lockEpoch) return;
     renderError({ kind: "unknown", title: "Algo salió mal", text: "Ocurrió un error inesperado en la app. Intente de nuevo.", details: `${e && e.name ? e.name + ": " : ""}${e && e.message ? e.message : e}` }, () => runJob(job));
     setEstado("error");
   } finally {
@@ -704,6 +718,7 @@ els.attachMenu.addEventListener("click", (ev) => {
   const btn = ev.target.closest("button[data-pick]");
   if (!btn) return;
   setMenu(false);
+  expectAway(3 * 60 * 1000);
   pickers[btn.dataset.pick].click();
 });
 els.attachMenu.addEventListener("keydown", (ev) => {
@@ -733,6 +748,7 @@ function formValues() {
     speechLang: els.speechLang.value,
     webSearch: els.webSearch.checked,
     autoLearn: els.autoLearn.checked,
+    ...(Lock.hasPin() ? { lockOnHide: els.lockOnHide.checked, idleMin: Number(els.idleLock.value) } : {}),
   };
 }
 const isDirty = () => !!snapshot && JSON.stringify(formValues()) !== JSON.stringify(snapshot);
@@ -765,6 +781,7 @@ function fillSettings() {
   els.speechLang.value = config.speechLang || "es-CR";
   els.webSearch.checked = !!config.webSearch;
   els.autoLearn.checked = !!config.autoLearn;
+  fillSecurity();
   els.voiceUnsupported.hidden = voice.canListen;
   if (config.geminiApiKey) setConnStatus("ok", "Key guardada en este dispositivo. Toque «Probar conexión» para verificarla.");
   else setConnStatus("pending", "Todavía no hay una key guardada");
@@ -797,6 +814,7 @@ function hideSettings() {
   snapshot = null;
   setEstado(busy ? "hablando" : (estado === "error" ? "error" : baseEstado()));
   if (settingsOpener && settingsOpener.isConnected && !settingsOpener.disabled) settingsOpener.focus();
+  if (isUnlocked() && !lockShowing()) setTimeout(maybeOfferPin, 300);
 }
 function closeSettings() {
   if (!confirmDiscard()) return;
@@ -843,11 +861,12 @@ function applyConfig() {
   renderGreeting();
 }
 
-els.save.addEventListener("click", () => {
-  const v = formValues();
+els.save.addEventListener("click", async () => {
+  const { lockOnHide, idleMin, ...v } = formValues();
   const next = { ...config, ...v, assistantName: v.assistantName || DEFAULT_ASSISTANT_NAME };
   const r = memory.saveConfig(next);
-  if (!r.ok) { setSettingsStatus("No se pudo guardar: el almacenamiento está lleno o el navegador está en modo privado.", true); return; }
+  const ok = r.ok && (await flushWrites()).ok && (!Lock.hasPin() || await Lock.savePrefs({ lockOnHide, idleMin }));
+  if (!ok) { setSettingsStatus("No se pudo guardar: el almacenamiento está lleno o el navegador está en modo privado.", true); return; }
   config = next;
   applyConfig();
   snapshot = formValues();
@@ -868,7 +887,8 @@ els.testConn.addEventListener("click", async () => {
     if (t.ok) {
       config.geminiApiKey = key;
       if (t.model) config.geminiModel = t.model;
-      const r = memory.saveConfig(config);
+      const r0 = memory.saveConfig(config);
+      const r = { ok: r0.ok && (await flushWrites()).ok };
       if (snapshot) snapshot.geminiApiKey = key;
       updateDirty();
       applyConfig();
@@ -912,6 +932,16 @@ function renderFactsList() {
 const mb = (n) => (n / 1024 / 1024).toFixed(n < 1024 * 1024 ? 2 : 1).replace(".", ",");
 async function renderStorage() {
   const u = await memory.usage();
+  if (u.vault) {
+    const used = u.total || u.vaultBytes, quota = u.quota || 0;
+    const p = quota ? Math.min(100, Math.round((used / quota) * 100)) : 0;
+    els.storageText.textContent = quota ? `${mb(used)} MB cifrados · ${p} %` : `${mb(used)} MB cifrados`;
+    els.storageFill.style.width = Math.max(p, used ? 2 : 0) + "%";
+    els.storageBar.setAttribute("aria-valuenow", String(p));
+    els.storageBar.setAttribute("aria-valuetext", `${p} % usado`);
+    els.storageMeter.classList.toggle("high", p >= 80);
+    return;
+  }
   const pct = Math.min(100, Math.round((u.ls / LS_LIMIT) * 100));
   els.storageText.textContent = `${mb(u.ls)} MB de ~5 MB`;
   els.storageFill.style.width = Math.max(pct, u.ls ? 2 : 0) + "%";
@@ -1016,25 +1046,236 @@ function buildWave() {
   }
 }
 
-async function init() {
-  await memory.init().catch((e) => console.warn("Antares: migración", e));
+// ---------- Seguridad: código, bloqueo y passkey ----------
+let awayUntil = 0;            // se espera que el usuario salga un momento (cámara/galería): no bloquear
+let hiddenAt = 0;
+let lastActivity = Date.now();
+function expectAway(ms) { awayUntil = Date.now() + ms; }
+
+async function fillSecurity() {
+  const on = Lock.hasPin();
+  els.secStatus.classList.toggle("on", on);
+  els.secStatusText.replaceChildren();
+  const small = document.createElement("small");
+  if (on) {
+    els.secStatusText.append("Código de seguridad activo", small);
+    small.textContent = "6 dígitos · sus datos se guardan cifrados";
+  } else {
+    els.secStatusText.append("Sin código de seguridad", small);
+    small.textContent = "Sus datos se guardan sin cifrar en este navegador";
+  }
+  els.secOffRow.hidden = on;
+  els.secOn.hidden = !on;
+  if (!on) return;
+  const p = Lock.prefs();
+  els.lockOnHide.checked = !!p.lockOnHide;
+  els.idleLock.value = String(p.idleMin);
+  const pk = Lock.passkeyInfo();
+  els.passkeySwitch.checked = !!pk;
+  els.passkeyNote.textContent = !pk
+    ? "Passkey (WebAuthn): Face ID en iPhone, huella en Android. El código sigue funcionando."
+    : pk.prf
+      ? "Activo: Face ID / huella también descifra sus datos. El código sigue funcionando."
+      : "Activo en modo comodidad: este navegador no ofrece cifrado con passkey (PRF), así que Face ID / huella solo desbloquea mientras la app sigue abierta. Al reabrirla se pide el código.";
+  const supported = await Lock.passkeySupported();
+  els.passkeySwitch.disabled = !supported && !pk;
+  if (!supported && !pk) els.passkeyNote.textContent = "Este dispositivo o navegador no ofrece Face ID / huella para sitios web.";
+}
+
+async function securityAction(fn) {
+  const wasOpen = !els.settingsView.hidden;
+  try { await fn(); } finally {
+    if (wasOpen && !els.settingsView.hidden) {
+      const st = els.settingsStatus.textContent, err = els.settingsStatus.classList.contains("err");
+      await fillSecurity();
+      if (snapshot) {
+        const { lockOnHide, idleMin, ...rest } = snapshot; // el código se creó o se quitó: actualizar solo esa parte
+        snapshot = { ...rest, ...secValues() };
+        updateDirty();
+        setSettingsStatus(st, err);
+      }
+      renderStorage();
+    }
+  }
+}
+const secValues = () => (Lock.hasPin() ? { lockOnHide: els.lockOnHide.checked, idleMin: Number(els.idleLock.value) } : {});
+
+async function createPinFlow() {
+  if (Lock.hasPin()) return;
+  if (!isUnlocked()) return;
+  await flushWrites();
+  const r = await runPinFlow("create");
+  if (r && r.ok) {
+    setSettingsStatus("Código activado: sus datos se guardan cifrados");
+    if (els.settingsView.hidden) { setVista("chat"); showNote("Código activado. Su key, la conversación y la memoria se guardan cifradas en este dispositivo."); }
+    lastActivity = Date.now();
+  }
+}
+els.pinCreate.addEventListener("click", () => securityAction(createPinFlow));
+els.pinChange.addEventListener("click", () => securityAction(async () => {
+  const r = await runPinFlow("change");
+  if (r && r.ok) setSettingsStatus("Código cambiado");
+}));
+els.lockNow.addEventListener("click", () => lockApp("manual"));
+els.pinRemove.addEventListener("click", () => securityAction(async () => {
+  if (!confirm("¿Quitar el código? Sus datos volverán a guardarse sin cifrar en este navegador.")) return;
+  const v = await runPinFlow("verify", "Ingrese su código para quitarlo");
+  if (!v || !v.ok) return;
+  if (Lock.passkeyInfo()) await Lock.disablePasskey();
+  const r = await Lock.removePin(v.dekX);
+  setSettingsStatus(r.ok ? "Código quitado. Sus datos ya no están cifrados." : "No se pudo quitar el código: no hay espacio para guardar los datos sin cifrar.", !r.ok);
+}));
+els.passkeySwitch.addEventListener("change", (ev) => {
+  ev.stopPropagation(); // no cuenta como "cambio sin guardar": se aplica de inmediato
+  const want = els.passkeySwitch.checked;
+  securityAction(async () => {
+    if (!want) {
+      if (confirm("¿Desactivar el desbloqueo con Face ID / huella? El código seguirá funcionando.")) { await Lock.disablePasskey(); setSettingsStatus("Face ID / huella desactivado"); }
+      return;
+    }
+    const v = await runPinFlow("verify", "Confirme su código para activar Face ID / huella");
+    if (!v || !v.ok) return;
+    try {
+      expectAway(60 * 1000);
+      const r = await Lock.enrollPasskey(v.dekX);
+      setSettingsStatus(r.prf ? "Face ID / huella activado" : "Face ID / huella activado en modo comodidad (sin cifrado)");
+    } catch (e) {
+      console.warn("Antares passkey:", e);
+      setSettingsStatus(e && e.name === "NotAllowedError" ? "Se canceló la activación de Face ID / huella." : "No se pudo activar Face ID / huella en este dispositivo.", true);
+    } finally { awayUntil = 0; }
+  });
+});
+
+// Bloquear: se borra lo descifrado, el contenido de la pantalla y se cancela lo que esté en curso
+function lockApp(reason = "manual") {
+  if (!Lock.hasPin() || !isUnlocked()) { if (Lock.hasPin() && !lockShowing()) showLock(afterUnlock); return; }
+  lockEpoch++;
+  stopResponse();
+  if (estado === "escuchando") voice.stopListening();
+  voice.stop();
+  if (!els.modal.hidden) closeModal();
+  if (!els.settingsView.hidden) {
+    snapshot = null;
+    if (historyPushed) { historyPushed = false; history.back(); }
+    hideSettings();
+  }
+  setMenu(false);
+  for (const a of attachments) if (a.url) URL.revokeObjectURL(a.url);
+  attachments = []; renderAttachments();
+  els.input.value = ""; autosize();
+  els.messages.replaceChildren();
+  els.announcer.textContent = "";
+  els.interimText.textContent = "";
+  pendingConfirm = null;
+  Lock.lockNow();
   config = memory.getConfig();
-  buildWave();
+  client = makeClient("");
+  vista = "inicio";
+  setEstado("sinkey");
+  showLock(afterUnlock);
+  console.info("Antares: bloqueado", reason);
+}
+
+function loadData() {
+  config = memory.getConfig();
   applyConfig();
-  els.version.textContent = `Antares Web ${APP_VERSION} · sus datos y su key se guardan solo en este navegador`;
+  els.messages.replaceChildren();
   for (const m of memory.getHistory(40)) {
     if (m.role === "user") {
       const text = String(m.content || "").replace(/^(\[(foto|video)\]\s*)+/, "").replace(/^Describa lo que ve\.$/, "");
       renderUser(m.media ? text : m.content, m.media);
     } else renderBot(m.content);
   }
+  vista = "inicio";
   setEstado(baseEstado());
+}
+function afterUnlock() {
+  lastActivity = Date.now();
+  loadData();
+  body.classList.remove("booting");
+}
+
+// Ofrecer el código una sola vez (es opcional)
+const K_PIN_OFFER = "antares.pinOffer.v1";
+function maybeOfferPin() {
+  try {
+    if (Lock.hasPin() || !config.geminiApiKey || localStorage.getItem(K_PIN_OFFER)) return;
+    localStorage.setItem(K_PIN_OFFER, String(Date.now()));
+  } catch { return; }
+  const card = document.createElement("div");
+  card.className = "confirm-card";
+  const p = document.createElement("p");
+  p.textContent = "¿Desea proteger Antares con un código de 6 dígitos? Su key, la conversación y la memoria quedarían cifradas en este dispositivo. Es opcional.";
+  const row = document.createElement("div");
+  row.className = "btn-row";
+  const yes = document.createElement("button");
+  yes.type = "button"; yes.className = "btn primary"; yes.textContent = "Crear código";
+  const no = document.createElement("button");
+  no.type = "button"; no.className = "btn"; no.textContent = "Ahora no";
+  yes.onclick = () => { card.remove(); createPinFlow(); };
+  no.onclick = () => { card.remove(); showNote("Puede crearlo cuando quiera en Configuración › Seguridad."); };
+  row.append(yes, no);
+  card.append(p, row);
+  els.messages.appendChild(card);
+  setVista("chat");
+  scrollToBottom();
+}
+
+// Al salir de la app (cambiar de app, apagar la pantalla) y por inactividad
+function onHidden() {
+  hiddenAt = Date.now();
+  if (!Lock.hasPin() || !isUnlocked()) return;
+  if (Date.now() < awayUntil) return; // eligiendo una foto o video
+  if (Lock.prefs().lockOnHide) lockApp("salir");
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") onHidden();
+  else {
+    if (Lock.hasPin() && isUnlocked() && awayUntil && hiddenAt && Date.now() > awayUntil && Lock.prefs().lockOnHide) lockApp("salir");
+    awayUntil = 0;
+    checkIdle();
+  }
+});
+window.addEventListener("pagehide", onHidden);
+for (const ev of ["pointerdown", "keydown", "wheel", "touchstart", "input"]) {
+  window.addEventListener(ev, () => { lastActivity = Date.now(); }, { capture: true, passive: true });
+}
+function checkIdle() {
+  if (!Lock.hasPin() || !isUnlocked() || lockShowing()) return;
+  if (busy || estado === "escuchando") { lastActivity = Date.now(); return; }
+  const min = Number(Lock.prefs().idleMin) || 0;
+  if (min > 0 && Date.now() - lastActivity >= min * 60 * 1000) lockApp("inactividad");
+}
+setInterval(checkIdle, 10 * 1000);
+for (const input of Object.values(pickers)) {
+  input.addEventListener("change", () => { awayUntil = 0; });
+  input.addEventListener("cancel", () => { awayUntil = 0; });
+}
+window.addEventListener("antares:save-error", () => { if (isUnlocked()) storageFullNote("No pude guardar los últimos cambios"); });
+
+async function init() {
+  buildWave();
+  els.version.textContent = `Antares Web ${APP_VERSION} · sus datos y su key se guardan solo en este navegador`;
   tick();
   setTimeout(() => { tick(); setInterval(tick, 60000); }, (60 - new Date().getSeconds()) * 1000 + 50);
   refreshWeather();
   setInterval(refreshWeather, 15 * 60 * 1000);
   syncViewport();
-  requestPersistence();
   setupServiceWorker();
+  await Lock.loadMeta();
+  if (Lock.hasPin()) {
+    // con código: siempre arranca bloqueada; nada se descifra hasta ingresar el código
+    config = memory.getConfig();
+    client = makeClient("");
+    setEstado("sinkey");
+    showLock(afterUnlock);
+    body.classList.remove("booting");
+  } else {
+    await memory.init().catch((e) => console.warn("Antares: migración", e));
+    loadData();
+    body.classList.remove("booting");
+    maybeOfferPin();
+  }
+  requestPersistence();
 }
 init();

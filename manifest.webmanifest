@@ -1,7 +1,7 @@
 {
   "name": "Antares - Asistente personal",
   "short_name": "Antares",
-  "description": "Antares, su asistente personal por voz con Gemini: respuestas en español formal, memoria local, fotos y videos.",
+  "description": "Antares, su asistente personal por voz con Gemini: respuestas en español formal, memoria local, fotos y videos, y código de seguridad opcional con datos cifrados.",
   "lang": "es",
   "dir": "ltr",
   "id": "./",
@@ -42,6 +42,20 @@
       "type": "image/png",
       "form_factor": "narrow",
       "label": "Pantalla principal de Antares en espera"
+    },
+    {
+      "src": "screenshots/bloqueo.png",
+      "sizes": "786x1746",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Antares bloqueado con código de seguridad"
+    },
+    {
+      "src": "screenshots/ajustes-seguridad.png",
+      "sizes": "786x1746",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Configuración de seguridad"
     },
     {
       "src": "screenshots/ajustes.png",

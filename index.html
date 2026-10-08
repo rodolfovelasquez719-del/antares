@@ -18,7 +18,7 @@
   <link rel="preload" href="fonts/rajdhani-600-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="styles.css">
 </head>
-<body data-estado="reposo">
+<body data-estado="reposo" class="booting">
 <div class="app" id="app">
 
   <!-- ===================== Vista principal ===================== -->
@@ -197,6 +197,45 @@
         <p class="hint">¿No tiene una? Consígala gratis en <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.</p>
       </section>
 
+      <!-- Seguridad -->
+      <section class="panel" id="seguridad" aria-labelledby="h-seg">
+        <h2 id="h-seg">SEGURIDAD</h2>
+        <div class="sec-status" id="sec-status" role="status">
+          <svg class="ico-on" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5M12 14.5v2.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <svg class="ico-off" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 10.5V8a4 4 0 0 1 7.6-1.7M12 14.5v2.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <span class="t" id="sec-status-text">Sin código de seguridad<small>Sus datos se guardan sin cifrar en este navegador</small></span>
+        </div>
+        <div class="btn-row" style="margin-top:10px" id="sec-off-row">
+          <button class="btn primary" type="button" id="pin-create">Crear código de seguridad</button>
+        </div>
+        <div id="sec-on" hidden>
+          <div class="btn-row" style="margin-top:10px">
+            <button class="btn" type="button" id="pin-change">Cambiar código</button>
+            <button class="btn" type="button" id="lock-now">Bloquear ahora</button>
+          </div>
+          <label class="switch-row sep" style="margin-top:8px">
+            <span class="txt">Desbloquear con Face ID / huella<small id="passkey-note">Passkey (WebAuthn): Face ID en iPhone, huella en Android. El código sigue funcionando.</small></span>
+            <input class="switch" type="checkbox" role="switch" id="passkey-switch">
+          </label>
+          <label class="switch-row">
+            <span class="txt">Bloquear al salir de la app<small>Al cambiar de app o apagar la pantalla</small></span>
+            <input class="switch" type="checkbox" role="switch" id="lock-on-hide">
+          </label>
+          <label class="field-label" for="idle-lock">Bloquear automáticamente tras inactividad</label>
+          <select id="idle-lock" class="field">
+            <option value="1">Tras 1 minuto</option>
+            <option value="5">Tras 5 minutos</option>
+            <option value="15">Tras 15 minutos</option>
+            <option value="60">Tras 1 hora</option>
+            <option value="0">Nunca (solo al salir o manualmente)</option>
+          </select>
+          <div class="danger-zone">
+            <button class="btn danger" type="button" id="pin-remove">Quitar el código</button>
+          </div>
+        </div>
+        <p class="hint">Si olvida su código no hay forma de recuperarlo: habría que borrar los datos de Antares en este dispositivo (key, historial y memoria) y empezar de nuevo.</p>
+      </section>
+
       <!-- Perfil -->
       <section class="panel" aria-labelledby="h-perfil">
         <h2 id="h-perfil">PERFIL</h2>
@@ -263,6 +302,67 @@
       <button class="btn primary" type="button" id="save-settings">Guardar</button>
     </div>
   </section>
+</div>
+
+<!-- Bloqueo con código -->
+<div class="lock-screen" id="lock-view" data-lock="normal" hidden>
+  <main class="lock" aria-labelledby="lock-title">
+    <div class="reactor-wrap" aria-hidden="true">
+      <svg class="reactor" viewBox="0 0 200 200">
+        <defs>
+          <radialGradient id="lg-core" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#fff"/><stop offset=".45" stop-color="#c9fbff"/><stop offset=".75" stop-color="#00e5ff"/><stop offset="1" stop-color="#00e5ff" stop-opacity="0"/></radialGradient>
+          <radialGradient id="lg-halo" cx="50%" cy="50%" r="50%"><stop offset=".55" stop-color="#00e5ff" stop-opacity="0"/><stop offset=".8" stop-color="#00e5ff" stop-opacity=".22"/><stop offset="1" stop-color="#00e5ff" stop-opacity="0"/></radialGradient>
+        </defs>
+        <circle class="halo" cx="100" cy="100" r="99" fill="url(#lg-halo)"/>
+        <circle cx="100" cy="100" r="97" fill="none" stroke="#00e5ff" stroke-opacity=".35" stroke-width="1"/>
+        <g class="spin"><circle cx="100" cy="100" r="90" fill="none" stroke="#00e5ff" stroke-opacity=".7" stroke-width="6" stroke-dasharray="1.4 6.45"/></g>
+        <g class="spin-rev"><circle cx="100" cy="100" r="78" fill="none" stroke="#00e5ff" stroke-width="3" stroke-dasharray="46 10 12 10" stroke-linecap="round"/></g>
+        <circle cx="100" cy="100" r="68" fill="#031018" stroke="#5ff1ff" stroke-opacity=".55" stroke-width="1.2"/>
+        <g class="coil"><circle cx="100" cy="100" r="52" fill="none" stroke="#00e5ff" stroke-opacity=".9" stroke-width="16" stroke-dasharray="25.5 7.17"/><circle cx="100" cy="100" r="52" fill="none" stroke="#e6fdff" stroke-opacity=".55" stroke-width="3" stroke-dasharray="25.5 7.17"/></g>
+        <circle cx="100" cy="100" r="40" fill="none" stroke="#5ff1ff" stroke-width="1.5"/>
+        <g class="core"><circle cx="100" cy="100" r="34" fill="url(#lg-core)"/></g>
+        <circle cx="100" cy="100" r="18" fill="#fff" fill-opacity=".92"/>
+      </svg>
+      <div class="lock-badge"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.2" fill="currentColor"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></div>
+    </div>
+
+    <h1 id="lock-title" tabindex="-1">ANTARES BLOQUEADO</h1>
+    <p class="sub" id="lock-sub">Ingrese su código de seguridad</p>
+
+    <div class="pin-dots" id="pin-dots" role="img" aria-label="0 de 6 dígitos ingresados">
+      <i></i><i></i><i></i><i></i><i></i><i></i>
+    </div>
+    <p class="lock-msg" id="lock-msg" role="status" aria-live="polite">&nbsp;</p>
+
+    <div class="keypad" id="keypad" role="group" aria-label="Teclado numérico">
+      <button class="key" type="button" data-d="1">1<small>&nbsp;</small></button>
+      <button class="key" type="button" data-d="2">2<small>ABC</small></button>
+      <button class="key" type="button" data-d="3">3<small>DEF</small></button>
+      <button class="key" type="button" data-d="4">4<small>GHI</small></button>
+      <button class="key" type="button" data-d="5">5<small>JKL</small></button>
+      <button class="key" type="button" data-d="6">6<small>MNO</small></button>
+      <button class="key" type="button" data-d="7">7<small>PQRS</small></button>
+      <button class="key" type="button" data-d="8">8<small>TUV</small></button>
+      <button class="key" type="button" data-d="9">9<small>WXYZ</small></button>
+      <button class="key ghost" type="button" id="bio-key" aria-label="Usar Face ID o huella">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M9 9v1.5M15 9v1.5M12 9v4h-1M9.5 16c1.5 1 3.5 1 5 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="key" type="button" data-d="0">0<small>&nbsp;</small></button>
+      <button class="key ghost" type="button" id="pin-del" aria-label="Borrar último dígito">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6-7 6-7Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m12 9.5 5 5m0-5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+
+    <button class="btn bio-btn" type="button" id="bio-btn" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 11v3m-4.5-6.5A6 6 0 0 1 18 12v1.5M6 12a6 6 0 0 0 .4 2.2M9 12a3 3 0 0 1 6 0c0 2.5-.6 4.6-1.6 6.3M9.3 15.5c-.2 1.3-.6 2.4-1.2 3.3M12 17.5c-.2.9-.5 1.7-.9 2.5M4 9.5A9 9 0 0 1 20 8.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+      Usar Face ID / huella
+    </button>
+    <p class="bio-note" id="bio-note" hidden></p>
+    <div class="lock-links">
+      <button class="link-btn" type="button" id="pin-forgot">¿Olvidó su código?</button>
+      <button class="link-btn" type="button" id="pin-cancel" hidden>Cancelar</button>
+    </div>
+  </main>
 </div>
 
 <!-- Diálogo (detalles técnicos / confirmaciones) -->
