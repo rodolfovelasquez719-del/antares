@@ -16,7 +16,7 @@
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="preload" href="fonts/orbitron-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/rajdhani-600-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=1.9.1">
+  <link rel="stylesheet" href="styles.css?v=1.10.0">
   <script>
   /* v1.9.0 Arranque vigilado: si la app no queda lista en ~4 s (error de carga, actualización a medias, base local que no
      responde, reanudación de iOS), se muestra una pantalla visible con Reintentar / Reparar en vez de una pantalla negra.
@@ -189,6 +189,7 @@
 
       <!-- Conversación (historial siempre accesible) -->
       <div class="chat" id="messages" role="log" aria-label="Conversación" aria-live="off" tabindex="-1"></div>
+      <span id="react-hint" class="sr-only">Pulse Enter para reaccionar a este mensaje.</span>
       <div class="sr-only" id="announcer" aria-live="polite" aria-atomic="true"></div>
     </main>
 
@@ -224,6 +225,7 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="1.7" fill="currentColor"/><path d="m4.5 17.5 5-5 4 4 2.5-2.5 3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
             Subir de la galería</button>
         </div>
+        <div id="sticker-menu" class="sticker-menu" hidden role="menu" aria-label="Stickers"></div>
         <input type="file" id="pick-photo" accept="image/*" capture="environment" hidden>
         <input type="file" id="pick-video" accept="video/*" capture="environment" hidden>
         <input type="file" id="pick-gallery" accept="image/*,video/*" multiple hidden>
@@ -231,6 +233,9 @@
         <div class="pill">
           <button class="icon-btn" type="button" id="attach-btn" aria-label="Adjuntar foto, video o PDF" aria-haspopup="menu" aria-expanded="false">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 11.5 12.4 19.6a5 5 0 0 1-7.07-7.07l8.13-8.13a3.33 3.33 0 0 1 4.71 4.71l-8.14 8.13a1.67 1.67 0 0 1-2.36-2.36l7.43-7.42" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="icon-btn" type="button" id="sticker-btn" aria-label="Enviar un sticker" aria-haspopup="menu" aria-expanded="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12.5 20c0-4.1 3.4-7.5 7.5-7.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="1.2" fill="currentColor"/><circle cx="15" cy="10" r="1.2" fill="currentColor"/><path d="M8.5 14c1 1.2 2.2 1.7 3.5 1.7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
           </button>
           <textarea id="msg-input" rows="1" placeholder="Escríbale a Antares…" aria-label="Mensaje" enterkeyhint="send"></textarea>
         </div>
@@ -402,6 +407,20 @@
         </label>
       </section>
 
+      <!-- Reacciones y stickers -->
+      <section class="panel" aria-labelledby="h-social">
+        <h2 id="h-social">REACCIONES Y STICKERS</h2>
+        <label class="switch-row">
+          <span class="txt">Reacciones y stickers<small>Antares puede reaccionar a sus mensajes con un emoji y enviar un sticker de vez en cuando. Usted puede tocar cualquier mensaje para reaccionar.</small></span>
+          <input class="switch" type="checkbox" role="switch" id="social-on">
+        </label>
+        <label class="field-label" for="social-freq">Frecuencia</label>
+        <select id="social-freq" class="field">
+          <option value="poco">Poco</option>
+          <option value="normal">Normal</option>
+        </select>
+      </section>
+
       <!-- Memoria -->
       <section class="panel" aria-labelledby="h-mem">
         <h2 id="h-mem">MEMORIA</h2>
@@ -550,34 +569,35 @@
 <script type="importmap">
 {
  "imports": {
-  "./js/app.js": "./js/app.js?v=1.9.1",
-  "./js/chinese-checkers.js": "./js/chinese-checkers.js?v=1.9.1",
-  "./js/cubic.js": "./js/cubic.js?v=1.9.1",
-  "./js/digest.js": "./js/digest.js?v=1.9.1",
-  "./js/facts.js": "./js/facts.js?v=1.9.1",
-  "./js/gemini.js": "./js/gemini.js?v=1.9.1",
-  "./js/lock.js": "./js/lock.js?v=1.9.1",
-  "./js/lockui.js": "./js/lockui.js?v=1.9.1",
-  "./js/logbook.js": "./js/logbook.js?v=1.9.1",
-  "./js/mail.js": "./js/mail.js?v=1.9.1",
-  "./js/media.js": "./js/media.js?v=1.9.1",
-  "./js/memory.js": "./js/memory.js?v=1.9.1",
-  "./js/notify.js": "./js/notify.js?v=1.9.1",
-  "./js/ocio.js": "./js/ocio.js?v=1.9.1",
-  "./js/panels.js": "./js/panels.js?v=1.9.1",
-  "./js/reminders.js": "./js/reminders.js?v=1.9.1",
-  "./js/robotics.js": "./js/robotics.js?v=1.9.1",
-  "./js/routes.js": "./js/routes.js?v=1.9.1",
-  "./js/shopping.js": "./js/shopping.js?v=1.9.1",
-  "./js/trivia.js": "./js/trivia.js?v=1.9.1",
-  "./js/vault.js": "./js/vault.js?v=1.9.1",
-  "./js/voice.js": "./js/voice.js?v=1.9.1",
-  "./js/wake.js": "./js/wake.js?v=1.9.1",
-  "./js/weather.js": "./js/weather.js?v=1.9.1",
-  "./js/workpanels.js": "./js/workpanels.js?v=1.9.1"
+  "./js/app.js": "./js/app.js?v=1.10.0",
+  "./js/chinese-checkers.js": "./js/chinese-checkers.js?v=1.10.0",
+  "./js/cubic.js": "./js/cubic.js?v=1.10.0",
+  "./js/digest.js": "./js/digest.js?v=1.10.0",
+  "./js/facts.js": "./js/facts.js?v=1.10.0",
+  "./js/gemini.js": "./js/gemini.js?v=1.10.0",
+  "./js/lock.js": "./js/lock.js?v=1.10.0",
+  "./js/lockui.js": "./js/lockui.js?v=1.10.0",
+  "./js/logbook.js": "./js/logbook.js?v=1.10.0",
+  "./js/mail.js": "./js/mail.js?v=1.10.0",
+  "./js/media.js": "./js/media.js?v=1.10.0",
+  "./js/memory.js": "./js/memory.js?v=1.10.0",
+  "./js/notify.js": "./js/notify.js?v=1.10.0",
+  "./js/ocio.js": "./js/ocio.js?v=1.10.0",
+  "./js/panels.js": "./js/panels.js?v=1.10.0",
+  "./js/reminders.js": "./js/reminders.js?v=1.10.0",
+  "./js/robotics.js": "./js/robotics.js?v=1.10.0",
+  "./js/routes.js": "./js/routes.js?v=1.10.0",
+  "./js/shopping.js": "./js/shopping.js?v=1.10.0",
+  "./js/social.js": "./js/social.js?v=1.10.0",
+  "./js/trivia.js": "./js/trivia.js?v=1.10.0",
+  "./js/vault.js": "./js/vault.js?v=1.10.0",
+  "./js/voice.js": "./js/voice.js?v=1.10.0",
+  "./js/wake.js": "./js/wake.js?v=1.10.0",
+  "./js/weather.js": "./js/weather.js?v=1.10.0",
+  "./js/workpanels.js": "./js/workpanels.js?v=1.10.0"
  }
 }
 </script>
-<script type="module" src="js/app.js?v=1.9.1"></script>
+<script type="module" src="js/app.js?v=1.10.0"></script>
 </body>
 </html>

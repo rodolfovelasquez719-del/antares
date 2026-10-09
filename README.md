@@ -107,6 +107,23 @@ Actualizar.
 - Funciona sin conexión para abrir la app (service worker "primero red" con espera de 3 s y
   respaldo en caché).
 
+## Novedades de la 1.10.0 (reacciones y stickers)
+
+- Antares puede reaccionar a sus mensajes con un emoji (👍 ❤️ 🎉 😂 ✅ 😮), como una persona: ante un
+  «gracias», «dale» o «listo» reacciona y responde con muy poco texto (o nada). No reacciona a las
+  preguntas normales. Lo decide Gemini en la misma respuesta con una etiqueta oculta (`[[react:❤️]]`)
+  que la app quita antes de mostrar, leer en voz alta o guardar: no hay llamadas extra.
+- 12 stickers propios en SVG con el estilo Jarvis (pulgar arriba, corazón, fiesta, reactor feliz, Listo,
+  Buenos días, Buenas noches, robot saludando, risa, pensando, camión en ruta y café). Funcionan sin
+  conexión y no hay descargas externas ni licencias de terceros. Antares envía uno de vez en cuando
+  (`[[sticker:id]]`): como mucho uno cada 8 h y no siempre (Poco: cada 48 h).
+- Botón de stickers junto a «Adjuntar»: usted envía un sticker y Antares le responde.
+- Toque (o mantenga presionado) cualquier mensaje para reaccionar; toque su reacción para cambiarla o
+  quitarla. Con el teclado: Enter sobre el mensaje.
+- Emojis moderados en el texto, siempre de usted y sin jerga. La lectura en voz alta omite los emojis.
+- Configuración › Reacciones y stickers: activar o desactivar, y la frecuencia (Poco / Normal).
+- Las reacciones y los stickers se guardan en el historial (cifrado si hay código).
+
 ## Novedades de la 1.9.1 (seguridad, revisión de Beru)
 
 - Al bloquear se vacían también los campos de Configuración (key, nombres, personalidad), la

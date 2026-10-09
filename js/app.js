@@ -19,8 +19,9 @@ import * as Routes from "./routes.js";
 import * as Cubic from "./cubic.js";
 import * as Mail from "./mail.js";
 import * as Logbook from "./logbook.js";
+import * as Social from "./social.js";
 
-const APP_VERSION = "1.9.1";
+const APP_VERSION = "1.10.0";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -38,7 +39,9 @@ function rememberMedia(id, items) {
 function historyForModel(limit) {
   const h = memory.getHistory(limit);
   const recent = new Set(h.slice(-FOLLOW_MAX_MSGS).map((m) => m.id));
-  return h.map(({ id, role, content }) => {
+  return h.map((m) => {
+    const { id, role } = m;
+    const content = Social.modelContent(m);
     const sm = sessionMedia.get(id);
     const keep = sm && recent.has(id) && Date.now() - sm.ts < FOLLOW_MAX_MS;
     return keep ? { role, content, items: sm.items } : { role, content };
@@ -78,6 +81,7 @@ const els = {
   storageMeter: $("storage-meter"), storageText: $("storage-text"), storageBar: $("storage-bar"), storageFill: $("storage-fill"),
   clearHistory: $("clear-history"), clearFacts: $("clear-facts"), version: $("app-version"),
   unsaved: $("unsaved"), settingsStatus: $("settings-status"), save: $("save-settings"),
+  stickerBtn: $("sticker-btn"), stickerMenu: $("sticker-menu"), socialOn: $("social-on"), socialFreq: $("social-freq"),
   modal: $("modal"), modalTitle: $("modal-title"), modalBody: $("modal-body"), modalCopy: $("modal-copy"), modalClose: $("modal-close"),
   toast: $("update-toast"), updateBtn: $("update-btn"), updateDismiss: $("update-dismiss"),
   // seguridad
@@ -377,11 +381,16 @@ function renderMedia(b, media) {
   b.appendChild(grid);
 }
 
-function renderUser(text, media = null) {
+function renderUser(text, media = null, { id = "", sticker = "", reactions = null } = {}) {
   const wrap = document.createElement("div");
   wrap.className = "msg user";
+  if (id) wrap.dataset.id = id;
   const b = document.createElement("div");
   b.className = "bubble";
+  if (sticker) {
+    const st = Social.stickerEl(sticker);
+    if (st) { b.classList.add("sticker-only"); b.appendChild(st); text = ""; }
+  }
   if (media && media.length) {
     b.classList.add("has-media");
     renderMedia(b, media);
@@ -394,18 +403,24 @@ function renderUser(text, media = null) {
     b.appendChild(t);
   }
   wrap.appendChild(b);
+  paintReactions(wrap, reactions);
   els.messages.appendChild(wrap);
   scrollToBottom();
   return wrap;
 }
 
-function renderBot(text, { sources = [], meta = "" } = {}) {
+function renderBot(text, { sources = [], meta = "", id = "", sticker = "", reactions = null } = {}) {
   const wrap = document.createElement("div");
   wrap.className = "msg bot";
+  if (id) wrap.dataset.id = id;
+  const st = sticker ? Social.stickerEl(sticker) : null;
   const b = document.createElement("div");
   b.className = "bubble";
-  appendLinkified(b, text);
+  if (text) appendLinkified(b, text);
+  if (st && !text) { b.classList.add("sticker-only"); b.appendChild(st); }
   wrap.appendChild(b);
+  if (st && text) { st.classList.add("after-text"); wrap.appendChild(st); }
+  paintReactions(wrap, reactions);
   const links = (sources || []).map((s) => ({ ...s, uri: safeHttps(s.uri) })).filter((s) => s.uri);
   if (links.length) {
     const s = document.createElement("div");
@@ -566,6 +581,14 @@ function storageFullNote(prefix) {
   });
 }
 function handleSave(r, what) {
+  if (r && r.id) {
+    // v1.10: la burbuja recién dibujada recibe el id del mensaje guardado (para reaccionar)
+    const m = memory.getHistory(1)[0];
+    if (m && m.id === r.id) {
+      const last = [...els.messages.querySelectorAll(`.msg.${m.role === "user" ? "user" : "bot"}:not([data-id])`)].pop();
+      if (last && last === [...els.messages.querySelectorAll(".msg")].pop()) last.dataset.id = r.id;
+    }
+  }
   if (!r.ok) storageFullNote(`No pude guardar ${what}`);
   else if (r.pruned) showNote(`Liberé espacio borrando ${r.pruned} mensajes antiguos de la conversación.`, { warn: true });
 }
@@ -678,7 +701,7 @@ async function runJob(job) {
         if (!stream) stream = createStreamingBubble();
         const near = isNearBottom();
         if (stream.bubble.classList.contains("pending")) { stream.bubble.classList.remove("pending"); els.connSub.textContent = "Respondiendo…"; }
-        stream.bubble.textContent = partial;
+        stream.bubble.textContent = Social.stripPartial(partial); // las etiquetas ocultas nunca se ven
         if (near) scrollToBottom(false);
       },
     });
@@ -686,13 +709,32 @@ async function runJob(job) {
     if (epoch !== lockEpoch) return; // se bloqueó mientras respondía: no se muestra ni se guarda nada
     if (r.ok) {
       lastModelShort = shortModel(r.model);
-      const botWrap = renderBot(r.text, { sources: r.sources, meta: formatMeta(r, uploadMs) });
-      if (job.kind === "mail") addMailActions(botWrap, r.text);
-      announce(`${assistantName()}: ${r.text}`);
-      handleSave(memory.addMessage("assistant", r.text), "la respuesta");
-      if ((wantsVoice() || job.speak) && !r.stopped) voice.speak(r.text);
+      // v1.10: etiquetas ocultas [[react:…]] / [[sticker:…]] (se quitan siempre; se aplican solo si está activado)
+      const parsed = Social.parseReply(r.text);
+      let { react, sticker } = job.social ? Social.gate({ ...parsed, userText: job.text || (job.kind === "sticker" ? "" : job.prompt), history: memory.getHistory(30), freq: job.social, textEmpty: !parsed.text, replyToSticker: job.kind === "sticker", rnd: typeof window.__antaresRnd === "function" ? window.__antaresRnd : Math.random }) : { react: null, sticker: null };
+      if (react && !job.userMsgId) react = null;
+      const text = parsed.text || (!react && !sticker ? (r.text.trim() && !Social.hasTag(r.text) ? r.text.trim() : "") : "");
+      if (react) applyReaction(job.userMsgId, "a", react, { animate: true });
+      let saved = null;
+      if (text || sticker) {
+        const botWrap = renderBot(text, { sources: r.sources, meta: formatMeta(r, uploadMs), sticker });
+        if (job.kind === "mail") addMailActions(botWrap, text);
+        saved = memory.addMessage("assistant", text, { sources: r.sources || [], sticker });
+        handleSave(saved, "la respuesta");
+        const st = sticker ? Social.sticker(sticker) : null;
+        announce(`${assistantName()}: ${text}${st ? (text ? " · " : "") + "Sticker: " + st.label : ""}${react ? " · Reaccionó: " + Social.reaction(react).label : ""}`);
+      } else if (react) {
+        // solo reacción (como una persona ante un «gracias»): sin burbuja; queda en el historial para el modelo
+        saved = memory.addMessage("assistant", "", { reactOnly: react });
+        handleSave(saved, "la respuesta");
+        announce(`${assistantName()} reaccionó: ${Social.reaction(react).label}`);
+      } else {
+        renderBot("", { meta: formatMeta(r, uploadMs) });
+        handleSave(memory.addMessage("assistant", ""), "la respuesta");
+      }
+      if (text && (wantsVoice() || job.speak) && !r.stopped) voice.speak(text);
       if (job.kind !== "mail" && job.text && looksLikeImportantFact(job.text)) {
-        if (config.autoLearn) autoLearn(job.text, r.text); // en segundo plano, no bloquea
+        if (config.autoLearn) autoLearn(job.text, text); // en segundo plano, no bloquea
         else { pendingConfirm = job.text; renderConfirm(job.text); }
       }
       setEstado(baseEstado());
@@ -948,8 +990,119 @@ function sendMessage(text, items = [], opts = {}) {
   const saved = memory.addMessage("user", [label, prompt].filter(Boolean).join(" "), items.length ? { media: thumbsToKeep } : null);
   handleSave(saved, "el mensaje");
   if (items.length) rememberMedia(saved.id, items);
-  currentJob = runJob({ text, items, prompt, history, facts, speak, extraSystem: tutorMode ? Robotics.TUTOR_SYSTEM : "" });
+  const social = socialMode();
+  currentJob = runJob({ text, items, prompt, history, facts, speak, userMsgId: saved.id, social,
+    extraSystem: [tutorMode ? Robotics.TUTOR_SYSTEM : "", social ? Social.socialRules(social) : ""].filter(Boolean).join("\n\n") });
   return true;
+}
+
+// ---------- v1.10: reacciones y stickers ----------
+const socialMode = () => (config.socialOn === false ? null : config.socialFreq === "poco" ? "poco" : "normal");
+function paintReactions(wrap, reactions) {
+  Social.renderReactions(wrap, reactions, { botName: assistantName(), onMine: (w) => openReactions(w) });
+}
+function applyReaction(id, who, emoji, { animate = false } = {}) {
+  if (!id) return;
+  const r = memory.setReaction(id, who, emoji);
+  if (!r.ok) { storageFullNote("No pude guardar la reacción"); return; }
+  const wrap = els.messages.querySelector(`.msg[data-id="${CSS.escape(id)}"]`);
+  if (!wrap) return;
+  paintReactions(wrap, r.reactions);
+  if (animate) { const pill = wrap.querySelector(".react-pill.from-bot"); if (pill) pill.classList.add("pop"); }
+}
+function openReactions(wrap, back = null) {
+  if (!socialMode() || !wrap || !wrap.dataset.id || !isUnlocked()) return;
+  const m = memory.getMessage(wrap.dataset.id);
+  if (!m) return;
+  const bubble = wrap.querySelector(":scope > .bubble");
+  Social.openReactBar(wrap, (m.reactions && m.reactions.u) || null, (emoji) => {
+    applyReaction(wrap.dataset.id, "u", emoji);
+    announce(emoji ? `Reaccionó con ${Social.reaction(emoji).label}` : "Reacción quitada");
+  }, { returnFocus: back || bubble });
+}
+// tocar (o mantener presionado) un mensaje abre la barra de reacciones; enlaces, botones y fotos siguen igual
+els.messages.addEventListener("click", (ev) => {
+  if (ev.target.closest(".react-bar, .react-pill, a, button, input, textarea, .media-grid, .media-item")) return;
+  const bubble = ev.target.closest(".msg > .bubble, .msg > .sticker");
+  if (!bubble || bubble.classList.contains("streaming") || bubble.classList.contains("pending")) return;
+  if (String(getSelection && getSelection()).length) return; // seleccionando texto
+  const wrap = bubble.parentElement;
+  if (wrap.querySelector(":scope > .react-bar")) { Social.closeReactBar(); return; }
+  openReactions(wrap, bubble);
+});
+els.messages.addEventListener("contextmenu", (ev) => {
+  const bubble = ev.target.closest(".msg > .bubble, .msg > .sticker");
+  if (!bubble || !socialMode() || ev.target.closest("a, img, video")) return;
+  ev.preventDefault();
+  openReactions(bubble.parentElement, bubble);
+});
+els.messages.addEventListener("keydown", (ev) => {
+  if ((ev.key === "Enter" || ev.key === " ") && ev.target.matches(".msg > .bubble[tabindex]")) { ev.preventDefault(); openReactions(ev.target.parentElement, ev.target); }
+});
+document.addEventListener("click", (ev) => { if (!ev.target.closest(".react-bar, .msg")) Social.closeReactBar(); });
+// burbujas con id: se pueden enfocar con el teclado para reaccionar
+new MutationObserver(() => {
+  const on = !!socialMode();
+  for (const b of els.messages.querySelectorAll(".msg[data-id] > .bubble:not([tabindex])")) if (on) { b.tabIndex = 0; b.setAttribute("aria-describedby", "react-hint"); }
+}).observe(els.messages, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-id"] });
+
+// Selector de stickers
+function buildStickerMenu() {
+  for (const s of Social.STICKERS) {
+    const b = document.createElement("button");
+    b.type = "button"; b.setAttribute("role", "menuitem"); b.dataset.sticker = s.id;
+    b.setAttribute("aria-label", `Enviar sticker: ${s.label}`);
+    b.innerHTML = Social.stickerSvg(s.id);
+    els.stickerMenu.appendChild(b);
+  }
+}
+function setStickerMenu(open) {
+  els.stickerMenu.hidden = !open;
+  els.stickerBtn.setAttribute("aria-expanded", String(open));
+  if (open) { setMenu(false); els.stickerMenu.querySelector("button").focus(); }
+}
+els.stickerBtn.addEventListener("click", () => setStickerMenu(els.stickerMenu.hidden));
+els.stickerMenu.addEventListener("click", (ev) => {
+  const b = ev.target.closest("button[data-sticker]");
+  if (!b) return;
+  setStickerMenu(false);
+  sendSticker(b.dataset.sticker);
+});
+els.stickerMenu.addEventListener("keydown", (ev) => {
+  const btns = [...els.stickerMenu.querySelectorAll("button")];
+  const i = btns.indexOf(document.activeElement);
+  if (ev.key === "Escape") { setStickerMenu(false); els.stickerBtn.focus(); }
+  else if (["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp"].includes(ev.key)) {
+    ev.preventDefault();
+    const d = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: 4, ArrowUp: -4 }[ev.key];
+    btns[(i + d + btns.length) % btns.length].focus();
+  }
+});
+document.addEventListener("click", (ev) => {
+  if (!els.stickerMenu.hidden && !els.stickerMenu.contains(ev.target) && !els.stickerBtn.contains(ev.target)) setStickerMenu(false);
+});
+function sendSticker(id) {
+  const st = Social.sticker(id);
+  if (!st || !isUnlocked()) return false;
+  if (busy) { chatNotice("Espere a que termine la respuesta."); return false; }
+  if (!client.isConfigured()) { setEstado("sinkey"); return false; }
+  const history = historyForModel(20);
+  const facts = memory.getFacts();
+  setVista("chat");
+  renderUser("", null, { sticker: st.id });
+  const saved = memory.addMessage("user", `[sticker:${st.id}]`, { sticker: st.id });
+  handleSave(saved, "el sticker");
+  const social = socialMode() || "poco";
+  currentJob = runJob({ text: "", items: [], prompt: Social.stickerPrompt(st), history, facts, userMsgId: saved.id, social, kind: "sticker",
+    extraSystem: [tutorMode ? Robotics.TUTOR_SYSTEM : "", Social.socialRules(social)].filter(Boolean).join("\n\n") });
+  return true;
+}
+els.socialOn.addEventListener("change", () => { els.socialFreq.disabled = !els.socialOn.checked; });
+function applySocial() {
+  const on = !!socialMode();
+  body.classList.toggle("no-social", !on);
+  els.stickerBtn.hidden = !on;
+  if (!on) { setStickerMenu(false); Social.closeReactBar(); }
 }
 
 els.form.addEventListener("submit", (ev) => {
@@ -1370,6 +1523,7 @@ function applyModes() {
   els.driveLabel.textContent = config.drivingMode ? "Conducción: sí" : "Conducción";
   document.documentElement.dataset.fs = String(config.fontSize || 1);
   paintWake();
+  applySocial();
 }
 function saveModes() {
   const r = memory.saveConfig(config);
@@ -1519,6 +1673,8 @@ function formValues() {
     wakeIdleMin: Number(els.wakeIdle.value) || 10,
     drivingMode: els.drivingMode.checked,
     fontSize: Number(els.fontSize.value) || 1,
+    socialOn: els.socialOn.checked,
+    socialFreq: els.socialFreq.value === "poco" ? "poco" : "normal",
     ...(Lock.hasPin() ? { lockOnHide: els.lockOnHide.checked, idleMin: Number(els.idleLock.value) } : {}),
   };
 }
@@ -1558,6 +1714,9 @@ function fillSettings() {
   els.wakeNote.textContent = wakeNoteText();
   els.drivingMode.checked = !!config.drivingMode;
   els.fontSize.value = String(config.fontSize || 1);
+  els.socialOn.checked = config.socialOn !== false;
+  els.socialFreq.value = config.socialFreq === "poco" ? "poco" : "normal";
+  els.socialFreq.disabled = !els.socialOn.checked;
   fillSecurity();
   els.voiceUnsupported.hidden = voice.canListen;
   if (config.geminiApiKey) setConnStatus("ok", "Key guardada en este dispositivo. Toque «Probar conexión» para verificarla.");
@@ -2026,6 +2185,8 @@ function lockApp(reason = "manual") {
   goHome();
   resetPanels();
   setMenu(false);
+  setStickerMenu(false);
+  Social.closeReactBar();
   for (const a of attachments) if (a.url) URL.revokeObjectURL(a.url);
   attachments = []; renderAttachments();
   forgetSessionMedia();
@@ -2056,8 +2217,8 @@ function loadData() {
   for (const m of memory.getHistory(40)) {
     if (m.role === "user") {
       const text = String(m.content || "").replace(/^(\[(foto|video|pdf)\]\s*)+/, "").replace(DEFAULT_PROMPTS_RE, "");
-      renderUser(m.media ? text : m.content, m.media);
-    } else renderBot(m.content, { sources: m.sources || [] });
+      renderUser(m.media ? text : m.content, m.media, { id: m.id, sticker: m.sticker, reactions: m.reactions });
+    } else if (m.content || m.sticker) renderBot(m.content, { sources: m.sources || [], id: m.id, sticker: m.sticker, reactions: m.reactions });
   }
   vista = "inicio";
   setEstado(baseEstado());
@@ -2181,6 +2342,7 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 
 async function init() {
   buildWave();
+  buildStickerMenu();
   els.version.textContent = `Antares Web ${APP_VERSION} · sus datos y su key se guardan solo en este navegador`;
   tick();
   setTimeout(() => { tick(); setInterval(tick, 60000); }, (60 - new Date().getSeconds()) * 1000 + 50);

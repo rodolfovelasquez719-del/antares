@@ -884,3 +884,40 @@ body.driving .wake-status { display: none; }
 .opt-row small { font-family: var(--font-read); font-size: 13.5px; color: var(--muted); }
 html[data-fs="2"] .opt-row small { font-size: 16px; }
 html[data-fs="3"] .opt-row small { font-size: 18px; }
+
+/* ===== v1.10.0: reacciones con emoji y stickers ===== */
+.msg { position: relative; }
+.msg > .bubble[tabindex] { cursor: pointer; }
+.msg > .bubble[tabindex]:focus-visible { outline: 2px solid var(--cyan-2); outline-offset: 2px; }
+.reactions { position: relative; z-index: 1; display: flex; margin: -14px 0 -8px; }
+.msg.user .reactions { justify-content: flex-end; padding-right: 4px; }
+.msg.bot .reactions { padding-left: 4px; }
+.react-pill { min-width: 44px; min-height: 44px; display: inline-grid; place-items: center; padding: 0; border: 0; background: transparent; color: inherit; }
+button.react-pill { cursor: pointer; }
+.react-pill i { font-style: normal; font-size: 17px; line-height: 1; padding: 4px 7px; border-radius: 999px; background: #08202b; border: 1px solid rgba(0, 229, 255, .6); box-shadow: 0 0 8px rgba(0, 229, 255, .35); }
+.react-pill.mine i { border-color: var(--cyan-2); background: #0d3a47; }
+.react-pill:focus-visible { outline: none; }
+.react-pill:focus-visible i { outline: 2px solid var(--cyan-2); outline-offset: 2px; }
+.react-pill.pop i { animation: react-pop .5s cubic-bezier(.2, 1.4, .4, 1); }
+@keyframes react-pop { 0% { transform: scale(.2); opacity: 0; } 60% { transform: scale(1.3); opacity: 1; } 100% { transform: scale(1); } }
+.react-bar { position: absolute; top: calc(100% - 4px); z-index: 15; display: flex; flex-wrap: wrap; gap: 2px; padding: 4px; max-width: calc(100vw - 24px); width: max-content;
+  border-radius: 26px; background: rgba(6, 20, 28, .97); border: 1px solid var(--cyan); box-shadow: 0 8px 24px rgba(0,0,0,.6), 0 0 16px rgba(0, 229, 255, .35); }
+.msg.user .react-bar { right: 0; }
+.msg.bot .react-bar { left: 0; }
+.react-bar button { width: 44px; height: 44px; border: 0; border-radius: 50%; background: transparent; font-size: 24px; line-height: 1; cursor: pointer; display: grid; place-items: center; }
+.react-bar button:active, .react-bar button:focus-visible { background: rgba(0, 229, 255, .16); outline: none; }
+.react-bar button[aria-pressed="true"] { background: rgba(0, 229, 255, .22); box-shadow: inset 0 0 0 1.5px var(--cyan); }
+.react-bar .rb-clear { width: auto; padding: 0 14px; border-radius: 22px; font-family: var(--font-ui); font-size: 15px; font-weight: 700; color: var(--text); }
+.sticker { width: 128px; height: 128px; filter: drop-shadow(0 0 8px rgba(0, 229, 255, .45)); animation: sticker-in .35s ease-out; }
+.sticker svg { display: block; width: 100%; height: 100%; }
+.sticker.after-text { margin-top: 6px; width: 112px; height: 112px; }
+.stk-txt { font-family: var(--font-hud), var(--font-ui), sans-serif; }
+.msg .bubble.sticker-only { padding: 0; background: transparent !important; border: 0 !important; box-shadow: none; }
+.msg.bot .bubble.sticker-only::before { display: none; }
+@keyframes sticker-in { from { transform: scale(.6) rotate(-8deg); opacity: 0; } to { transform: none; opacity: 1; } }
+.sticker-menu { position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 20; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 8px;
+  width: min(360px, calc(100vw - 24px)); background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.6), var(--glow); }
+.sticker-menu button { aspect-ratio: 1; min-height: 64px; padding: 4px; border: 0; border-radius: 12px; background: transparent; cursor: pointer; }
+.sticker-menu button:active, .sticker-menu button:focus-visible { background: rgba(0, 229, 255, .14); outline: 2px solid var(--cyan-2); outline-offset: -2px; }
+.sticker-menu svg { display: block; width: 100%; height: 100%; }
+@media (prefers-reduced-motion: reduce) { .sticker, .react-pill.pop i { animation: none; } }

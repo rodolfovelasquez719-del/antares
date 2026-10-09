@@ -84,7 +84,7 @@ export class Voice {
       };
       try {
         this.synth.cancel();
-        const clean = String(text).replace(/https?:\/\/\S+/g, "").replace(/[*_#`>]+/g, " ").slice(0, 4000);
+        const clean = String(text).replace(/https?:\/\/\S+/g, "").replace(/\p{Extended_Pictographic}|[\uFE0F\u200D]/gu, "").replace(/[*_#`>]+/g, " ").slice(0, 4000);
         const u = new SpeechSynthesisUtterance(clean);
         if (this.voice) { u.voice = this.voice; u.lang = this.voice.lang; } else { u.lang = "es-CR"; }
         u.rate = this.rate || 0.95;  // pausado

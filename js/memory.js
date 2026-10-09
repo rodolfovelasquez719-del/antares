@@ -23,6 +23,8 @@ export const DEFAULT_CONFIG = {
   autoLearn: true,       // aprender datos del usuario automáticamente
   geminiModel: "",       // último modelo que respondió bien
   noGrounding: {},       // modelos donde la búsqueda de Google no está disponible
+  socialOn: true,        // v1.10: reacciones con emoji y stickers
+  socialFreq: "normal",  // "poco" | "normal"
   configRev: CONFIG_REV,
 };
 
@@ -212,6 +214,8 @@ export const memory = {
   addMessage(role, content, extra = null) {
     const msg = { id: newId(), role, content, ts: new Date().toISOString() };
     if (extra && Array.isArray(extra.sources) && extra.sources.length) msg.sources = extra.sources.slice(0, 8);
+    if (extra && extra.sticker) msg.sticker = String(extra.sticker).slice(0, 40);
+    if (extra && extra.reactOnly) msg.reactOnly = String(extra.reactOnly).slice(0, 8);
     if (extra && extra.media) {
       msg.media = extra.media.map((x) => {
         const out = { kind: x.kind };
@@ -231,6 +235,19 @@ export const memory = {
     return { ok: r.ok, pruned: r.pruned, id: msg.id };
   },
   clearHistory() { thumbs.clear(); return rawSave(K_HISTORY, []).ok; },
+  // v1.10: reacción de Antares ("a") o del usuario ("u") sobre un mensaje; emoji null la quita
+  setReaction(id, who, emoji) {
+    if (!id || (who !== "a" && who !== "u")) return { ok: false };
+    const h = load(K_HISTORY, []);
+    const m = h.find((x) => x.id === id);
+    if (!m) return { ok: false };
+    const r = { ...(m.reactions || {}) };
+    if (emoji) r[who] = String(emoji).slice(0, 8); else delete r[who];
+    if (Object.keys(r).length) m.reactions = r; else delete m.reactions;
+    const res = saveHistory(h);
+    return { ok: res.ok, pruned: res.pruned, reactions: m.reactions || null };
+  },
+  getMessage(id) { return load(K_HISTORY, []).find((x) => x.id === id) || null; },
 
   getFactItems() {
     return load(K_FACTS, []).map((f, i) => ({ id: f.id || f.ts || String(i), fact: f.fact, ts: f.ts, auto: !!f.auto }));
