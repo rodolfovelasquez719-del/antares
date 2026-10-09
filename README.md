@@ -103,6 +103,33 @@ Actualizar.
 - Funciona sin conexión para abrir la app (service worker "primero red" con espera de 3 s y
   respaldo en caché).
 
+## Novedades de la 1.8.1 (fotos y videos más precisos)
+
+Tras un audit con 19 casos reales (factura, circular, nota a mano, etiqueta de fórmula, letrero,
+captura de un error, tabla, Arduino, cámaras CCTV, foto oscura y borrosa, foto de 4000×3000,
+foto con rotación EXIF, HEIC, dos fotos juntas, video .mp4 y .mov) con Gemini en vivo:
+
+- Reglas nuevas para fotos: responde primero lo que se preguntó, lee montos, fechas y códigos
+  exactos y con cifras (antes a veces los escribía en palabras), dice cuando una foto está oscura
+  o borrosa en vez de inventar un número, suma tablas fila por fila, da pasos numerados para
+  conectar equipos y va al grano (sin "Con mucho gusto…" ni ofrecimientos al final).
+- Preguntas de seguimiento: la foto o el video sigue "a la vista" en las siguientes preguntas
+  ("¿y cuánto pagué por los pañales?") durante 8 mensajes o 30 minutos. Esas fotos viven solo en
+  la memoria RAM: no se guardan en disco y se olvidan al bloquear, al borrar la conversación o al
+  recargar la app. Los videos grandes reutilizan el archivo ya subido (no se suben otra vez).
+- Foto sola: pregunta por defecto "¿Qué es esto? … léame los datos importantes".
+- Indicador en el chat: "Analizando la foto…", "Analizando las 2 fotos…", "Subiendo el video
+  (6,5 MB)… 40 %", "Gemini está procesando el video…". El botón Detener también cancela la subida.
+- HEIC/HEIF (iPhone): si el navegador no puede abrirla, se envía el original (Gemini sí la
+  entiende), con la etiqueta "HEIC" en lugar de la miniatura.
+- Archivos dañados o no compatibles: aviso claro en español (antes salía el error del navegador
+  en inglés). Tamaños con coma decimal ("6,5 MB").
+- Se quitan caracteres japoneses o chinos que a veces cuela el modelo ("con何か más").
+
+Límites: la foto de seguimiento no sobrevive a una recarga; el HEIC sin miniatura en Chrome;
+los videos se envían sin recomprimir (los de más de 4 MB van por la Files API); las sumas de
+tablas las hace el modelo y conviene revisarlas.
+
 ## Novedades de la 1.8.0 (manos libres, juegos y robótica)
 
 ### Modo «Hey Antares» (opcional, apagado por defecto)

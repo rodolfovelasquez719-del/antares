@@ -756,3 +756,12 @@ html[data-fs="3"] .msg-actions .mini-btn, html[data-fs="3"] .sources a, html[dat
 .rb-projects h4 { margin: 8px 0 4px; font-family: var(--font-hud); font-size: 12px; letter-spacing: 1.3px; color: var(--cyan-2); }
 .rb-projects ul { margin: 0; padding-left: 20px; font-family: var(--font-read); font-size: 15px; line-height: 1.5; color: var(--text); }
 .tutor-chip .mini-btn { min-height: 44px; min-width: 64px; }
+
+/* ---------- v1.8.1: fotos y videos ---------- */
+.msg.bot .bubble.streaming.pending { color: var(--muted, #86aebd); font-style: italic; display: inline-flex; align-items: center; gap: 10px; }
+.msg.bot .bubble.streaming.pending::after { content: ""; order: -1; width: 14px; height: 14px; flex: none; margin: 0; vertical-align: 0; background: none; border-radius: 50%; border: 2px solid var(--cyan); border-right-color: transparent; animation: spin181 0.9s linear infinite; box-shadow: 0 0 8px var(--cyan); }
+@keyframes spin181 { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .msg.bot .bubble.streaming.pending::after { animation: none; } }
+.att .pdf-chip { font-size: 12px; }
+.pdf-chip.img-chip { background: linear-gradient(180deg, rgba(0,229,255,.16), transparent 60%); }
+.pdf-chip.img-chip::before { content: attr(data-label); color: var(--cyan); }

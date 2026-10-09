@@ -19,8 +19,36 @@ import * as Cubic from "./cubic.js";
 import * as Mail from "./mail.js";
 import * as Logbook from "./logbook.js";
 
-const APP_VERSION = "1.8.0";
-const DEFAULT_MEDIA_PROMPT = "Describa lo que ve.";
+const APP_VERSION = "1.8.1";
+// Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
+const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
+const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
+const DEFAULT_PROMPTS_RE = /^(Describa lo que ve\.|¿Qué es esto\? Dígamelo en pocas palabras.*|¿Qué se ve en este video\? Resúmalo.*|Resuma este documento: puntos clave.*)$/;
+// Fotos y videos recientes que siguen "a la vista" para preguntas de seguimiento ("¿y cuánto pagué de pañales?").
+// Solo en memoria RAM (nunca en disco): se borran al bloquear, al borrar la conversación o al recargar.
+const sessionMedia = new Map(); // id del mensaje -> { items, ts }
+const FOLLOW_MAX_MSGS = 8, FOLLOW_MAX_MS = 30 * 60 * 1000, FOLLOW_MAX_TURNS = 2;
+function rememberMedia(id, items) {
+  if (!id || !items.length) return;
+  sessionMedia.set(id, { items, ts: Date.now() });
+  while (sessionMedia.size > FOLLOW_MAX_TURNS) sessionMedia.delete(sessionMedia.keys().next().value);
+}
+// Historial para el modelo; las fotos recientes vuelven a ir con su mensaje (como items, se convierten en runJob)
+function historyForModel(limit) {
+  const h = memory.getHistory(limit);
+  const recent = new Set(h.slice(-FOLLOW_MAX_MSGS).map((m) => m.id));
+  return h.map(({ id, role, content }) => {
+    const sm = sessionMedia.get(id);
+    const keep = sm && recent.has(id) && Date.now() - sm.ts < FOLLOW_MAX_MS;
+    return keep ? { role, content, items: sm.items } : { role, content };
+  });
+}
+function forgetSessionMedia() { sessionMedia.clear(); }
+const mediaWord = (items) => {
+  const n = items.length, v = items.filter((i) => i.kind === "video").length, d = items.filter((i) => i.kind === "pdf").length;
+  if (n > 1) return v === n ? `los ${n} videos` : d === n ? `los ${n} documentos` : v || d ? `los ${n} archivos` : `las ${n} fotos`;
+  return v ? "el video" : d ? "el documento" : "la foto";
+};
 const DEFAULT_PDF_PROMPT = "Resuma este documento: puntos clave, fechas, montos y lo que usted deba hacer.";
 const $ = (id) => document.getElementById(id);
 const body = document.body;
@@ -276,13 +304,19 @@ function renderMedia(b, media) {
     } else {
       const img = document.createElement("img");
       img.alt = label;
+      // la foto carga después de pintar la burbuja: si es de los últimos mensajes, se baja para que se vea
+      // también la burbuja "Analizando la foto…" (antes quedaba tapada por el botón Detener)
+      img.addEventListener("load", () => {
+        const wrap = img.closest(".msg"), kids = els.messages.children;
+        if (wrap && [...kids].slice(-3).includes(wrap)) scrollToBottom(false);
+      }, { once: true });
       const src = m.url || m.thumb;
       if (src) item.appendChild(img), (img.src = src);
       else if (m.thumbId) {
         thumbs.get(m.thumbId).then((t) => { if (t) { img.src = t; item.prepend(img); ph.remove(); } });
       }
       const ph = document.createElement("div");
-      ph.className = "ph"; ph.textContent = m.kind === "video" ? "[video]" : "[foto]";
+      ph.className = "ph"; ph.textContent = m.kind === "video" ? "[video]" : m.label === "HEIC" ? "[foto HEIC]" : "[foto]";
       if (!src) item.appendChild(ph);
     }
     if (m.kind === "video" && !m.url) {
@@ -531,32 +565,59 @@ async function runJob(job) {
   setVista("chat");
   setEstado("hablando");
   let stream = null, uploadMs = 0;
+  let pending = null; // burbuja "Analizando la foto…" hasta que llega el primer texto
+  const setPending = (txt) => {
+    if (!pending) { stream = createStreamingBubble(); stream.bubble.classList.add("pending"); pending = stream; scrollToBottom(false); setTimeout(() => scrollToBottom(false), 350); }
+    if (stream === pending && stream.bubble.classList.contains("pending")) stream.bubble.textContent = txt;
+    els.connSub.textContent = txt.replace(/^Gemini /, "");
+  };
   try {
-    let media = null;
-    if (job.items.length && client.isConfigured()) {
+    let media = null, history = job.history;
+    const histItems = (job.history || []).flatMap((h) => h.items || []);
+    if ((job.items.length || histItems.length) && client.isConfigured()) {
       const tUp = performance.now();
+      if (job.items.length) setPending(`Analizando ${mediaWord(job.items)}…`);
       try {
-        const res = await toGeminiMedia(config.geminiApiKey, job.items, {
-          onProgress: (st) => { els.connSub.textContent = st === "subiendo" ? "Subiendo archivo…" : "Procesando archivo…"; },
+        const all = [...histItems, ...job.items];
+        const res = await toGeminiMedia(config.geminiApiKey, all, {
+          signal: abortCtrl.signal,
+          onProgress: (st, pct, it) => {
+            const w = it && it.kind === "video" ? "el video" : it && it.kind === "pdf" ? "el documento" : "la foto";
+            setPending(st === "subiendo" ? `Subiendo ${w}${it ? " (" + formatBytes(it.size) + ")" : ""}… ${pct || 0} %` : `Gemini está procesando ${w}…`);
+          },
         });
-        media = res.media;
+        // se reparten las partes: primero las del historial (en orden), luego las del mensaje nuevo
+        let k = 0;
+        history = (job.history || []).map((h) => {
+          if (!h.items) return h;
+          const m = res.media.slice(k, k + h.items.length); k += h.items.length;
+          return { role: h.role, content: h.content, media: m };
+        });
+        media = job.items.length ? res.media.slice(k) : null;
         uploadMs = res.uploaded ? Math.round(performance.now() - tUp) : 0;
+        if (res.uploaded && job.items.length) setPending(`Analizando ${mediaWord(job.items)}…`);
       } catch (e) {
+        if (stream) { stream.wrap.remove(); stream = null; }
         if (epoch !== lockEpoch) return;
+        if (abortCtrl.signal.aborted) { showNote("Respuesta detenida."); setEstado(baseEstado()); return; }
         console.warn("Antares media:", e);
-        const what = job.items.length > 1 ? "los archivos" : (job.items[0].kind === "video" ? "el video" : job.items[0].kind === "pdf" ? "el PDF" : "la foto");
-        renderError({ kind: "media", title: "No pude enviar el archivo", text: `No pude subir ${what}. Revise su conexión e intente de nuevo, o pruebe con un video más corto.`, details: String(e.message || e) }, () => runJob(job));
+        const what = job.items.length ? mediaWord(job.items) : "la foto anterior";
+        const big = job.items.some((i) => i.kind === "video" && i.size > 50 * 1024 * 1024);
+        renderError({ kind: "media", title: "No pude enviar el archivo",
+          text: `No pude subir ${what}. Revise su conexión e intente de nuevo${big ? ", o grabe un video más corto" : ""}.`,
+          details: String(e.message || e) }, () => runJob(job));
         setEstado("error");
         return;
       }
     }
-    if (abortCtrl.signal.aborted) { showNote("Respuesta detenida."); setEstado(baseEstado()); return; }
+    if (abortCtrl.signal.aborted) { if (stream) stream.wrap.remove(); showNote("Respuesta detenida."); setEstado(baseEstado()); return; }
     const search = !media && !!config.webSearch && needsSearch(job.prompt);
-    const r = await client.ask(job.prompt, job.history, job.facts, {
+    const r = await client.ask(job.prompt, history, job.facts, {
       search, media, signal: abortCtrl.signal, extraSystem: job.extraSystem || "",
       onChunk: (partial) => {
         if (!stream) stream = createStreamingBubble();
         const near = isNearBottom();
+        if (stream.bubble.classList.contains("pending")) { stream.bubble.classList.remove("pending"); els.connSub.textContent = "Respondiendo…"; }
         stream.bubble.textContent = partial;
         if (near) scrollToBottom(false);
       },
@@ -816,14 +877,17 @@ function sendMessage(text, items = [], opts = {}) {
     return true;
   }
   const label = items.map((i) => (i.kind === "video" ? "[video]" : i.kind === "pdf" ? "[pdf]" : "[foto]")).join(" ");
-  const prompt = text || (items.some((i) => i.kind === "pdf") ? DEFAULT_PDF_PROMPT : DEFAULT_MEDIA_PROMPT);
-  // al modelo solo le mandamos el texto del historial (las miniaturas no)
-  const history = memory.getHistory(20).map(({ role, content }) => ({ role, content }));
+  const prompt = text || (items.some((i) => i.kind === "pdf") ? DEFAULT_PDF_PROMPT
+    : items.length && items.every((i) => i.kind === "video") ? DEFAULT_VIDEO_PROMPT : DEFAULT_MEDIA_PROMPT);
+  // historial en texto; las fotos/videos recientes de esta sesión vuelven a ir para las preguntas de seguimiento
+  const history = historyForModel(20);
   const facts = memory.getFacts();
   setVista("chat");
-  renderUser(text, items.map((i) => ({ kind: i.kind, url: i.url, thumb: i.thumb, name: i.name })));
+  renderUser(text, items.map((i) => ({ kind: i.kind, url: i.url, thumb: i.thumb, name: i.name, label: i.label })));
   const thumbsToKeep = items.map((i) => ({ kind: i.kind, thumb: i.thumb && i.thumb.length < 16000 ? i.thumb : "", ...(i.kind === "pdf" ? { name: String(i.name || "").slice(0, 80) } : {}) }));
-  handleSave(memory.addMessage("user", [label, prompt].filter(Boolean).join(" "), items.length ? { media: thumbsToKeep } : null), "el mensaje");
+  const saved = memory.addMessage("user", [label, prompt].filter(Boolean).join(" "), items.length ? { media: thumbsToKeep } : null);
+  handleSave(saved, "el mensaje");
+  if (items.length) rememberMedia(saved.id, items);
   currentJob = runJob({ text, items, prompt, history, facts, speak, extraSystem: tutorMode ? Robotics.TUTOR_SYSTEM : "" });
   return true;
 }
@@ -892,11 +956,18 @@ function renderAttachments() {
         const chip = document.createElement("span");
         chip.className = "pdf-chip"; chip.textContent = (a.name || "PDF").slice(0, 18);
         box.appendChild(chip);
-      } else if (a.thumb || a.kind === "image") {
+      } else if (a.thumb || (a.kind === "image" && a.url)) {
         const img = document.createElement("img");
         img.src = a.thumb || a.url; img.alt = a.kind === "video" ? "Video adjunto" : "Foto adjunta";
         box.appendChild(img);
-      } else box.append("video");
+      } else {
+        // HEIC u otra foto que el navegador no puede mostrar: se envía igual, con una etiqueta
+        const chip = document.createElement("span");
+        chip.className = "pdf-chip img-chip"; chip.dataset.label = a.kind === "video" ? "VIDEO" : a.label || "FOTO";
+        chip.textContent = formatBytes(a.size);
+        chip.title = a.name || "";
+        box.appendChild(chip);
+      }
       if (a.kind === "video") {
         const bd = document.createElement("span"); bd.className = "badge"; bd.textContent = "▶ " + formatBytes(a.size);
         box.appendChild(bd);
@@ -929,7 +1000,10 @@ async function addFiles(fileList) {
     } catch (e) {
       attachments = attachments.filter((x) => x !== slot);
       setVista("chat");
-      showNote(`No pude usar "${f.name || "el archivo"}": ${e.message || e}`, { warn: true });
+      const msg = String(e.message || e);
+      // los errores del navegador vienen en inglés: se muestra un mensaje claro en español
+      const es = /[áéíóúñ¿]|^(la|el|este|solo|pruebe)\b/i.test(msg) ? msg : "no pude abrir ese archivo (formato no compatible o archivo dañado). Pruebe con una foto JPG o PNG.";
+      showNote(`No pude usar "${f.name || "el archivo"}": ${es.replace(/^[A-ZÁÉÍÓÚ]/, (c) => c.toLowerCase())}`, { warn: true });
     }
     renderAttachments();
   }));
@@ -1523,6 +1597,7 @@ async function renderStorage() {
 els.clearHistory.addEventListener("click", () => {
   if (!confirm("¿Borrar toda la conversación de este dispositivo?")) return;
   memory.clearHistory();
+  forgetSessionMedia();
   els.messages.replaceChildren();
   vista = "inicio";
   setSettingsStatus("Conversación borrada");
@@ -1739,6 +1814,7 @@ function lockApp(reason = "manual") {
   setMenu(false);
   for (const a of attachments) if (a.url) URL.revokeObjectURL(a.url);
   attachments = []; renderAttachments();
+  forgetSessionMedia();
   els.input.value = ""; autosize();
   els.messages.replaceChildren();
   els.announcer.textContent = "";
@@ -1759,7 +1835,7 @@ function loadData() {
   els.messages.replaceChildren();
   for (const m of memory.getHistory(40)) {
     if (m.role === "user") {
-      const text = String(m.content || "").replace(/^(\[(foto|video|pdf)\]\s*)+/, "").replace(/^Describa lo que ve\.$/, "");
+      const text = String(m.content || "").replace(/^(\[(foto|video|pdf)\]\s*)+/, "").replace(DEFAULT_PROMPTS_RE, "");
       renderUser(m.media ? text : m.content, m.media);
     } else renderBot(m.content, { sources: m.sources || [] });
   }

@@ -28,6 +28,39 @@ const THINKING_LEVEL = "low";
 
 export const DEFAULT_ASSISTANT_NAME = "Antares";
 
+// Reglas cuando hay fotos, videos o PDF en la conversación (v1.8.1, tras el audit con fotos reales)
+export const MEDIA_RULES =
+  "FOTOS, VIDEOS Y DOCUMENTOS ADJUNTOS. Siga estas reglas:\n" +
+  "1. Responda primero exactamente lo que el usuario preguntó, en la primera oración. Si solo mandó la foto, " +
+  "diga en una oración qué es (factura, etiqueta, letrero, pantalla con un error, placa electrónica…) y lo más importante que muestra.\n" +
+  "2. Lea el texto tal como aparece. Copie montos, fechas, horas, cantidades, códigos y nombres exactos y escríbalos " +
+  "con cifras, como en la imagen (por ejemplo ₡19.695,00, 15/03/2027, ORD-409), nunca en palabras.\n" +
+  "3. Si una parte está borrosa, oscura, cortada, tapada o es ilegible, dígalo claramente y NO adivine ni invente " +
+  "números, nombres o datos; sugiera tomar otra foto con más luz, de frente y enfocada. Si no está seguro, dígalo.\n" +
+  "4. Cuando la pregunta trata de una foto o video enviado antes en la conversación, use esa imagen para responder.\n" +
+  "5. Para tablas o cuentas, sume fila por fila, revise el resultado antes de responder y dé el resultado con cifras.\n" +
+  "6. Para conectar o armar equipos (electrónica, cámaras, cables), primero identifique el modelo o las piezas que se ven, " +
+  "luego dé pasos cortos y numerados en texto plano (1., 2., 3.) y advierta sobre voltaje o polaridad si aplica.\n" +
+  "7. En videos, describa lo que pasa en orden y lea el texto visible. En capturas de pantalla con un error, " +
+  "diga el código del error tal cual, qué significa en palabras simples y qué hacer.\n" +
+  "8. Sea breve y directo: de 1 a 4 oraciones, salvo que le pidan leer todo, resumir o dar pasos. No empiece con " +
+  "fórmulas de cortesía (\"Con mucho gusto\") ni termine ofreciendo más ayuda. Sin relleno (\"como usted puede ver\") y, " +
+  "en estas respuestas, normalmente sin decir el nombre del usuario. No describa colores ni fondos si no se lo piden.\n" +
+  "9. Escriba solo en español, sin palabras ni caracteres de otros idiomas (salvo el texto que aparece en la imagen).";
+
+// Preguntas de cálculo sobre una foto (sumar una tabla, promedios…): con razonamiento "medium" el modelo
+// acertó 3/3 la suma de la tabla del audit; con "low" acertaba más o menos la mitad de las veces.
+export const CALC_RE = /\b(sum[ae]n?|sumar|s[uú]melo|en total|entre tod[oa]s|promedio|calcul\w*|diferencia|porcentaje|multiplic\w*|divid\w*|cu[aá]nto (da|sale|queda|es)|cu[aá]nt[oa]s .{0,40}(fueron|hay|son|suman) .{0,30}(total|tod[oa]s))\b/i;
+export const needsMath = (text) => CALC_RE.test(text || "");
+
+const CJK = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uff66-\uff9f]/;
+// Algunos modelos "lite" cuelan a veces una palabra en japonés o chino (p. ej. "con何か más"). Se quita si el
+// usuario no escribió en esos idiomas.
+export function cleanReply(text, userText = "") {
+  if (!text || !CJK.test(text) || CJK.test(userText || "")) return text;
+  return text.replace(new RegExp(CJK.source + "+", "g"), "").replace(/[ \t]{2,}/g, " ").replace(/ ([,.;:?!])/g, "$1");
+}
+
 const SYSTEM_PROMPT_TEMPLATE = (name) =>
   `Usted es ${name}, un asistente virtual personal. Habla en español de Costa Rica, ` +
   `con el "usted" respetuoso y cálido propio de los costarricenses.\n` +
@@ -177,15 +210,19 @@ export class GeminiClient {
     }
     if (search) system += "\n\nSi usa resultados de búsqueda, resúmalos con sus palabras en texto plano.";
     const hasMedia = !!(media && media.length);
-    if (hasMedia) {
-      system += "\n\nEl usuario adjuntó fotos, videos o documentos: descríbalos o analícelos según lo que pida, " +
-        "con precisión y sin inventar detalles que no aparezcan.";
-    }
+    const allMedia = [...(media || []), ...history.flatMap((m) => m.media || [])];
+    const anyMedia = allMedia.length > 0; // también cuenta una foto enviada antes (preguntas de seguimiento)
+    if (anyMedia) system += "\n\n" + MEDIA_RULES;
     const messages = [...history, { role: "user", content: userMessage, media: hasMedia ? media : undefined }];
-    return this.callApi(system, messages, {
-      search: search && !hasMedia, onChunk, stream: !!onChunk, signal,
-      ...(hasMedia ? { timeoutMs: 120000, budgetMs: 240000, maxModels: MAX_MODELS_MEDIA, retries: false } : {}),
+    // Fotos: si un modelo no empieza a responder en 30 s se pasa al siguiente. Videos y PDF pueden tardar más.
+    const heavy = allMedia.some((m) => !/^image\//.test(m.mime || ""));
+    const r = await this.callApi(system, messages, {
+      thinkingLevel: anyMedia && needsMath(userMessage) ? "medium" : THINKING_LEVEL,
+      search: search && !anyMedia, onChunk: onChunk && ((t) => onChunk(cleanReply(t, userMessage))), stream: !!onChunk, signal,
+      ...(anyMedia ? { timeoutMs: heavy ? 120000 : 30000, budgetMs: heavy ? 240000 : 90000, maxModels: MAX_MODELS_MEDIA, retries: false } : {}),
     });
+    if (r.ok && r.text) r.text = cleanReply(r.text, userMessage);
+    return r;
   }
 
   // Consulta que debe responder solo JSON (trivia y su verificación). Sin historial ni datos personales.
@@ -304,9 +341,9 @@ export class GeminiClient {
   }
 
   // El cuerpo se arma una sola vez por mensaje: los adjuntos en base64 no se vuelven a serializar en cada intento.
-  static bodyString(sysJson, contentsJson, { thinking, search, maxTokens, json }) {
+  static bodyString(sysJson, contentsJson, { thinking, search, maxTokens, json, thinkingLevel = THINKING_LEVEL }) {
     const generationConfig = { maxOutputTokens: maxTokens, temperature: json ? 0.2 : 0.7 };
-    if (thinking) generationConfig.thinkingConfig = { thinkingLevel: THINKING_LEVEL };
+    if (thinking) generationConfig.thinkingConfig = { thinkingLevel };
     if (json) generationConfig.responseMimeType = "application/json";
     return `{"system_instruction":${sysJson},"contents":${contentsJson},"generationConfig":${JSON.stringify(generationConfig)}` +
       (search ? `,"tools":[{"google_search":{}}]` : "") + "}";
@@ -372,7 +409,7 @@ export class GeminiClient {
   async callApi(system, messages, {
     search = false, maxTokens = MAX_OUTPUT_TOKENS, stream = false, onChunk = null, models = null, json = false,
     budgetMs = TOTAL_BUDGET_MS, retries = true, timeoutMs = TIMEOUT_MS, thinking: thinkingOpt = true,
-    maxModels = MAX_MODELS, signal = null,
+    maxModels = MAX_MODELS, signal = null, thinkingLevel: levelOpt = THINKING_LEVEL,
   } = {}) {
     this.attempts = [];
     const t0 = performance.now();
@@ -418,14 +455,14 @@ export class GeminiClient {
       if (aborted()) return stopped("", "");
       if (performance.now() > deadline) { record("(resto)", "-", "se agotó el tiempo total", false); lastKind = lastKind || "timeout"; break; }
       const model = queue.shift();
-      let thinking = thinkingOpt, retried = false, countedModel = false;
+      let thinking = thinkingOpt, retried = false, countedModel = false, level = levelOpt;
       let useSearch = search && !this.noGrounding[model];
       for (;;) {
         const remaining = deadline - performance.now();
         if (remaining < 3000) break;
         if (!countedModel) { tried++; countedModel = true; }
         const url = `${GEMINI_BASE_URL}/${model}:${stream ? "streamGenerateContent?alt=sse" : "generateContent"}`;
-        const body = GeminiClient.bodyString(sysJson, contentsJson, { thinking, search: useSearch, maxTokens, json });
+        const body = GeminiClient.bodyString(sysJson, contentsJson, { thinking, search: useSearch, maxTokens, json, thinkingLevel: level });
         const ctrl = new AbortController();
         const onAbort = () => ctrl.abort();
         if (signal) signal.addEventListener("abort", onAbort, { once: true });
@@ -503,7 +540,10 @@ export class GeminiClient {
         record(model, code, `${err.status}${err.reason ? " " + err.reason : ""}: ${err.message}`, useSearch);
         lastExtra = `HTTP ${code} ${err.status} ${err.reason}\n${err.message}`.trim();
 
-        if (code === 400 && thinking && /thinking/i.test(err.message)) { thinking = false; continue; }
+        if (code === 400 && thinking && /thinking/i.test(err.message)) {
+          if (level !== THINKING_LEVEL) level = THINKING_LEVEL; else thinking = false; // "medium" no soportado -> "low" -> sin razonamiento
+          continue;
+        }
         // La búsqueda de Google no está en todos los planes/modelos: reintentar sin ella
         if (useSearch && code >= 400 && code < 500 && code !== 429 && !STOP_KINDS.has(kind)) {
           useSearch = false;

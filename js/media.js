@@ -49,9 +49,41 @@ async function loadImage(file) {
   } finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
 }
 
-// Foto -> JPEG comprimido (máx 1600 px) + miniatura pequeña
+// HEIC/HEIF (fotos del iPhone): Chrome y Firefox no las abren, pero Gemini sí las entiende, así que se envían tal cual.
+// (Un JPG/PNG/WEBP que el navegador no puede abrir está dañado: ese no se envía.)
+const RAW_IMAGE_MIME = { heic: "image/heic", heif: "image/heif" };
+const IMAGE_EXT = /\.(jpe?g|png|webp|gif|bmp|heic|heif|avif)$/i;
+export const MAX_RAW_IMAGE_BYTES = 20 * 1024 * 1024;
+export function isHeic(file) {
+  return /image\/hei[cf]/i.test(file.type || "") || /\.hei[cf]$/i.test(file.name || "");
+}
+function rawImageMime(file) {
+  const ext = ((file.name || "").split(".").pop() || "").toLowerCase();
+  if (RAW_IMAGE_MIME[ext]) return RAW_IMAGE_MIME[ext];
+  const t = (file.type || "").toLowerCase();
+  return Object.values(RAW_IMAGE_MIME).includes(t) ? t : "";
+}
+export function isImageFile(file) {
+  const t = (file.type || "").toLowerCase();
+  return t.startsWith("image/") || (!t || t === "application/octet-stream") && IMAGE_EXT.test(file.name || "");
+}
+
+// Foto -> JPEG comprimido (máx 1600 px, orientación EXIF aplicada) + miniatura pequeña.
+// Si el navegador no puede abrirla (p. ej. HEIC en Chrome), se envía el archivo original:
+// Gemini sí entiende HEIC/HEIF, PNG, WEBP y JPEG.
 async function prepareImage(file) {
-  const img = await loadImage(file);
+  let img;
+  try {
+    img = await loadImage(file);
+    if (!(img.width || img.naturalWidth)) throw new Error("sin tamaño");
+  } catch {
+    const mime = rawImageMime(file);
+    if (mime && file.size <= MAX_RAW_IMAGE_BYTES) {
+      return { kind: "image", mime, blob: file, size: file.size, thumb: "", url: "", name: file.name, raw: true, label: isHeic(file) ? "HEIC" : "FOTO" };
+    }
+    if (mime) throw new Error(`la foto HEIC pesa ${formatBytes(file.size)} y este navegador no puede reducirla. Envíela en JPG o tome la foto de nuevo.`);
+    throw new Error("este navegador no puede abrir esa foto (formato no compatible o archivo dañado). Pruebe con JPG o PNG.");
+  }
   const w = img.width || img.naturalWidth, h = img.height || img.naturalHeight;
   const big = drawScaled(img, w, h, MAX_SIDE);
   const blob = await canvasToBlob(big, JPEG_QUALITY);
@@ -116,8 +148,7 @@ async function preparePdf(file) {
 }
 
 export async function prepareFile(file) {
-  const type = file.type || "";
-  if (type.startsWith("image/")) return prepareImage(file);
+  if (isImageFile(file)) return prepareImage(file);
   if (isPdfFile(file)) return preparePdf(file);
   if (isVideoFile(file)) {
     if (file.size > MAX_VIDEO_BYTES) {
@@ -129,13 +160,31 @@ export async function prepareFile(file) {
 }
 
 export function formatBytes(n) {
-  if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + " MB";
+  if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(1).replace(".", ",") + " MB";
   return Math.max(1, Math.round(n / 1024)) + " KB";
 }
 
+// Subida con porcentaje (fetch no informa el avance de la subida)
+function xhrUpload(url, headers, blob, { onPct = null, signal = null } = {}) {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open("POST", url);
+    for (const [k, v] of Object.entries(headers)) x.setRequestHeader(k, v);
+    x.responseType = "text";
+    if (onPct) x.upload.onprogress = (ev) => { if (ev.lengthComputable) onPct(Math.min(100, Math.round((ev.loaded / ev.total) * 100))); };
+    x.onload = () => resolve({ ok: x.status >= 200 && x.status < 300, status: x.status, text: x.responseText || "" });
+    x.onerror = () => reject(new Error("Falló la conexión durante la subida"));
+    x.onabort = () => { const e = new Error("Subida cancelada"); e.name = "AbortError"; reject(e); };
+    if (signal) { if (signal.aborted) { x.abort(); return; } signal.addEventListener("abort", () => x.abort(), { once: true }); }
+    x.send(blob);
+  });
+}
+
 // Sube un archivo a la Files API (subida reanudable) y espera a que quede ACTIVE.
-export async function uploadToFilesApi(apiKey, item, { onProgress = null, timeoutMs = 180000 } = {}) {
+// onProgress(etapa, porcentaje): etapa = "subiendo" | "procesando"
+export async function uploadToFilesApi(apiKey, item, { onProgress = null, timeoutMs = 180000, signal = null } = {}) {
   const start = await fetch(GEMINI_UPLOAD_URL, {
+    signal,
     method: "POST",
     headers: {
       "x-goog-api-key": apiKey,
@@ -149,20 +198,19 @@ export async function uploadToFilesApi(apiKey, item, { onProgress = null, timeou
   });
   const uploadUrl = start.headers.get("x-goog-upload-url");
   if (!start.ok || !uploadUrl) throw new Error(`No se pudo iniciar la subida (HTTP ${start.status})`);
-  onProgress && onProgress("subiendo");
-  const up = await fetch(uploadUrl, {
-    method: "POST",
-    headers: { "X-Goog-Upload-Command": "upload, finalize", "X-Goog-Upload-Offset": "0" },
-    body: item.blob,
-  });
+  onProgress && onProgress("subiendo", 0);
+  const up = await xhrUpload(uploadUrl, { "X-Goog-Upload-Command": "upload, finalize", "X-Goog-Upload-Offset": "0" }, item.blob,
+    { signal, onPct: (pct) => onProgress && onProgress("subiendo", pct) });
   if (!up.ok) throw new Error(`La subida falló (HTTP ${up.status})`);
-  let file = (await up.json()).file || {};
+  let file = {};
+  try { file = JSON.parse(up.text).file || {}; } catch { /* */ }
   const t0 = performance.now();
-  onProgress && onProgress("procesando");
+  onProgress && onProgress("procesando", 100);
   while (file.state === "PROCESSING") {
     if (performance.now() - t0 > timeoutMs) throw new Error("Gemini tardó demasiado en procesar el archivo");
     await new Promise((r) => setTimeout(r, 2000));
-    const r = await fetch(`${GEMINI_FILES_URL}/${file.name}`, { headers: { "x-goog-api-key": apiKey } });
+    if (signal && signal.aborted) { const e = new Error("Subida cancelada"); e.name = "AbortError"; throw e; }
+    const r = await fetch(`${GEMINI_FILES_URL}/${file.name}`, { headers: { "x-goog-api-key": apiKey }, signal });
     if (!r.ok) throw new Error(`No se pudo consultar el archivo (HTTP ${r.status})`);
     file = await r.json();
   }
@@ -173,7 +221,7 @@ export async function uploadToFilesApi(apiKey, item, { onProgress = null, timeou
 // Convierte los adjuntos en partes para Gemini: inline si son pequeños, Files API si pesan más de 4 MB
 // (o si juntos no caben). El resultado queda guardado en cada adjunto (it.part), así un reintento
 // reutiliza el mismo fileUri / base64 sin volver a subir ni a codificar nada.
-export async function toGeminiMedia(apiKey, items, { onProgress = null } = {}) {
+export async function toGeminiMedia(apiKey, items, { onProgress = null, signal = null } = {}) {
   const viaFiles = new Set(items.filter((it) => it.size > FILES_API_FROM));
   let total = 0;
   for (const it of items) if (!viaFiles.has(it)) total += base64Size(it.size);
@@ -188,7 +236,7 @@ export async function toGeminiMedia(apiKey, items, { onProgress = null } = {}) {
     if (!fresh) {
       if (viaFiles.has(it)) {
         // Los archivos de la Files API duran 48 h; se reutilizan por un margen menor
-        it.part = { ...(await uploadToFilesApi(apiKey, it, { onProgress })), expires: Date.now() + 40 * 3600 * 1000 };
+        it.part = { ...(await uploadToFilesApi(apiKey, it, { onProgress: onProgress && ((st, pct) => onProgress(st, pct, it)), signal })), expires: Date.now() + 40 * 3600 * 1000 };
         uploaded++;
       } else {
         it.part = { mime: it.mime, data: await blobToBase64(it.blob) };
