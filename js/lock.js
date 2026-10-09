@@ -17,12 +17,15 @@ let heldDek = null;   // solo "modo comodidad" (passkey sin PRF): la clave queda
 
 const putMeta = (m) => tx("vault", "readwrite", (s) => { s.put(m, "meta"); });
 
-export async function loadMeta() {
-  try { meta = (await idbGet("vault", "meta")) || null; } catch { meta = null; }
+export async function loadMeta({ strict = false } = {}) {
+  // strict: un fallo de IndexedDB se propaga (no se confunde con "no hay código")
+  try { meta = (await idbGet("vault", "meta")) || null; } catch (e) { if (strict) throw e; meta = null; }
   setVaultMode(!!meta);
   return meta;
 }
 export const hasPin = () => !!meta;
+// solo cuando hay datos en claro en localStorage (prueba de que no hay código): seguir sin la base local
+export function assumeNoPin() { meta = null; setVaultMode(false); }
 export const prefs = () => ({ ...DEFAULT_PREFS, ...((meta && meta.prefs) || {}) });
 export async function savePrefs(p) {
   if (!meta) return false;

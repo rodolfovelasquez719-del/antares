@@ -2,6 +2,7 @@
 import { GeminiClient, DEFAULT_ASSISTANT_NAME, needsSearch } from "./gemini.js";
 import { memory, thumbs, requestPersistence, LS_LIMIT, flushWrites, isVaultMode, isUnlocked } from "./memory.js";
 import * as Lock from "./lock.js";
+import * as Vault from "./vault.js";
 import { showLock, runPinFlow, isShowing as lockShowing } from "./lockui.js";
 import { looksLikeImportantFact, buildConfirmationQuestion } from "./facts.js";
 import { Voice, isIOS, speechErrorMessage } from "./voice.js";
@@ -13,13 +14,13 @@ import * as Reminders from "./reminders.js";
 import * as Shopping from "./shopping.js";
 import * as Digest from "./digest.js";
 import * as Notify from "./notify.js";
-import { initPanels, openPanel, render as renderPanel, resetPanels } from "./panels.js";
+import { initPanels, openPanel, openGroup, currentView, groupOf, GROUP_LABEL, render as renderPanel, resetPanels } from "./panels.js";
 import * as Routes from "./routes.js";
 import * as Cubic from "./cubic.js";
 import * as Mail from "./mail.js";
 import * as Logbook from "./logbook.js";
 
-const APP_VERSION = "1.8.1";
+const APP_VERSION = "1.9.0";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -65,7 +66,7 @@ const els = {
   form: $("composer"), input: $("msg-input"), send: $("send-btn"),
   attachBtn: $("attach-btn"), attachMenu: $("attach-menu"),
   pickPhoto: $("pick-photo"), pickVideo: $("pick-video"), pickGallery: $("pick-gallery"), pickPdf: $("pick-pdf"),
-  openPanel: $("open-panel"), closePanel: $("close-panel"), panelView: $("panel-view"), panelRoot: $("panel-root"), panelTitle: $("panel-title"), quickbar: $("quickbar"),
+  closePanel: $("close-panel"), panelView: $("panel-view"), panelRoot: $("panel-root"), panelTitle: $("panel-title"), tabbar: $("tabbar"), wakeStatus: $("wake-status"),
   exportTxt: $("export-txt"), exportJson: $("export-json"),
   // configuración
   closeSettings: $("close-settings"), settingsTitle: $("settings-title"), settingsScroll: $("settings-scroll"),
@@ -216,6 +217,7 @@ function tick() {
   els.hora.textContent = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   els.hora.dateTime = d.toISOString();
   els.fecha.textContent = `${DIAS[d.getDay()]}, ${d.getDate()} de ${MESES[d.getMonth()]}`;
+  const fc = $("fecha-c"); if (fc) fc.textContent = `${DIAS[d.getDay()].slice(0, 3)} ${d.getDate()} ${MESES[d.getMonth()].slice(0, 3)}`;
   renderGreeting();
   updateConn();
 }
@@ -236,22 +238,68 @@ async function refreshWeather() {
 }
 
 // ---------- Teclado móvil: la app ocupa solo el área visible ----------
+// v1.9.0: el teclado se detecta contra la altura "en reposo" del área visible (por ancho de pantalla), no contra
+// innerHeight. En la PWA instalada de iPhone y en Android, innerHeight también se encoge con el teclado, así que la
+// comparación vieja (innerHeight - visualViewport.height) nunca detectaba el teclado y el campo quedaba debajo.
+const vpBase = new Map();          // ancho → mayor altura visible vista (sin teclado)
+let vpRaf = 0, kbSeen = false, typingTimer = 0;
+const coarse = window.matchMedia ? window.matchMedia("(pointer: coarse)") : { matches: false };
+function isTyping() { return document.activeElement === els.input; }
 function syncViewport() {
+  vpRaf = 0;
   const vv = window.visualViewport;
   const h = vv ? vv.height : window.innerHeight;
-  const top = vv ? vv.offsetTop : 0;
+  const top = vv ? Math.max(0, vv.offsetTop) : 0;
+  const w = Math.round(window.innerWidth);
+  const base = Math.max(vpBase.get(w) || 0, window.innerHeight, h);
+  // la base solo crece cuando no hay campo de texto enfocado (evita aprender la altura con el teclado abierto)
+  const field = document.activeElement && document.activeElement.matches && document.activeElement.matches("input, textarea, select, [contenteditable]");
+  if (!field || !vpBase.has(w)) vpBase.set(w, base);
+  const ref = vpBase.get(w);
   const near = isNearBottom();
+  const kb = Math.max(0, Math.round(ref - h));
+  const open = kb > 120 || window.innerHeight - h > 120;
   document.documentElement.style.setProperty("--app-h", `${Math.round(h)}px`);
+  document.documentElement.style.setProperty("--kb", `${open ? kb : 0}px`);
   els.app.style.top = `${Math.round(top)}px`;
-  body.classList.toggle("kb-open", window.innerHeight - h > 120);
-  if (near) scrollToBottom(false);
+  body.classList.toggle("kb-open", open);
+  if (open && isTyping()) kbSeen = true;
+  // Android: el botón Atrás esconde el teclado pero deja el foco → salir del modo escritura
+  if (!open && kbSeen && isTyping() && body.classList.contains("typing")) { kbSeen = false; els.input.blur(); }
+  if (near || isTyping()) scrollToBottom(false);
 }
+function queueViewport() { if (!vpRaf) vpRaf = requestAnimationFrame(syncViewport); }
+// el teclado se anima: volver a medir varias veces tras enfocar o soltar
+function settleViewport() { queueViewport(); [80, 200, 350, 600, 900].forEach((t) => setTimeout(queueViewport, t)); }
 if (window.visualViewport) {
-  window.visualViewport.addEventListener("resize", syncViewport);
-  window.visualViewport.addEventListener("scroll", syncViewport);
+  window.visualViewport.addEventListener("resize", queueViewport);
+  window.visualViewport.addEventListener("scroll", queueViewport);
 }
-window.addEventListener("resize", syncViewport);
-window.addEventListener("scroll", () => { if (window.scrollY) window.scrollTo(0, 0); });
+window.addEventListener("resize", queueViewport);
+window.addEventListener("orientationchange", settleViewport);
+// iOS desplaza la página para mostrar el campo: mientras se escribe se acompaña (la app sigue al área visible);
+// fuera del modo escritura se devuelve la página arriba.
+window.addEventListener("scroll", () => { if (window.scrollY && !isTyping()) window.scrollTo(0, 0); queueViewport(); });
+function setTyping(on) {
+  clearTimeout(typingTimer);
+  if (on) {
+    if (!coarse.matches && !body.classList.contains("kb-open")) return; // escritorio: sin modo escritura
+    body.classList.add("typing");
+    settleViewport();
+    return;
+  }
+  // pequeña espera: al tocar Enviar o un adjunto el diseño no salta bajo el dedo
+  typingTimer = setTimeout(() => {
+    if (isTyping()) return;
+    body.classList.remove("typing");
+    kbSeen = false;
+    if (window.scrollY) window.scrollTo(0, 0);
+    settleViewport();
+  }, 220);
+}
+els.input.addEventListener("focus", () => setTyping(true));
+els.input.addEventListener("blur", () => setTyping(false));
+syncViewport();
 
 // ---------- Render del chat ----------
 function isNearBottom() {
@@ -552,8 +600,20 @@ function renderConfirm(factText) {
 
 // ---------- Envío ----------
 function autosize() {
+  // crece hasta 5 líneas (22 px c/u + 22 px de relleno); después se desplaza por dentro
+  // si el campo está oculto (scrollHeight = 0) no se fija una altura: antes podía quedar sin espacio para el texto
+  if (!els.input.offsetParent || !els.input.scrollHeight) { els.input.style.height = ""; els.input.style.overflowY = ""; return; }
+  const near = isNearBottom();
+  const cs = getComputedStyle(els.input);
+  const lh = parseFloat(cs.lineHeight) || 22;
+  const max = Math.round(lh * 5 + (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0));
   els.input.style.height = "auto";
-  els.input.style.height = Math.min(els.input.scrollHeight, 120) + "px";
+  const full = els.input.scrollHeight;
+  els.input.style.height = Math.max(Math.min(full, max), 44) + "px";
+  els.input.style.maxHeight = max + "px";
+  els.input.style.overflowY = full > max ? "auto" : "hidden";
+  if (full <= max) els.input.scrollTop = 0; // el texto nunca queda desplazado fuera del cuadro
+  if (near) scrollToBottom(false);
 }
 
 // job: {text, items, prompt, history, facts}; en un reintento se reutiliza el mismo job (y los archivos ya subidos)
@@ -915,7 +975,7 @@ els.input.addEventListener("keydown", (ev) => {
     els.form.requestSubmit ? els.form.requestSubmit() : els.form.dispatchEvent(new Event("submit", { cancelable: true }));
   }
 });
-els.input.addEventListener("focus", () => setTimeout(() => scrollToBottom(false), 300));
+els.input.addEventListener("focus", () => { scrollToBottom(false); setTimeout(() => scrollToBottom(false), 350); });
 
 // Detener la respuesta en curso
 function stopResponse() {
@@ -1038,36 +1098,111 @@ els.toggleChat.addEventListener("click", () => setVista(body.classList.contains(
 els.openChat.addEventListener("click", () => setVista("chat"));
 els.setupOpen.addEventListener("click", () => openSettings({ focusKey: true }));
 
-// ---------- Paneles: recordatorios, compras, noticias ----------
+// ---------- Pestañas (Inicio · Personal · Trabajo · Ocio) y paneles ----------
+// Historial: una sola entrada para los paneles ({ antares: "panel", group, tab }); la vista se dibuja siempre al
+// instante y el historial solo se ajusta. Atrás: panel → portada de su pestaña → Inicio (botón de la app y del sistema).
 let panelOpen = false;
-function showPanel(name) {
-  if (!isUnlocked()) return;
+let panelPushed = false;   // hay una entrada de historial de paneles
+let skipPops = 0;          // retrocesos hechos por la propia app (la vista ya se dibujó)
+let histQueue = [];        // cambios de historial esperando a que termine un retroceso
+function histDo(fn) { if (skipPops > 0) histQueue.push(fn); else { try { fn(); } catch { /* */ } } }
+function syncHistory() {
+  histDo(() => {
+    if (!panelOpen) return;
+    if (panelPushed) history.replaceState(navState(), "");
+    else { history.pushState(navState(), ""); panelPushed = true; }
+  });
+}
+const PANEL_NAME = { noticias: "Resumen del día", recordatorios: "Recordatorios", compras: "Compras", rutas: "Rutas", cubica: "Cúbica", correo: "Correo", bitacora: "Bitácora", damas: "Damas chinas", trivia: "Trivia", robotica: "Robótica" };
+function markTab(section) {
+  els.tabbar.querySelectorAll(".tab").forEach((t) => { if (t.dataset.section === section) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current"); });
+}
+function paintPanelHeader(focus = true) {
+  const v = currentView();
+  els.panelTitle.textContent = v.landing ? GROUP_LABEL[v.group].toUpperCase() : (PANEL_NAME[v.tab] || "").toUpperCase();
+  els.closePanel.setAttribute("aria-label", v.landing ? "Volver al inicio" : `Volver a ${GROUP_LABEL[v.group]}`);
+  els.panelView.dataset.tabGroup = v.group;
+  markTab(v.group);
+  if (focus) els.panelTitle.focus({ preventScroll: true });
+}
+function navState() { const v = currentView(); return { antares: "panel", group: v.group, tab: v.tab }; }
+function enterPanelView() {
   if (!els.settingsView.hidden) closeSettings();
-  openPanel(name);
+  if (!els.settingsView.hidden) return false; // canceló por cambios sin guardar
+  if (document.activeElement === els.input) els.input.blur();
   els.chatView.hidden = true;
   els.panelView.hidden = false;
-  if (!panelOpen) { try { history.pushState({ antares: "panel" }, ""); panelPushed = true; } catch { /* */ } }
   panelOpen = true;
-  els.panelTitle.focus();
+  return true;
 }
-let panelPushed = false;
-window.addEventListener("popstate", () => { if (panelOpen) { panelPushed = false; hidePanel(); } });
+// abre un panel concreto (desde la portada, el chat, ?panel= o el service worker)
+function showPanel(name) {
+  if (!isUnlocked()) return;
+  if (!enterPanelView()) return;
+  openPanel(name);
+  paintPanelHeader();
+  syncHistory();
+}
+// abre la portada de una pestaña
+function showGroup(group) {
+  if (!isUnlocked()) return;
+  if (!enterPanelView()) return;
+  openGroup(group);
+  paintPanelHeader();
+  syncHistory();
+}
+function selectTab(section) {
+  if (section === "inicio") { if (panelOpen) goHome(); else setVista("inicio"); return; }
+  showGroup(section);
+}
+window.addEventListener("popstate", (ev) => {
+  const st = ev.state && ev.state.antares === "panel" ? ev.state : null;
+  if (skipPops > 0) {
+    if (--skipPops === 0) { const q = histQueue; histQueue = []; q.forEach((fn) => { try { fn(); } catch { /* */ } }); }
+    return;
+  }
+  if (st) { // adelante del navegador hacia un panel: solo si los paneles siguen abiertos
+    if (panelOpen) { panelPushed = true; if (st.tab) openPanel(st.tab); else openGroup(st.group); paintPanelHeader(); }
+    return;
+  }
+  panelPushed = false;
+  if (!panelOpen) return;
+  // Atrás del sistema: desde un panel vuelve a la portada de su pestaña; desde la portada, a Inicio
+  const v = currentView();
+  if (!v.landing) { openGroup(v.group); paintPanelHeader(); syncHistory(); return; }
+  hidePanel();
+});
 function hidePanel() {
   if (!panelOpen && els.panelView.hidden) { if (els.panelRoot) els.panelRoot.replaceChildren(); return; }
   els.panelView.hidden = true;
   els.panelRoot.replaceChildren();
   if (els.settingsView.hidden) els.chatView.hidden = false;
   panelOpen = false;
-  if (els.openPanel.isConnected) els.openPanel.focus({ preventScroll: true });
+  markTab("inicio");
+  const t = $("tab-inicio");
+  if (t && t.offsetParent) t.focus({ preventScroll: true });
 }
-els.openPanel.addEventListener("click", () => showPanel("recordatorios"));
+// vuelve a Inicio desde cualquier nivel de paneles
+function goHome() {
+  hidePanel();
+  if (panelPushed) {
+    panelPushed = false; skipPops++;
+    try { history.back(); } catch { skipPops--; }
+    // si el navegador no avisa el retroceso, no dejar el historial en espera
+    setTimeout(() => { if (skipPops > 0) { skipPops = 0; const q = histQueue; histQueue = []; q.forEach((fn) => { try { fn(); } catch { /* */ } }); } }, 1200);
+  }
+}
 els.closePanel.addEventListener("click", () => {
-  if (panelPushed) { panelPushed = false; history.back(); } else hidePanel();
+  const v = currentView();
+  if (v.landing) { goHome(); return; }
+  showGroup(v.group); // en un panel: volver a la portada de su pestaña
 });
-els.quickbar.addEventListener("click", (ev) => {
-  const b = ev.target.closest("button[data-panel]");
-  if (b) showPanel(b.dataset.panel);
+els.tabbar.addEventListener("click", (ev) => {
+  const b = ev.target.closest("button[data-section]");
+  if (b) selectTab(b.dataset.section);
 });
+// navegación dentro de los paneles (tarjeta de la portada o pestaña interna)
+function onPanelNav(v) { paintPanelHeader(v.from === "landing"); syncHistory(); }
 initPanels(els.panelRoot, (what) => { if (what === "reminders" || what === "notify") syncReminders(); }, {
   hasKey: () => !!(client && client.isConfigured()),
   download: (name, text, type) => downloadFile(name, text, type),
@@ -1093,8 +1228,8 @@ initPanels(els.panelRoot, (what) => { if (what === "reminders" || what === "noti
     sendMessage(q);
   },
   setTutor: (on) => { setTutor(on); hidePanelNow(); },
-});
-function hidePanelNow() { if (panelPushed) { panelPushed = false; history.back(); } else hidePanel(); setVista("chat"); }
+}, onPanelNav);
+function hidePanelNow() { goHome(); setVista("chat"); }
 
 // ---------- Modo tutor de robótica ----------
 function setTutor(on, { note = true } = {}) {
@@ -1264,6 +1399,8 @@ function paintWake() {
   els.wakeBtn.dataset.state = shown;
   els.wakeBtn.setAttribute("aria-pressed", String(!!config.wakeWord));
   els.wakeLabel.textContent = WAKE_TEXT[shown] || WAKE_TEXT.off;
+  // línea visible solo cuando "Hey Antares" está activo (el botón es un icono)
+  els.wakeStatus.textContent = shown === "off" || shown === "error" ? "" : (WAKE_TEXT[shown] || "");
   body.dataset.wake = shown;
 }
 let audioCtx = null;
@@ -1809,7 +1946,7 @@ function lockApp(reason = "manual") {
     if (historyPushed) { historyPushed = false; history.back(); }
     hideSettings();
   }
-  hidePanel();
+  goHome();
   resetPanels();
   setMenu(false);
   for (const a of attachments) if (a.url) URL.revokeObjectURL(a.url);
@@ -1845,7 +1982,7 @@ function loadData() {
 function afterUnlock() {
   lastActivity = Date.now();
   loadData();
-  body.classList.remove("booting");
+  bootReady();
   maybeOfferBirthday();
   syncReminders();
   reminderTick();
@@ -1921,6 +2058,43 @@ for (const input of Object.values(pickers)) {
 }
 window.addEventListener("antares:save-error", () => { if (isUnlocked()) storageFullNote("No pude guardar los últimos cambios"); });
 
+// ---------- Arranque vigilado (v1.9.0) ----------
+function withTimeout(promise, ms, label) {
+  let t;
+  return Promise.race([promise, new Promise((_, rej) => { t = setTimeout(() => rej(new Error(`${label}: sin respuesta en ${ms / 1000} s`)), ms); })]).finally(() => clearTimeout(t));
+}
+// metadatos del código: si IndexedDB falla o no responde se reintenta una vez. Nunca se asume "sin código" por un
+// fallo, salvo que haya datos en claro en localStorage (con código todo eso se guarda cifrado y se borra de ahí).
+async function loadMetaSafe() {
+  try { return await withTimeout(Lock.loadMeta({ strict: true }), 2000, "Base local"); }
+  catch {
+    Vault.resetDb();
+    try { indexedDB.open("antares-ping").onsuccess = (ev) => { try { ev.target.result.close(); } catch { /* */ } }; } catch { /* */ }
+    try { return await withTimeout(Lock.loadMeta({ strict: true }), 1500, "La base local (IndexedDB) no responde"); }
+    catch (e) {
+      let plain = false;
+      try { plain = !!localStorage.getItem("antares.config.v1"); } catch { /* */ }
+      if (!("indexedDB" in window) || plain) { console.warn("Antares: sin base local, sigue sin código", e); Lock.assumeNoPin(); return null; }
+      throw new Error(`La base local (IndexedDB) no responde: ${e && e.message ? e.message : e}`);
+    }
+  }
+}
+function bootReady() {
+  body.classList.remove("booting");
+  if (window.__antaresBoot) window.__antaresBoot.ready();
+}
+// al volver a la app (iOS PWA, bfcache): medir de nuevo la pantalla, el reloj y repintar
+function resumeRepaint() {
+  els.app.style.top = "0px";
+  if (window.scrollY && !isTyping()) window.scrollTo(0, 0);
+  syncViewport(); settleViewport();
+  try { tick(); } catch { /* */ }
+  if (!document.getElementById("boot-rescue") && window.__antaresBoot && window.__antaresBoot.done) body.classList.remove("booting");
+}
+window.addEventListener("pageshow", (ev) => { if (ev.persisted) resumeRepaint(); });
+window.addEventListener("focus", () => queueViewport());
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") resumeRepaint(); });
+
 async function init() {
   buildWave();
   els.version.textContent = `Antares Web ${APP_VERSION} · sus datos y su key se guardan solo en este navegador`;
@@ -1936,18 +2110,18 @@ async function init() {
   });
   syncViewport();
   setupServiceWorker();
-  await Lock.loadMeta();
+  await loadMetaSafe();
   if (Lock.hasPin()) {
     // con código: siempre arranca bloqueada; nada se descifra hasta ingresar el código
     config = memory.getConfig();
     client = makeClient("");
     setEstado("sinkey");
     showLock(afterUnlock);
-    body.classList.remove("booting");
+    bootReady();
   } else {
-    await memory.init().catch((e) => console.warn("Antares: migración", e));
+    await withTimeout(memory.init(), 6000, "migración").catch((e) => console.warn("Antares: migración", e));
     loadData();
-    body.classList.remove("booting");
+    bootReady();
     maybeOfferPin();
     maybeOfferBirthday();
     syncReminders();
@@ -1957,4 +2131,7 @@ async function init() {
   }
   requestPersistence();
 }
-init();
+init().catch((e) => {
+  console.error("Antares: arranque", e);
+  if (window.__antaresBoot) window.__antaresBoot.fail(`Arranque: ${e && e.message ? e.message : e}`);
+});

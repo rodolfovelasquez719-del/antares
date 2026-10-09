@@ -16,7 +16,68 @@
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="preload" href="fonts/orbitron-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/rajdhani-600-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=1.9.0">
+  <script>
+  /* v1.9.0 Arranque vigilado: si la app no queda lista en ~4 s (error de carga, actualización a medias, base local que no
+     responde, reanudación de iOS), se muestra una pantalla visible con Reintentar / Reparar en vez de una pantalla negra.
+     Script clásico y estilos en línea: funciona aunque fallen los módulos o styles.css. Nunca toca los datos cifrados. */
+  (function () {
+    var B = window.__antaresBoot = { t0: Date.now(), done: false, errors: [], shown: false };
+    var AUTO = "antares.autoRepair.v1";
+    function note(msg) { try { msg = String(msg || "").slice(0, 400); if (msg && B.errors.indexOf(msg) < 0) B.errors.push(msg); if (B.shown) paint(); } catch (e) {} }
+    window.addEventListener("error", function (ev) {
+      var t = ev && ev.target;
+      if (t && t !== window && (t.tagName === "SCRIPT" || t.tagName === "LINK")) note("No se pudo cargar " + (t.src || t.href || t.tagName));
+      else if (!B.done) note((ev && ev.message ? ev.message : "Error") + (ev && ev.filename ? " (" + String(ev.filename).split("/").pop() + ":" + ev.lineno + ")" : ""));
+    }, true);
+    window.addEventListener("unhandledrejection", function (ev) { if (!B.done) note("Promesa rechazada: " + (ev && ev.reason && (ev.reason.message || ev.reason))); });
+    function looksLikeLoadError() { return B.errors.some(function (m) { return /import|export|module|No se pudo cargar|SyntaxError|is not a function|null is not an object|Cannot read propert/i.test(m); }); }
+    B.ready = function () {
+      B.done = true;
+      try { sessionStorage.removeItem(AUTO); } catch (e) {}
+      var r = document.getElementById("boot-rescue"); if (r) r.remove();
+      B.shown = false;
+    };
+    B.repair = function () {
+      // Reparar: borra solo las copias guardadas de la app (cachés antares-*) y el service worker; los datos cifrados quedan.
+      var jobs = [];
+      try { if (window.caches) jobs.push(caches.keys().then(function (ks) { return Promise.all(ks.filter(function (k) { return k.indexOf("antares-") === 0; }).map(function (k) { return caches.delete(k); })); })); } catch (e) {}
+      try { if (navigator.serviceWorker) jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); })); } catch (e) {}
+      var go = function () { var u = location.pathname + "?r=" + Date.now() + location.hash; location.replace(u); };
+      Promise.all(jobs).then(go, go); setTimeout(go, 2500);
+    };
+    B.fail = function (msg) { note(msg); show(); };
+    function paint() {
+      var pre = document.getElementById("boot-rescue-log");
+      if (pre) pre.textContent = (B.errors.length ? B.errors.join("\n") : "Sin errores registrados: la app tardó más de lo normal en abrir.") + "\n\n" + navigator.userAgent + "\n" + Math.round((Date.now() - B.t0) / 100) / 10 + " s desde el inicio";
+    }
+    function show() {
+      if (B.done || B.shown || !document.body) return;
+      // una sola reparación automática si fue un error de carga (típico tras una actualización a medias)
+      try { if (looksLikeLoadError() && !sessionStorage.getItem(AUTO)) { sessionStorage.setItem(AUTO, "1"); B.repair(); return; } } catch (e) {}
+      B.shown = true;
+      var d = document.createElement("div");
+      d.id = "boot-rescue"; d.setAttribute("role", "alertdialog"); d.setAttribute("aria-labelledby", "boot-rescue-t"); d.setAttribute("aria-describedby", "boot-rescue-p");
+      d.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:flex;flex-direction:column;justify-content:center;gap:14px;padding:calc(env(safe-area-inset-top) + 24px) 24px calc(env(safe-area-inset-bottom) + 24px);background:#03060b;color:#e6f8ff;font:17px/1.45 system-ui,-apple-system,sans-serif;overflow:auto";
+      var btn = "min-height:52px;border-radius:14px;font:600 18px system-ui,-apple-system,sans-serif;cursor:pointer;padding:0 18px;";
+      d.innerHTML = '<h1 id="boot-rescue-t" tabindex="-1" style="margin:0;font-size:22px;letter-spacing:1px;color:#5ff1ff">Antares no terminó de abrir</h1>' +
+        '<p id="boot-rescue-p" style="margin:0;color:#a3c8d6">Puede pasar tras una actualización a medias o si el teléfono pausó la app. Toque <b style="color:#e6f8ff">Reintentar</b>. Si vuelve a pasar, toque <b style="color:#e6f8ff">Reparar</b>: borra solo las copias guardadas de la app; su key, su código y sus datos cifrados se conservan.</p>' +
+        '<button type="button" id="boot-retry" style="' + btn + 'border:0;background:#00e5ff;color:#03141a">Reintentar</button>' +
+        '<button type="button" id="boot-repair" style="' + btn + 'border:1px solid #00e5ff;background:transparent;color:#5ff1ff">Reparar</button>' +
+        '<details style="color:#a3c8d6"><summary style="min-height:44px;display:flex;align-items:center;cursor:pointer">Ver detalles</summary><pre id="boot-rescue-log" style="white-space:pre-wrap;word-break:break-word;font-size:13px;color:#e6f8ff;background:#0a1620;border-radius:10px;padding:10px;margin:0"></pre></details>';
+      document.body.appendChild(d);
+      paint();
+      document.getElementById("boot-retry").onclick = function () { location.reload(); };
+      document.getElementById("boot-repair").onclick = function () { this.textContent = "Reparando…"; this.disabled = true; B.repair(); };
+      try { document.getElementById("boot-rescue-t").focus(); } catch (e) {}
+    }
+    B.check = function () { if (!B.done && Date.now() - B.t0 >= 3900) show(); };
+    setTimeout(B.check, 4000);
+    // reanudación (iOS PWA / bfcache): si nunca terminó de abrir, recargar; si está abierta, la app se redibuja sola
+    window.addEventListener("pageshow", function (ev) { if (ev.persisted && !B.done) location.reload(); });
+    document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") setTimeout(B.check, 1500); });
+  })();
+  </script>
 </head>
 <body data-estado="reposo" class="booting">
 <div class="app" id="app">
@@ -31,62 +92,41 @@
       <button class="icon-btn" type="button" id="toggle-chat" aria-label="Ver conversación" aria-pressed="false">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v10H9.5L5 19.5v-4H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 9.5h8M8 12.5h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       </button>
-      <button class="icon-btn" type="button" id="open-panel" aria-label="Paneles: personal, trabajo, juegos y robótica">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
-      </button>
       <button class="icon-btn" type="button" id="open-settings" aria-label="Configuración">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M10.3 2.8h3.4l.5 2.4 1.7.8 2.1-1.3 2.4 2.4-1.3 2.1.8 1.7 2.4.5v3.4l-2.4.5-.8 1.7 1.3 2.1-2.4 2.4-2.1-1.3-1.7.8-.5 2.4h-3.4l-.5-2.4-1.7-.8-2.1 1.3-2.4-2.4 1.3-2.1-.8-1.7-2.4-.5v-3.4l2.4-.5.8-1.7-1.3-2.1 2.4-2.4 2.1 1.3 1.7-.8z"/></svg>
       </button>
     </header>
 
-    <!-- Panel HUD -->
-    <section class="hud" id="hud" aria-label="Panel de estado">
-      <div>
-        <span class="hud-label">HORA</span>
+    <!-- HUD compacto: hora, clima, conexión y modos en una sola línea -->
+    <section class="hud slim" id="hud" aria-label="Panel de estado">
+      <div class="hud-time">
+        <span class="hud-label sr-only">Hora</span>
         <time class="hud-big" id="hora">--:--</time>
-        <span class="hud-sub" id="fecha"></span>
+        <span class="sr-only" id="fecha"></span><span class="hud-sub" id="fecha-c" aria-hidden="true"></span>
       </div>
       <div id="weather-cell" hidden>
-        <span class="hud-label">ALAJUELA</span>
+        <span class="hud-label sr-only">Alajuela</span>
         <span class="hud-val" id="weather-temp"></span>
         <span class="hud-sub" id="weather-desc"></span>
       </div>
       <div id="conn-cell">
-        <span class="hud-label">CONEXIÓN</span>
+        <span class="hud-label sr-only">Conexión</span>
         <span class="hud-val"><i class="dot"></i><span id="conn">En línea</span></span>
         <span class="hud-sub" id="conn-sub"></span>
       </div>
+      <!-- Modos: manos libres y conducción (iconos) -->
+      <div class="mode-row" id="mode-row" role="group" aria-label="Modos">
+        <button type="button" class="mode-btn" id="wake-btn" aria-label="Hey Antares" aria-pressed="false" aria-describedby="wake-label">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 10.5v3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+          <i class="wake-dot" aria-hidden="true"></i><span class="sr-only" id="wake-label">Hey Antares</span>
+        </button>
+        <button type="button" class="mode-btn" id="drive-btn" aria-label="Modo conducción" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 16.5V12l2-5h10l2 5v4.5M5 16.5h14M5 16.5V19h2.5v-2.5M16.5 16.5V19H19v-2.5M5.5 12h13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="8" cy="14.2" r="1" fill="currentColor"/><circle cx="16" cy="14.2" r="1" fill="currentColor"/></svg>
+          <span class="mode-txt" id="drive-label">Conducción</span>
+        </button>
+      </div>
     </section>
-
-    <!-- Modos: manos libres y conducción -->
-    <div class="mode-row" id="mode-row" role="group" aria-label="Modos">
-      <button type="button" class="mode-btn" id="wake-btn" aria-pressed="false" aria-describedby="wake-label">
-        <i class="wake-dot" aria-hidden="true"></i><span id="wake-label">Hey Antares</span>
-      </button>
-      <button type="button" class="mode-btn" id="drive-btn" aria-pressed="false">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 16.5V12l2-5h10l2 5v4.5M5 16.5h14M5 16.5V19h2.5v-2.5M16.5 16.5V19H19v-2.5M5.5 12h13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="8" cy="14.2" r="1" fill="currentColor"/><circle cx="16" cy="14.2" r="1" fill="currentColor"/></svg>
-        <span id="drive-label">Conducción</span>
-      </button>
-    </div>
-
-    <nav class="quickbar home-only only reposo flex" id="quickbar" aria-label="Accesos">
-      <div class="qrow">
-        <button type="button" data-panel="noticias">Resumen del día</button>
-        <button type="button" data-panel="recordatorios">Recordatorios</button>
-        <button type="button" data-panel="compras">Compras</button>
-      </div>
-      <div class="qrow work" aria-label="Trabajo">
-        <button type="button" data-panel="rutas">Rutas</button>
-        <button type="button" data-panel="cubica">Cúbica</button>
-        <button type="button" data-panel="correo">Correo</button>
-        <button type="button" data-panel="bitacora">Bitácora</button>
-      </div>
-      <div class="qrow ocio" aria-label="Ocio">
-        <button type="button" data-panel="damas">Damas chinas</button>
-        <button type="button" data-panel="trivia">Trivia</button>
-        <button type="button" data-panel="robotica">Robótica</button>
-      </div>
-    </nav>
+    <p class="wake-status" id="wake-status" aria-hidden="true"></p>
 
     <!-- Escenario -->
     <main class="stage" id="stage">
@@ -204,7 +244,7 @@
   <!-- ===================== Paneles ===================== -->
   <section id="panel-view" class="view panel-view" aria-labelledby="panel-title" hidden>
     <header class="topbar">
-      <button class="icon-btn" type="button" id="close-panel" aria-label="Volver al asistente">
+      <button class="icon-btn" type="button" id="close-panel" aria-label="Volver">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <h1 class="page-title" id="panel-title" tabindex="-1">PANELES</h1>
@@ -383,6 +423,26 @@
       <button class="btn primary" type="button" id="save-settings">Guardar</button>
     </div>
   </section>
+
+  <!-- ===================== Barra de pestañas ===================== -->
+  <nav class="tabbar" id="tabbar" aria-label="Secciones">
+    <button type="button" class="tab" id="tab-inicio" data-section="inicio" aria-current="page">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3.4" fill="currentColor"/></svg>
+      <span>Inicio</span>
+    </button>
+    <button type="button" class="tab" id="tab-personal" data-section="personal" data-group="personal">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.2" r="3.6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4.8 20c.8-3.9 3.6-6 7.2-6s6.4 2.1 7.2 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span>Personal</span>
+    </button>
+    <button type="button" class="tab" id="tab-trabajo" data-section="trabajo" data-group="trabajo">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="7.5" width="17" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 7.5V5.5h6v2M3.5 12.5h17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      <span>Trabajo</span>
+    </button>
+    <button type="button" class="tab" id="tab-ocio" data-section="ocio" data-group="ocio">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 8.5h9a4 4 0 0 1 3.9 4.9l-.8 3.4a2.2 2.2 0 0 1-3.8.9L14 15.5h-4l-1.8 2.2a2.2 2.2 0 0 1-3.8-.9l-.8-3.4a4 4 0 0 1 3.9-4.9z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8.5 11v3M7 12.5h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="15.5" cy="11.6" r="1" fill="currentColor"/><circle cx="17" cy="13.6" r="1" fill="currentColor"/></svg>
+      <span>Ocio</span>
+    </button>
+  </nav>
 </div>
 
 <!-- Bloqueo con código -->
@@ -466,6 +526,38 @@
 </div>
 
 <noscript><p style="padding:20px;color:#e6f8ff">Antares necesita JavaScript activado.</p></noscript>
-<script type="module" src="js/app.js"></script>
+<!-- Módulos con versión: tras una actualización nunca se mezclan archivos viejos (caché HTTP) con nuevos -->
+<script type="importmap">
+{
+ "imports": {
+  "./js/app.js": "./js/app.js?v=1.9.0",
+  "./js/chinese-checkers.js": "./js/chinese-checkers.js?v=1.9.0",
+  "./js/cubic.js": "./js/cubic.js?v=1.9.0",
+  "./js/digest.js": "./js/digest.js?v=1.9.0",
+  "./js/facts.js": "./js/facts.js?v=1.9.0",
+  "./js/gemini.js": "./js/gemini.js?v=1.9.0",
+  "./js/lock.js": "./js/lock.js?v=1.9.0",
+  "./js/lockui.js": "./js/lockui.js?v=1.9.0",
+  "./js/logbook.js": "./js/logbook.js?v=1.9.0",
+  "./js/mail.js": "./js/mail.js?v=1.9.0",
+  "./js/media.js": "./js/media.js?v=1.9.0",
+  "./js/memory.js": "./js/memory.js?v=1.9.0",
+  "./js/notify.js": "./js/notify.js?v=1.9.0",
+  "./js/ocio.js": "./js/ocio.js?v=1.9.0",
+  "./js/panels.js": "./js/panels.js?v=1.9.0",
+  "./js/reminders.js": "./js/reminders.js?v=1.9.0",
+  "./js/robotics.js": "./js/robotics.js?v=1.9.0",
+  "./js/routes.js": "./js/routes.js?v=1.9.0",
+  "./js/shopping.js": "./js/shopping.js?v=1.9.0",
+  "./js/trivia.js": "./js/trivia.js?v=1.9.0",
+  "./js/vault.js": "./js/vault.js?v=1.9.0",
+  "./js/voice.js": "./js/voice.js?v=1.9.0",
+  "./js/wake.js": "./js/wake.js?v=1.9.0",
+  "./js/weather.js": "./js/weather.js?v=1.9.0",
+  "./js/workpanels.js": "./js/workpanels.js?v=1.9.0"
+ }
+}
+</script>
+<script type="module" src="js/app.js?v=1.9.0"></script>
 </body>
 </html>

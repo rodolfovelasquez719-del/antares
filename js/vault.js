@@ -6,6 +6,8 @@ const te = new TextEncoder();
 const td = new TextDecoder();
 
 let dbPromise = null;
+// iOS a veces deja colgado indexedDB.open al reanudar la PWA: permite descartar el intento y abrir de nuevo
+export function resetDb() { dbPromise = null; }
 export function db() {
   if (!("indexedDB" in window)) return Promise.reject(new Error("sin IndexedDB"));
   if (!dbPromise) {

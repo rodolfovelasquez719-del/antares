@@ -103,6 +103,26 @@ Actualizar.
 - Funciona sin conexión para abrir la app (service worker "primero red" con espera de 3 s y
   respaldo en caché).
 
+## Novedades de la 1.9.0 (pestañas, escritura visible y arranque seguro)
+
+### Pestañas
+- Barra inferior con **Inicio · Personal · Trabajo · Ocio** (iconos y texto, 44 px o más, respeta el área segura del iPhone). Ajustes sigue en el engranaje.
+- **Inicio** queda limpio: una sola línea con hora, clima y conexión, los modos «Hey Antares» y Conducción como iconos, el reactor, el micrófono y el campo de texto.
+- **Personal** (Resumen del día, Recordatorios, Compras), **Trabajo** (Rutas, Cúbica, Correo, Bitácora) y **Ocio** (Damas chinas, Trivia, Robótica) abren una portada con tarjetas; cada panel se abre dentro de su pestaña y «Atrás» vuelve a la portada y luego a Inicio (también con el botón Atrás del teléfono).
+- Los accesos `?panel=` siguen funcionando. La barra se esconde con el teclado abierto, en Ajustes y en modo conducción.
+
+### Ahora se ve lo que escribe
+- Causa: el teclado se detectaba comparando `innerHeight` con el área visible. En la app instalada en iPhone y en Android, `innerHeight` también se encoge, así que el teclado no se detectaba: los bloques fijos (HUD, modos, 10 accesos, micrófono) empujaban el campo debajo del teclado y la conversación quedaba en 0 px. Además, la página se devolvía arriba a la fuerza mientras iOS intentaba mostrar el campo.
+- Ahora el teclado se mide contra la altura «en reposo» de la pantalla (`visualViewport`), la app ocupa solo el área visible y el campo queda pegado justo encima del teclado. Al escribir se esconden reactor, HUD, micrófono y pestañas, y la conversación crece.
+- El campo crece hasta 5 líneas, con texto claro, cursor cian y un alto mínimo que nunca deja el texto sin espacio.
+
+### Arranque seguro (sin pantalla negra)
+- Si la app no queda lista en unos 4 s, aparece una pantalla con **Reintentar** y **Reparar** (borra solo las copias guardadas de la app; la key, el código y los datos cifrados se conservan) y **Ver detalles** con el error.
+- Una reparación automática si el problema fue una actualización a medias. Los módulos llevan versión (`?v=1.9.0`, mapa de importación) para no mezclar archivos viejos y nuevos.
+- Si la base local (IndexedDB) no responde, se reintenta; nunca se entra como «sin código» por un fallo.
+- Al volver a la app (iOS, bfcache) se vuelve a medir la pantalla.
+- Al publicar una versión nueva hay que actualizar `VERSION` en `sw.js`, `APP_VERSION` en `js/app.js` y los `?v=` de `index.html`.
+
 ## Novedades de la 1.8.1 (fotos y videos más precisos)
 
 Tras un audit con 19 casos reales (factura, circular, nota a mano, etiqueta de fórmula, letrero,

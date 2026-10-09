@@ -1,4 +1,4 @@
-// Paneles: Personal (Recordatorios, Compras, Noticias), Trabajo (Rutas, Cúbica, Correo, Bitácora) y Ocio (Damas chinas, Trivia, Robótica).
+// Paneles: Personal (Recordatorios, Compras, Resumen del día), Trabajo (Rutas, Cúbica, Correo, Bitácora) y Ocio (Damas chinas, Trivia, Robótica).
 import * as R from "./reminders.js";
 import * as S from "./shopping.js";
 import * as D from "./digest.js";
@@ -8,7 +8,7 @@ import * as O from "./ocio.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-let root, onChange = () => {}, tab = "recordatorios";
+let root, onChange = () => {}, onNav = () => {}, tab = "recordatorios", landing = null;
 let digest = null, digestBusy = false, digestError = "";
 let editingId = null;
 const pad = (n) => String(n).padStart(2, "0");
@@ -16,7 +16,7 @@ const dateVal = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getD
 const timeVal = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
 const GROUPS = {
-  personal: [["recordatorios", "Recordatorios"], ["compras", "Compras"], ["noticias", "Noticias"]],
+  personal: [["noticias", "Resumen"], ["recordatorios", "Recordatorios"], ["compras", "Compras"]],
   trabajo: [["rutas", "Rutas"], ["cubica", "Cúbica"], ["correo", "Correo"], ["bitacora", "Bitácora"]],
   ocio: [["damas", "Damas chinas"], ["trivia", "Trivia"], ["robotica", "Robótica"]],
 };
@@ -25,17 +25,29 @@ const ALL_TABS = Object.values(GROUPS).flat().map(([id]) => id);
 const groupOf = (t) => Object.keys(GROUPS).find((g) => GROUPS[g].some(([id]) => id === t)) || "personal";
 const lastInGroup = { personal: "recordatorios", trabajo: "rutas", ocio: "damas" };
 
-export function initPanels(el, changeCb, workDeps = {}, ocioDeps = {}) {
-  root = el; onChange = changeCb || (() => {});
+export function initPanels(el, changeCb, workDeps = {}, ocioDeps = {}, navCb) {
+  root = el; onChange = changeCb || (() => {}); onNav = navCb || (() => {});
   W.initWork({ ...workDeps, onChange: (w) => onChange(w) }, () => render());
   O.initOcio({ ...ocioDeps, onChange: (w) => onChange(w) }, () => { if (root && root.isConnected && root.dataset.tab && groupOf(root.dataset.tab) === "ocio" && root.childElementCount) render(); });
 }
 export function resetPanels() { W.resetWork(); O.resetOcio(); editingId = null; }
 
 export function currentTab() { return tab; }
+export { groupOf, GROUPS, GROUP_LABEL };
+// Vista actual: { group, tab, landing } (landing = portada de la pestaña con tarjetas)
+export function currentView() { return { group: landing || groupOf(tab), tab: landing ? null : tab, landing: !!landing }; }
+
+// Portada de una pestaña (Personal / Trabajo / Ocio): tarjetas grandes para abrir cada panel
+export function openGroup(group) {
+  landing = GROUPS[group] ? group : "personal";
+  editingId = null;
+  W.clearStatus(); O.clearStatus();
+  render();
+}
 
 export function openPanel(name) {
   if (ALL_TABS.includes(name)) tab = name;
+  landing = null;
   editingId = null;
   W.clearStatus(); O.clearStatus();
   render();
@@ -43,6 +55,7 @@ export function openPanel(name) {
 
 export function render() {
   if (!root) return;
+  if (landing) return renderLanding();
   const group = groupOf(tab);
   lastInGroup[group] = tab;
   // conservar la posición de desplazamiento al redibujar el mismo panel
@@ -50,21 +63,56 @@ export function render() {
   const keep = root.dataset.tab === tab ? scroller.scrollTop : 0;
   const focusId = document.activeElement && root.contains(document.activeElement) ? document.activeElement.id : "";
   root.innerHTML = `
-    <div class="panel-groups" role="group" aria-label="Tipo de panel">
-      ${Object.keys(GROUPS).map((g) => `<button type="button" class="seg${group === g ? " on" : ""}" data-group="${g}" aria-pressed="${group === g}">${GROUP_LABEL[g]}</button>`).join("")}
-    </div>
     <div class="panel-tabs${group === "trabajo" ? " four" : ""}${group === "ocio" ? " ocio" : ""}" role="tablist" aria-label="Paneles">
       ${GROUPS[group].map(([id, label]) => tabBtn(id, label)).join("")}
     </div>
     <div class="panel-body" id="panel-body" role="tabpanel" aria-label="${(GROUPS[group].find(([id]) => id === tab) || [, ""])[1]}">${body()}</div>`;
   root.dataset.tab = tab;
-  root.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => { tab = b.dataset.tab; editingId = null; W.clearStatus(); O.clearStatus(); render(); }));
-  root.querySelectorAll("[data-group]").forEach((b) => b.addEventListener("click", () => { tab = lastInGroup[b.dataset.group]; editingId = null; W.clearStatus(); O.clearStatus(); render(); }));
+  root.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => { tab = b.dataset.tab; editingId = null; W.clearStatus(); O.clearStatus(); render(); onNav({ from: "tabs", ...currentView() }); }));
   if (group === "trabajo") W.bind(tab, root.querySelector("#panel-body"));
   else if (group === "ocio") O.bind(tab, root.querySelector("#panel-body"));
   else bind();
   scroller.scrollTop = keep;
   if (focusId) { const el = document.getElementById(focusId); if (el && root.contains(el)) el.focus({ preventScroll: true }); }
+}
+
+const CARD = {
+  noticias: ["Resumen del día", "Clima, dólar y titulares", '<path d="M5 5.5h11v13H6.5A1.5 1.5 0 0 1 5 17zM16 9h3v8a1.5 1.5 0 0 1-3 0M8 9h5M8 12h5M8 15h3"/>'],
+  recordatorios: ["Recordatorios", "Alarmas y avisos", '<path d="M12 4a5 5 0 0 0-5 5v3.5L5.5 16h13L17 12.5V9a5 5 0 0 0-5-5zM10 19a2 2 0 0 0 4 0"/>'],
+  compras: ["Compras", "Lista por tienda", '<path d="M4 5h2l2 10h9.5l2-7H7M10 19.5h.01M17 19.5h.01"/>'],
+  rutas: ["Rutas", "Orden de paradas y distancias", '<path d="M6 18.5a2 2 0 1 0 0-.01M18 6.5a2 2 0 1 0 0-.01M6 16.5V11a3 3 0 0 1 3-3h4a3 3 0 0 0 3-3"/>'],
+  cubica: ["Cúbica", "Carga del camión", '<path d="M12 3.5l7.5 4v9L12 20.5l-7.5-4v-9zM4.5 7.5L12 11.5l7.5-4M12 11.5v9"/>'],
+  correo: ["Correo", "Redactar y revisar correos", '<path d="M4 6.5h16v11H4zM4 7l8 6 8-6"/>'],
+  bitacora: ["Bitácora", "Registro de rutas del día", '<path d="M6.5 4h11v16h-11zM9.5 8h5M9.5 11.5h5M9.5 15h3"/>'],
+  damas: ["Damas chinas", "Tablero de estrella contra Antares", '<path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8L3.5 9.2l5.9-.9z"/>'],
+  trivia: ["Trivia", "Preguntas para jugar en familia", '<path d="M9.2 9a2.9 2.9 0 1 1 4.2 2.6c-.9.5-1.4 1.2-1.4 2.2v.7M12 18h.01"/><circle cx="12" cy="12" r="8.5"/>'],
+  robotica: ["Robótica", "Retos paso a paso", '<path d="M7 8.5h10v9H7zM12 5v3.5M9.5 12h.01M14.5 12h.01M10 15h4M4.5 12v3M19.5 12v3"/>'],
+};
+function cardCount(id) {
+  try {
+    if (id === "recordatorios") { const n = R.upcoming().length; return n ? `${n} pendiente${n === 1 ? "" : "s"}` : ""; }
+    if (id === "compras") { const n = S.loadItems().filter((i) => !i.bought).length; return n ? `${n} por comprar` : ""; }
+  } catch { /* bóveda cerrada */ }
+  return "";
+}
+function renderLanding() {
+  const g = landing;
+  root.innerHTML = `
+    <p class="landing-intro">${{ personal: "Su día, avisos y compras.", trabajo: "Herramientas para la ruta de hoy.", ocio: "Juegos y retos para descansar." }[g]}</p>
+    <ul class="group-cards ${g}" aria-label="${GROUP_LABEL[g]}">
+      ${GROUPS[g].map(([id]) => { const [name, desc, icon] = CARD[id]; const c = cardCount(id);
+        return `<li><button type="button" class="group-card" data-tab="${id}" data-open="${id}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${icon}</g></svg>
+          <span class="gc-text"><strong>${name}</strong><small>${desc}</small></span>
+          ${c ? `<span class="gc-count">${c}</span>` : ""}
+          <svg class="gc-go" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button></li>`; }).join("")}
+    </ul>`;
+  root.dataset.tab = `landing-${g}`;
+  (root.closest(".settings-scroll") || root).scrollTop = 0;
+  root.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => {
+    tab = b.dataset.open; landing = null; editingId = null; W.clearStatus(); O.clearStatus(); render(); onNav({ from: "landing", ...currentView() });
+  }));
 }
 
 function tabBtn(id, label) {
