@@ -3,7 +3,7 @@ import { GeminiClient, DEFAULT_ASSISTANT_NAME, needsSearch } from "./gemini.js";
 import { memory, thumbs, requestPersistence, LS_LIMIT, flushWrites, isVaultMode, isUnlocked } from "./memory.js";
 import * as Lock from "./lock.js";
 import * as Vault from "./vault.js";
-import { showLock, runPinFlow, isShowing as lockShowing } from "./lockui.js";
+import { showLock, runPinFlow, runTapFlow, isShowing as lockShowing } from "./lockui.js";
 import { looksLikeImportantFact, buildConfirmationQuestion } from "./facts.js";
 import { Voice, isIOS, speechErrorMessage } from "./voice.js";
 import { WakeWord } from "./wake.js";
@@ -20,7 +20,7 @@ import * as Cubic from "./cubic.js";
 import * as Mail from "./mail.js";
 import * as Logbook from "./logbook.js";
 
-const APP_VERSION = "1.9.0";
+const APP_VERSION = "1.9.1";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -83,7 +83,7 @@ const els = {
   // seguridad
   secStatus: $("sec-status"), secStatusText: $("sec-status-text"), secOffRow: $("sec-off-row"), secOn: $("sec-on"),
   pinCreate: $("pin-create"), pinChange: $("pin-change"), lockNow: $("lock-now"), pinRemove: $("pin-remove"),
-  passkeySwitch: $("passkey-switch"), passkeyNote: $("passkey-note"), lockOnHide: $("lock-on-hide"), idleLock: $("idle-lock"),
+  passkeySwitch: $("passkey-switch"), passkeyNote: $("passkey-note"), comboRow: $("combo-row"), comboSwitch: $("combo-switch"), secType: $("sec-type"), lockOnHide: $("lock-on-hide"), idleLock: $("idle-lock"),
   // modos (1.8)
   wakeBtn: $("wake-btn"), wakeLabel: $("wake-label"), driveBtn: $("drive-btn"), driveLabel: $("drive-label"),
   tutorChip: $("tutor-chip"), tutorExit: $("tutor-exit"),
@@ -1083,7 +1083,7 @@ els.attachMenu.addEventListener("click", (ev) => {
   const btn = ev.target.closest("button[data-pick]");
   if (!btn) return;
   setMenu(false);
-  expectAway(3 * 60 * 1000);
+  expectAway(AWAY_PICKER_MS); // v1.9.1: margen corto (antes 3 min)
   pickers[btn.dataset.pick].click();
 });
 els.attachMenu.addEventListener("keydown", (ev) => {
@@ -1801,6 +1801,7 @@ function setupServiceWorker() {
     els.toast.hidden = false;
   });
   navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((reg) => {
+    if (!reg) return;
     if (reg.waiting && hadController) els.toast.hidden = false;
     let lastCheck = Date.now();
     document.addEventListener("visibilitychange", () => {
@@ -1830,6 +1831,9 @@ function buildWave() {
 
 // ---------- Seguridad: código, bloqueo y passkey ----------
 let awayUntil = 0;            // se espera que el usuario salga un momento (cámara/galería): no bloquear
+const AWAY_PICKER_MS = 60 * 1000;   // elegir foto/video/PDF
+const AWAY_PASSKEY_MS = 45 * 1000;  // registrar o usar Face ID / huella
+let pendingPanel = null;      // OPEN_PANEL recibido con la app bloqueada
 let hiddenAt = 0;
 let lastActivity = Date.now();
 function expectAway(ms) { awayUntil = Date.now() + ms; }
@@ -1839,15 +1843,18 @@ async function fillSecurity() {
   els.secStatus.classList.toggle("on", on);
   els.secStatusText.replaceChildren();
   const small = document.createElement("small");
+  const type = Lock.secretType();
   if (on) {
-    els.secStatusText.append("Código de seguridad activo", small);
-    small.textContent = "6 dígitos · sus datos se guardan cifrados";
+    const combo = Lock.factor() === "pin+passkey";
+    els.secStatusText.append(type === "frase" ? "Frase segura activa" : "Código de seguridad activo", small);
+    small.textContent = (type === "frase" ? "Frase segura" : "6 dígitos") + (combo ? " + Face ID / huella" : "") + " · sus datos se guardan cifrados";
   } else {
     els.secStatusText.append("Sin código de seguridad", small);
     small.textContent = "Sus datos se guardan sin cifrar en este navegador";
   }
   els.secOffRow.hidden = on;
   els.secOn.hidden = !on;
+  setSecTypeRadio(on ? type : selectedSecType());
   if (!on) return;
   const p = Lock.prefs();
   els.lockOnHide.checked = !!p.lockOnHide;
@@ -1859,10 +1866,27 @@ async function fillSecurity() {
     : pk.prf
       ? "Activo: Face ID / huella también descifra sus datos. El código sigue funcionando."
       : "Activo en modo comodidad: este navegador no ofrece cifrado con passkey (PRF), así que Face ID / huella solo desbloquea mientras la app sigue abierta. Al reabrirla se pide el código.";
+  // código + passkey juntos: solo si la passkey ofrece cifrado (PRF)
+  els.comboRow.hidden = !(pk && pk.prf);
+  els.comboSwitch.checked = !!(pk && pk.combo);
+  if (pk && pk.combo) els.passkeyNote.textContent = "Activo junto con su " + (type === "frase" ? "frase" : "código") + ": para abrir hacen falta los dos.";
   const supported = await Lock.passkeySupported();
   els.passkeySwitch.disabled = !supported && !pk;
   if (!supported && !pk) els.passkeyNote.textContent = "Este dispositivo o navegador no ofrece Face ID / huella para sitios web.";
 }
+
+const selectedSecType = () => { const r = els.secType.querySelector("input:checked"); return r && r.value === "frase" ? "frase" : "pin"; };
+function setSecTypeRadio(t) {
+  for (const r of els.secType.querySelectorAll("input")) r.checked = r.value === t;
+  paintSecType();
+}
+function paintSecType() {
+  const sel = selectedSecType(), on = Lock.hasPin(), cur = Lock.secretType();
+  els.pinCreate.textContent = sel === "frase" ? "Crear frase segura" : "Crear código de seguridad";
+  els.pinChange.textContent = !on ? "Cambiar código" : sel !== cur ? (sel === "frase" ? "Cambiar a frase segura" : "Cambiar a código de 6 dígitos") : (cur === "frase" ? "Cambiar frase" : "Cambiar código");
+}
+els.secType.addEventListener("change", (ev) => { ev.stopPropagation(); paintSecType(); }); // no es un "cambio sin guardar"
+els.secType.addEventListener("input", (ev) => ev.stopPropagation());
 
 async function securityAction(fn) {
   const wasOpen = !els.settingsView.hidden;
@@ -1886,9 +1910,10 @@ async function createPinFlow() {
   if (Lock.hasPin()) return;
   if (!isUnlocked()) return;
   await flushWrites();
-  const r = await runPinFlow("create");
+  const type = els.settingsView.hidden ? "pin" : selectedSecType();
+  const r = await runPinFlow("create", "", { type });
   if (r && r.ok) {
-    setSettingsStatus("Código activado: sus datos se guardan cifrados");
+    setSettingsStatus(type === "frase" ? "Frase segura activada: sus datos se guardan cifrados" : "Código activado: sus datos se guardan cifrados");
     syncReminders();
     if (els.settingsView.hidden) { setVista("chat"); showNote("Código activado. Su key, la conversación y la memoria se guardan cifradas en este dispositivo."); }
     lastActivity = Date.now();
@@ -1896,16 +1921,17 @@ async function createPinFlow() {
 }
 els.pinCreate.addEventListener("click", () => securityAction(createPinFlow));
 els.pinChange.addEventListener("click", () => securityAction(async () => {
-  const r = await runPinFlow("change");
-  if (r && r.ok) setSettingsStatus("Código cambiado");
+  const r = await runPinFlow("change", "", { newType: selectedSecType() });
+  if (r && r.ok) setSettingsStatus(r.type === "frase" ? "Frase segura guardada" : "Código cambiado");
 }));
 els.lockNow.addEventListener("click", () => lockApp("manual"));
 els.pinRemove.addEventListener("click", () => securityAction(async () => {
   if (!confirm("¿Quitar el código? Sus datos volverán a guardarse sin cifrar en este navegador.")) return;
-  const v = await runPinFlow("verify", "Ingrese su código para quitarlo");
+  const v = await runPinFlow("verify", Lock.secretType() === "frase" ? "Escriba su frase para quitarla" : "Ingrese su código para quitarlo");
   if (!v || !v.ok) return;
-  if (Lock.passkeyInfo()) await Lock.disablePasskey();
+  if (Lock.passkeyInfo()) await Lock.disablePasskey(v);
   const r = await Lock.removePin(v.dekX);
+  Lock.forgetVerified(v);
   if (r.ok) syncReminders();
   setSettingsStatus(r.ok ? "Código quitado. Sus datos ya no están cifrados." : "No se pudo quitar el código: no hay espacio para guardar los datos sin cifrar.", !r.ok);
 }));
@@ -1914,21 +1940,72 @@ els.passkeySwitch.addEventListener("change", (ev) => {
   const want = els.passkeySwitch.checked;
   securityAction(async () => {
     if (!want) {
-      if (confirm("¿Desactivar el desbloqueo con Face ID / huella? El código seguirá funcionando.")) { await Lock.disablePasskey(); setSettingsStatus("Face ID / huella desactivado"); }
+      if (!confirm("¿Desactivar el desbloqueo con Face ID / huella? El código seguirá funcionando.")) return;
+      let v = null;
+      if (Lock.factor() === "pin+passkey") { // hay que volver a cifrar solo con el código: se confirman ambos
+        expectAway(AWAY_PASSKEY_MS);
+        v = await runPinFlow("verify", "Confirme su código y Face ID / huella para desactivarlo");
+        awayUntil = 0;
+        if (!v || !v.ok) return;
+      }
+      const r = await Lock.disablePasskey(v);
+      Lock.forgetVerified(v);
+      setSettingsStatus(r && r.ok === false ? (r.error || "No se pudo desactivar Face ID / huella.") : "Face ID / huella desactivado", r && r.ok === false);
       return;
     }
     const v = await runPinFlow("verify", "Confirme su código para activar Face ID / huella");
     if (!v || !v.ok) return;
     try {
-      expectAway(60 * 1000);
+      expectAway(AWAY_PASSKEY_MS);
       const r = await Lock.enrollPasskey(v.dekX);
       setSettingsStatus(r.prf ? "Face ID / huella activado" : "Face ID / huella activado en modo comodidad (sin cifrado)");
     } catch (e) {
       console.warn("Antares passkey:", e);
       setSettingsStatus(e && e.name === "NotAllowedError" ? "Se canceló la activación de Face ID / huella." : "No se pudo activar Face ID / huella en este dispositivo.", true);
-    } finally { awayUntil = 0; }
+    } finally { awayUntil = 0; Lock.forgetVerified(v); }
   });
 });
+// v1.9.1: exigir código (o frase) y Face ID / huella juntos (la llave depende de los dos)
+els.comboSwitch.addEventListener("change", (ev) => {
+  ev.stopPropagation();
+  const want = els.comboSwitch.checked;
+  securityAction(async () => {
+    if (want) {
+      if (!confirm("Protección doble: desde ahora, para abrir Antares hará falta su " + (Lock.secretType() === "frase" ? "frase" : "código") + " y también Face ID / huella.\n\nSi pierde esta passkey (por ejemplo, al cambiar de teléfono), no habrá forma de abrir sus datos y habría que borrarlos. ¿Continuar?")) return;
+      const v = await runPinFlow("verify", "Confirme su código para unirlo a Face ID / huella");
+      if (!v || !v.ok) return;
+      try {
+        expectAway(AWAY_PASSKEY_MS);
+        const r = await Lock.bindPasskey(v, () => runTapFlow("PROTECCIÓN DOBLE", "Toque el botón para confirmar con Face ID / huella"));
+        setSettingsStatus(r.ok ? "Protección doble activada: código + Face ID / huella" : (r.cancelled ? "Se canceló Face ID / huella. No cambió nada." : (r.error || "No se pudo activar la protección doble.")), !r.ok);
+      } finally { awayUntil = 0; Lock.forgetVerified(v); }
+    } else {
+      expectAway(AWAY_PASSKEY_MS);
+      const v = await runPinFlow("verify", "Confirme su código y Face ID / huella para quitar la protección doble");
+      awayUntil = 0;
+      if (!v || !v.ok) return;
+      const r = await Lock.unbindPasskey(v);
+      Lock.forgetVerified(v);
+      setSettingsStatus(r.ok ? "Protección doble desactivada: basta con el código" : (r.error || "No se pudo desactivar la protección doble."), !r.ok);
+    }
+  });
+});
+
+// v1.9.1: al bloquear no queda en el DOM nada personal (key, nombre, personalidad, memoria, saludo, modal…)
+function wipePersonalDom() {
+  for (const el of [els.apiKey, els.userName, els.assistantName, els.personality]) { if (el) el.value = ""; }
+  if (els.apiKey) els.apiKey.type = "password";
+  els.factsList.replaceChildren();
+  els.factsCount.textContent = "";
+  els.saludo.replaceChildren();
+  els.saludoSinkey.replaceChildren();
+  els.modalTitle.textContent = "";
+  els.modalBody.replaceChildren();
+  els.connStatusText.textContent = "";
+  clearTimeout(noticeTimer);
+  els.status.textContent = "Asistente personal";
+  els.settingsStatus.textContent = "";
+}
 
 // Bloquear: se borra lo descifrado, el contenido de la pantalla y se cancela lo que esté en curso
 function lockApp(reason = "manual") {
@@ -1957,8 +2034,14 @@ function lockApp(reason = "manual") {
   els.announcer.textContent = "";
   els.interimText.textContent = "";
   pendingConfirm = null;
+  pendingPanel = null;
+  wipePersonalDom();
   Lock.lockNow();
   config = memory.getConfig();
+  // pantalla genérica: sin nombre del usuario ni del asistente
+  renderGreeting();
+  els.title.textContent = DEFAULT_ASSISTANT_NAME.toUpperCase();
+  document.title = DEFAULT_ASSISTANT_NAME;
   client = makeClient("");
   vista = "inicio";
   setEstado("sinkey");
@@ -1987,6 +2070,7 @@ function afterUnlock() {
   syncReminders();
   reminderTick();
   openPanelFromUrl();
+  if (pendingPanel) { const p = pendingPanel; pendingPanel = null; showPanel(p); }
   syncWake();
 }
 // Accesos directos del manifiesto: ?panel=recordatorios|compras|noticias (se usa una sola vez)
@@ -2106,7 +2190,11 @@ async function init() {
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") reminderTick(); });
   navigator.serviceWorker && navigator.serviceWorker.addEventListener("message", (ev) => {
     const d = ev.data || {};
-    if (d.type === "OPEN_PANEL") showPanel(d.panel || "recordatorios");
+    if (d.type === "OPEN_PANEL") {
+      // v1.9.1: con la app bloqueada no se abre nada; se deja pendiente hasta desbloquear
+      if (!isUnlocked() || lockShowing()) { pendingPanel = String(d.panel || "recordatorios"); return; }
+      showPanel(d.panel || "recordatorios");
+    }
   });
   syncViewport();
   setupServiceWorker();

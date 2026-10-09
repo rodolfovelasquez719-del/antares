@@ -27,6 +27,8 @@ const MAX_OUTPUT_TOKENS = 2048;
 const THINKING_LEVEL = "low";
 
 export const DEFAULT_ASSISTANT_NAME = "Antares";
+// v1.9.1: el detalle de modelos y errores solo va a la consola con localStorage "antaresDebug" = "1" (desactivado por defecto)
+const DEBUG = () => { try { return localStorage.getItem("antaresDebug") === "1"; } catch { return false; } };
 
 // Reglas cuando hay fotos, videos o PDF en la conversación (v1.8.1, tras el audit con fotos reales)
 export const MEDIA_RULES =
@@ -426,7 +428,7 @@ export class GeminiClient {
       msg = String(msg || "").replace(/\s+/g, " ").trim().slice(0, 160);
       if (this.apiKey) msg = msg.split(this.apiKey).join("***");
       this.attempts.push({ model, code, msg, search: usedSearch });
-      console.log(`Antares LLM: ${model}${usedSearch ? " +search" : ""} -> ${code} ${msg}`);
+      if (DEBUG()) console.debug(`Antares LLM: ${model}${usedSearch ? " +search" : ""} -> ${code} ${msg}`);
     };
     const ok = (r, model, extra = {}) => {
       this.lastModel = model;

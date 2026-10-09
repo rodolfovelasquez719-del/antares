@@ -51,25 +51,52 @@ export async function idbEntries(store) {
   return keys.map((k, i) => [k, vals[i]]);
 }
 
-// Borra toda la base (cierra la conexión propia primero)
-export async function deleteDatabase() {
+// Borra toda la base (cierra la conexión propia primero). {ok} | {ok:false, blocked:true} si otra pestaña la tiene abierta.
+export async function deleteDatabase({ waitMs = 4000 } = {}) {
   try { if (dbPromise) (await dbPromise).close(); } catch { /* */ }
   dbPromise = null;
-  await new Promise((resolve) => {
+  let markDone;
+  const finished = new Promise((res) => { markDone = res; }); // se cumple cuando el borrado de verdad termina
+  const r = await new Promise((resolve) => {
+    let blocked = false, t = 0;
     const req = indexedDB.deleteDatabase(DB_NAME);
-    req.onsuccess = req.onerror = () => resolve();
-    req.onblocked = () => setTimeout(resolve, 500);
+    req.onsuccess = () => { clearTimeout(t); markDone(true); resolve({ ok: true }); };
+    req.onerror = () => { clearTimeout(t); markDone(false); resolve({ ok: false, error: String(req.error && req.error.message || "error") }); };
+    // bloqueada por otra pestaña: se espera un poco a que la suelte; si no, se informa (no se da por borrada).
+    // La petición sigue en cola y termina sola cuando se cierren las otras pestañas (finished).
+    req.onblocked = () => { if (blocked) return; blocked = true; t = setTimeout(() => resolve({ ok: false, blocked: true, finished }), waitMs); };
   });
+  if (!r.ok) return r;
+  // verificar: si el navegador lo permite, la base ya no debe aparecer
+  try {
+    if (indexedDB.databases) { const list = await indexedDB.databases(); if (list.some((d) => d.name === DB_NAME)) return { ok: false, blocked: true }; }
+  } catch { /* */ }
+  return { ok: true };
 }
 
 // ---------- Cifrado ----------
 export const randomBytes = (n) => crypto.getRandomValues(new Uint8Array(n));
 export const PBKDF2_ITERATIONS = 600000;
 
-// PIN -> clave de envoltura (KEK) no extraíble
+// PIN o frase -> clave de envoltura (KEK) no extraíble
 export async function deriveKek(pin, salt, iterations = PBKDF2_ITERATIONS) {
   const base = await crypto.subtle.importKey("raw", te.encode(pin), "PBKDF2", false, ["deriveKey"]);
   return crypto.subtle.deriveKey({ name: "PBKDF2", hash: "SHA-256", salt, iterations }, base,
+    { name: "AES-GCM", length: 256 }, false, ["wrapKey", "unwrapKey"]);
+}
+// Los mismos 256 bits que deriveKek (PBKDF2 -> AES-256 es idéntico a deriveBits(256)), para combinarlos con la passkey
+export async function deriveSecretBits(pin, salt, iterations = PBKDF2_ITERATIONS) {
+  const base = await crypto.subtle.importKey("raw", te.encode(pin), "PBKDF2", false, ["deriveBits"]);
+  return new Uint8Array(await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt, iterations }, base, 256));
+}
+export const kekFromBits = (bits) => crypto.subtle.importKey("raw", bits, { name: "AES-GCM", length: 256 }, false, ["wrapKey", "unwrapKey"]);
+// Código + passkey: KEK = HKDF(PBKDF2(código) || PRF). Una copia de IndexedDB ya no basta: hace falta también el teléfono.
+export async function comboKek(secretBits, prfSecret, salt) {
+  const ikm = new Uint8Array(secretBits.length + prfSecret.length);
+  ikm.set(secretBits, 0); ikm.set(prfSecret, secretBits.length);
+  const base = await crypto.subtle.importKey("raw", ikm, "HKDF", false, ["deriveKey"]);
+  ikm.fill(0);
+  return crypto.subtle.deriveKey({ name: "HKDF", hash: "SHA-256", salt, info: te.encode("antares-pin+prf-kek-v1") }, base,
     { name: "AES-GCM", length: 256 }, false, ["wrapKey", "unwrapKey"]);
 }
 // Secreto PRF de la passkey -> KEK no extraíble

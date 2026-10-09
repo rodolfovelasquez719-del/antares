@@ -34,7 +34,7 @@ Actualizar.
 ## Código de seguridad (opcional)
 
 - Se ofrece una vez al empezar y se puede crear, cambiar o quitar en Configuración › Seguridad.
-- Código de 6 dígitos. **El código no se guarda**: se deriva con PBKDF2-SHA-256 (sal aleatoria de
+- Código de 6 dígitos o **frase segura** (10 caracteres o más). **El secreto no se guarda**: se deriva con PBKDF2-SHA-256 (sal aleatoria de
   16 bytes, 600 000 iteraciones) a una clave que envuelve la clave de datos AES-GCM de 256 bits.
   Con ella se cifran la API key, la configuración, la conversación, la memoria y las miniaturas
   (IndexedDB, IV aleatorio por registro). Un código equivocado simplemente no logra descifrar.
@@ -42,15 +42,19 @@ Actualizar.
 - La app arranca bloqueada, se bloquea al salir de ella (si está activado) y tras la inactividad
   elegida (1, 5, 15 o 60 minutos). Al bloquear se borran de la pantalla y de la memoria la
   conversación y la key, y se cancela la respuesta en curso.
-- 5 intentos fallidos → espera de 30 s; luego 1 min, 5 min, 15 min y 1 h. La espera sobrevive a
-  recargar la página (es disuasiva: lo que protege de verdad es el cifrado).
+- 5 intentos fallidos → espera de 30 s; luego 1 min, 5 min, 15 min y 1 h. El intento se anota
+  antes de derivar la clave; la espera se mide con el reloj monótono y sobrevive a recargar la
+  página y a adelantar o atrasar el reloj (es disuasiva: lo que protege de verdad es el cifrado).
 - Face ID / huella (passkey WebAuthn con verificación de usuario obligatoria): si el navegador
   ofrece la extensión PRF, la passkey también descifra los datos. Si no, queda en **modo
-  comodidad**: solo desbloquea mientras la app sigue abierta y, al reabrirla, se pide el código.
+  comodidad**: solo desbloquea mientras la app sigue abierta, como máximo 20 minutos, y al
+  reabrirla se pide el código.
+- **Código + Face ID / huella** (requiere PRF): la clave de datos queda envuelta con HKDF sobre el
+  código y el secreto de la passkey juntos; una copia de IndexedDB ya no basta para adivinarlo.
 - "¿Olvidó su código?" borra, con doble confirmación, todos los datos de Antares en el
   dispositivo (no hay forma de recuperarlos sin servidor). Después se vuelve a pegar la key.
 - Límites: un código de 6 dígitos se puede adivinar fuera de la app si alguien copia los datos
-  cifrados (PBKDF2 solo lo hace lento); no protege contra malware ni mientras la app está
+  cifrados (PBKDF2 solo lo hace lento): use una frase segura o «código + Face ID / huella»; no protege contra malware ni mientras la app está
   desbloqueada. Limite su API key en Google AI Studio.
 
 ## Privacidad y almacenamiento
@@ -102,6 +106,23 @@ Actualizar.
   voz alta opcional con voz masculina en español cuando el sistema la tiene.
 - Funciona sin conexión para abrir la app (service worker "primero red" con espera de 3 s y
   respaldo en caché).
+
+## Novedades de la 1.9.1 (seguridad, revisión de Beru)
+
+- Al bloquear se vacían también los campos de Configuración (key, nombres, personalidad), la
+  memoria, el saludo con su nombre y el contenido del cuadro de detalles.
+- Seguridad › Tipo de protección: «Código de 6 dígitos» o «Frase segura», con explicación. Se
+  puede pasar de uno a otro sin perder datos (solo se vuelve a envolver la clave).
+- «Exigir código y Face ID / huella juntos» cuando la passkey ofrece PRF.
+- Espera por intentos robusta a cambios de reloj; el intento se cuenta antes de derivar la clave.
+- Las preferencias de bloqueo se guardan cifradas y solo con la app desbloqueada (migración
+  automática de las guardadas en claro).
+- Modo comodidad: la clave se olvida a los 20 minutos.
+- Margen sin bloqueo al elegir fotos: 60 s (antes 3 min); al registrar la passkey: 45 s.
+- «¿Olvidó su código?» avisa si otra pestaña impide borrar y termina al cerrarla.
+- Los avisos del sistema no abren paneles con la app bloqueada (quedan pendientes).
+- Sin registros de modelo/errores en la consola (salvo `localStorage.antaresDebug = "1"`).
+- Enlaces a AI Studio con área táctil de 44 px.
 
 ## Novedades de la 1.9.0 (pestañas, escritura visible y arranque seguro)
 

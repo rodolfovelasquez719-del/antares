@@ -487,6 +487,18 @@ body.booting #app { visibility: hidden; }
 .bio-note { margin: 6px 0 0; max-width: 320px; font-family: var(--font-read); font-size: 13.5px; color: var(--muted); text-align: center; }
 .lock-links { display: flex; flex-direction: column; align-items: center; margin-top: 6px; }
 .countdown { font-variant-numeric: tabular-nums; }
+/* v1.9.1: frase segura y paso «Confirmar con Face ID / huella» */
+.phrase-form { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 12px; margin: 20px 0 6px; }
+.phrase-row { position: relative; }
+.phrase-row .field { width: 100%; min-height: 52px; padding-right: 52px; font-size: 18px; color: var(--text); -webkit-text-fill-color: var(--text); }
+.phrase-row .icon-btn { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); width: 48px; height: 48px; border: 0; background: transparent; color: var(--muted); }
+.phrase-row .icon-btn svg { width: 24px; height: 24px; }
+.phrase-row .icon-btn[aria-pressed="true"] { color: var(--cyan); }
+.phrase-form .btn { min-height: 48px; }
+[data-lock="error"] .phrase-row { animation: shake .4s ease-in-out; }
+[data-lock="error"] .phrase-row .field { border-color: var(--red); }
+[data-lock="factor"] .keypad, [data-lock="factor"] .pin-dots, [data-lock="factor"] .phrase-form { display: none !important; }
+[data-lock="factor"] .bio-btn { margin-top: 26px; }
 @media (max-height: 700px) {
   .lock-screen .reactor-wrap { width: 72px !important; height: 72px !important; }
   .keypad { grid-template-columns: repeat(3, 68px); gap: 10px 26px; }
@@ -859,3 +871,16 @@ body.driving .hud.slim .mode-btn .mode-txt { display: inline; }
 body.driving .hud.slim .wake-dot { position: static; }
 body.driving #wake-label { position: static !important; width: auto; height: auto; margin: 0; clip: auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 body.driving .wake-status { display: none; }
+
+/* v1.9.1: enlaces de texto con área táctil de 44px */
+.hint a, a.link-44 { display: inline-flex; align-items: center; min-height: 44px; padding: 0 2px; color: var(--cyan-2); text-underline-offset: 3px; overflow-wrap: anywhere; }
+.setup-card .more { min-height: 44px; display: flex; align-items: center; justify-content: center; }
+/* Seguridad: tipo de protección */
+.sec-type { border: 0; margin: 10px 0 0; padding: 0; }
+.sec-type legend { padding: 0; margin-bottom: 4px; font-family: var(--font-read); font-size: 15px; color: var(--muted); }
+.opt-row { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 4px 0; cursor: pointer; }
+.opt-row input { width: 22px; height: 22px; flex: none; accent-color: var(--cyan); }
+.opt-row .txt { display: flex; flex-direction: column; }
+.opt-row small { font-family: var(--font-read); font-size: 13.5px; color: var(--muted); }
+html[data-fs="2"] .opt-row small { font-size: 16px; }
+html[data-fs="3"] .opt-row small { font-size: 18px; }

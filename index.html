@@ -16,7 +16,7 @@
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="preload" href="fonts/orbitron-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/rajdhani-600-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=1.9.0">
+  <link rel="stylesheet" href="styles.css?v=1.9.1">
   <script>
   /* v1.9.0 Arranque vigilado: si la app no queda lista en ~4 s (error de carga, actualización a medias, base local que no
      responde, reanudación de iOS), se muestra una pantalla visible con Reintentar / Reparar en vez de una pantalla negra.
@@ -183,7 +183,7 @@
           <div class="btn-row">
             <button class="btn primary" type="button" id="setup-open">Abrir Configuración</button>
           </div>
-          <p class="more">¿Aún no tiene una? <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Obtenerla gratis ↗</a></p>
+          <p class="more">¿Aún no tiene una? <a class="link-44" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Obtenerla gratis ↗</a></p>
         </div>
       </div>
 
@@ -286,7 +286,7 @@
           <span id="conn-status-text"></span>
           <button class="link-btn" type="button" id="conn-details" hidden>Ver detalles</button>
         </div>
-        <p class="hint">¿No tiene una? Consígala gratis en <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.</p>
+        <p class="hint">¿No tiene una? Consígala gratis en <a class="link-44" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.</p>
       </section>
 
       <!-- Seguridad -->
@@ -297,6 +297,12 @@
           <svg class="ico-off" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 10.5V8a4 4 0 0 1 7.6-1.7M12 14.5v2.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           <span class="t" id="sec-status-text">Sin código de seguridad<small>Sus datos se guardan sin cifrar en este navegador</small></span>
         </div>
+        <fieldset class="sec-type" id="sec-type">
+          <legend>Tipo de protección</legend>
+          <label class="opt-row"><input type="radio" name="sec-type" value="pin" checked><span class="txt">Código de 6 dígitos<small>Rápido de escribir</small></span></label>
+          <label class="opt-row"><input type="radio" name="sec-type" value="frase"><span class="txt">Frase segura<small>10 caracteres o más, por ejemplo tres palabras. Mucho más difícil de adivinar</small></span></label>
+        </fieldset>
+        <p class="hint" id="sec-explain">Un código de 6 dígitos detiene a quien tenga el teléfono en la mano, pero si alguien copiara los datos de este navegador podría probar todas las combinaciones con una computadora potente en pocos minutos. Una <b>frase segura</b>, o el modo <b>«código + Face ID / huella»</b>, evita eso.</p>
         <div class="btn-row" style="margin-top:10px" id="sec-off-row">
           <button class="btn primary" type="button" id="pin-create">Crear código de seguridad</button>
         </div>
@@ -308,6 +314,10 @@
           <label class="switch-row sep" style="margin-top:8px">
             <span class="txt">Desbloquear con Face ID / huella<small id="passkey-note">Passkey (WebAuthn): Face ID en iPhone, huella en Android. El código sigue funcionando.</small></span>
             <input class="switch" type="checkbox" role="switch" id="passkey-switch">
+          </label>
+          <label class="switch-row" id="combo-row" hidden>
+            <span class="txt">Exigir código y Face ID / huella juntos<small id="combo-note">Protección doble: para abrir hará falta su código y también Face ID / huella. Si pierde la passkey (por ejemplo, cambia de teléfono), habrá que borrar los datos de este dispositivo.</small></span>
+            <input class="switch" type="checkbox" role="switch" id="combo-switch">
           </label>
           <label class="switch-row">
             <span class="txt">Bloquear al salir de la app<small>Al cambiar de app o apagar la pantalla</small></span>
@@ -325,7 +335,7 @@
             <button class="btn danger" type="button" id="pin-remove">Quitar el código</button>
           </div>
         </div>
-        <p class="hint">Si olvida su código no hay forma de recuperarlo: habría que borrar los datos de Antares en este dispositivo (key, historial y memoria) y empezar de nuevo.</p>
+        <p class="hint">Si olvida su código o su frase no hay forma de recuperarlo: habría que borrar los datos de Antares en este dispositivo (key, historial y memoria) y empezar de nuevo.</p>
       </section>
 
       <!-- Perfil -->
@@ -473,6 +483,16 @@
     <div class="pin-dots" id="pin-dots" role="img" aria-label="0 de 6 dígitos ingresados">
       <i></i><i></i><i></i><i></i><i></i><i></i>
     </div>
+    <form class="phrase-form" id="phrase-form" hidden autocomplete="off">
+      <label class="sr-only" for="phrase-input" id="phrase-label">Frase segura</label>
+      <div class="phrase-row">
+        <input class="field" id="phrase-input" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" maxlength="200">
+        <button type="button" class="icon-btn" id="phrase-show" aria-label="Mostrar la frase" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+        </button>
+      </div>
+      <button class="btn primary" type="submit" id="phrase-ok">Desbloquear</button>
+    </form>
     <p class="lock-msg" id="lock-msg" role="status" aria-live="polite">&nbsp;</p>
 
     <div class="keypad" id="keypad" role="group" aria-label="Teclado numérico">
@@ -496,7 +516,7 @@
 
     <button class="btn bio-btn" type="button" id="bio-btn" hidden>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 11v3m-4.5-6.5A6 6 0 0 1 18 12v1.5M6 12a6 6 0 0 0 .4 2.2M9 12a3 3 0 0 1 6 0c0 2.5-.6 4.6-1.6 6.3M9.3 15.5c-.2 1.3-.6 2.4-1.2 3.3M12 17.5c-.2.9-.5 1.7-.9 2.5M4 9.5A9 9 0 0 1 20 8.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
-      Usar Face ID / huella
+      <span id="bio-label">Usar Face ID / huella</span>
     </button>
     <p class="bio-note" id="bio-note" hidden></p>
     <div class="lock-links">
@@ -530,34 +550,34 @@
 <script type="importmap">
 {
  "imports": {
-  "./js/app.js": "./js/app.js?v=1.9.0",
-  "./js/chinese-checkers.js": "./js/chinese-checkers.js?v=1.9.0",
-  "./js/cubic.js": "./js/cubic.js?v=1.9.0",
-  "./js/digest.js": "./js/digest.js?v=1.9.0",
-  "./js/facts.js": "./js/facts.js?v=1.9.0",
-  "./js/gemini.js": "./js/gemini.js?v=1.9.0",
-  "./js/lock.js": "./js/lock.js?v=1.9.0",
-  "./js/lockui.js": "./js/lockui.js?v=1.9.0",
-  "./js/logbook.js": "./js/logbook.js?v=1.9.0",
-  "./js/mail.js": "./js/mail.js?v=1.9.0",
-  "./js/media.js": "./js/media.js?v=1.9.0",
-  "./js/memory.js": "./js/memory.js?v=1.9.0",
-  "./js/notify.js": "./js/notify.js?v=1.9.0",
-  "./js/ocio.js": "./js/ocio.js?v=1.9.0",
-  "./js/panels.js": "./js/panels.js?v=1.9.0",
-  "./js/reminders.js": "./js/reminders.js?v=1.9.0",
-  "./js/robotics.js": "./js/robotics.js?v=1.9.0",
-  "./js/routes.js": "./js/routes.js?v=1.9.0",
-  "./js/shopping.js": "./js/shopping.js?v=1.9.0",
-  "./js/trivia.js": "./js/trivia.js?v=1.9.0",
-  "./js/vault.js": "./js/vault.js?v=1.9.0",
-  "./js/voice.js": "./js/voice.js?v=1.9.0",
-  "./js/wake.js": "./js/wake.js?v=1.9.0",
-  "./js/weather.js": "./js/weather.js?v=1.9.0",
-  "./js/workpanels.js": "./js/workpanels.js?v=1.9.0"
+  "./js/app.js": "./js/app.js?v=1.9.1",
+  "./js/chinese-checkers.js": "./js/chinese-checkers.js?v=1.9.1",
+  "./js/cubic.js": "./js/cubic.js?v=1.9.1",
+  "./js/digest.js": "./js/digest.js?v=1.9.1",
+  "./js/facts.js": "./js/facts.js?v=1.9.1",
+  "./js/gemini.js": "./js/gemini.js?v=1.9.1",
+  "./js/lock.js": "./js/lock.js?v=1.9.1",
+  "./js/lockui.js": "./js/lockui.js?v=1.9.1",
+  "./js/logbook.js": "./js/logbook.js?v=1.9.1",
+  "./js/mail.js": "./js/mail.js?v=1.9.1",
+  "./js/media.js": "./js/media.js?v=1.9.1",
+  "./js/memory.js": "./js/memory.js?v=1.9.1",
+  "./js/notify.js": "./js/notify.js?v=1.9.1",
+  "./js/ocio.js": "./js/ocio.js?v=1.9.1",
+  "./js/panels.js": "./js/panels.js?v=1.9.1",
+  "./js/reminders.js": "./js/reminders.js?v=1.9.1",
+  "./js/robotics.js": "./js/robotics.js?v=1.9.1",
+  "./js/routes.js": "./js/routes.js?v=1.9.1",
+  "./js/shopping.js": "./js/shopping.js?v=1.9.1",
+  "./js/trivia.js": "./js/trivia.js?v=1.9.1",
+  "./js/vault.js": "./js/vault.js?v=1.9.1",
+  "./js/voice.js": "./js/voice.js?v=1.9.1",
+  "./js/wake.js": "./js/wake.js?v=1.9.1",
+  "./js/weather.js": "./js/weather.js?v=1.9.1",
+  "./js/workpanels.js": "./js/workpanels.js?v=1.9.1"
  }
 }
 </script>
-<script type="module" src="js/app.js?v=1.9.0"></script>
+<script type="module" src="js/app.js?v=1.9.1"></script>
 </body>
 </html>
