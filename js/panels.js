@@ -1,10 +1,12 @@
-// Paneles: Personal (Recordatorios, Compras, Resumen del día), Trabajo (Rutas, Cúbica, Correo, Bitácora) y Ocio (Damas chinas, Trivia, Robótica).
+// Paneles: Personal (Recordatorios, Compras, Resumen del día), Trabajo (Rutas, Cúbica, Correo, Bitácora), Ocio (Damas chinas, Trivia, Robótica)
+// y Herramientas (Fotos, Código, Excel).
 import * as R from "./reminders.js";
 import * as S from "./shopping.js";
 import * as D from "./digest.js";
 import * as Notify from "./notify.js";
 import * as W from "./workpanels.js";
 import * as O from "./ocio.js";
+import * as T from "./tools.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -19,18 +21,20 @@ const GROUPS = {
   personal: [["noticias", "Resumen"], ["recordatorios", "Recordatorios"], ["compras", "Compras"]],
   trabajo: [["rutas", "Rutas"], ["cubica", "Cúbica"], ["correo", "Correo"], ["bitacora", "Bitácora"]],
   ocio: [["damas", "Damas chinas"], ["trivia", "Trivia"], ["robotica", "Robótica"]],
+  herramientas: [["fotos", "Fotos"], ["codigo", "Código"], ["excel", "Excel"]],
 };
-const GROUP_LABEL = { personal: "Personal", trabajo: "Trabajo", ocio: "Ocio" };
+const GROUP_LABEL = { personal: "Personal", trabajo: "Trabajo", ocio: "Ocio", herramientas: "Herramientas" };
 const ALL_TABS = Object.values(GROUPS).flat().map(([id]) => id);
 const groupOf = (t) => Object.keys(GROUPS).find((g) => GROUPS[g].some(([id]) => id === t)) || "personal";
-const lastInGroup = { personal: "recordatorios", trabajo: "rutas", ocio: "damas" };
+const lastInGroup = { personal: "recordatorios", trabajo: "rutas", ocio: "damas", herramientas: "fotos" };
 
-export function initPanels(el, changeCb, workDeps = {}, ocioDeps = {}, navCb) {
+export function initPanels(el, changeCb, workDeps = {}, ocioDeps = {}, navCb, toolDeps = {}) {
   root = el; onChange = changeCb || (() => {}); onNav = navCb || (() => {});
   W.initWork({ ...workDeps, onChange: (w) => onChange(w) }, () => render());
   O.initOcio({ ...ocioDeps, onChange: (w) => onChange(w) }, () => { if (root && root.isConnected && root.dataset.tab && groupOf(root.dataset.tab) === "ocio" && root.childElementCount) render(); });
+  T.initTools({ ...toolDeps, onChange: (w) => onChange(w) }, () => { if (root && root.isConnected && root.dataset.tab && groupOf(root.dataset.tab) === "herramientas" && root.childElementCount) render(); });
 }
-export function resetPanels() { W.resetWork(); O.resetOcio(); editingId = null; }
+export function resetPanels() { W.resetWork(); O.resetOcio(); T.resetTools(); editingId = null; }
 
 export function currentTab() { return tab; }
 export { groupOf, GROUPS, GROUP_LABEL };
@@ -41,7 +45,7 @@ export function currentView() { return { group: landing || groupOf(tab), tab: la
 export function openGroup(group) {
   landing = GROUPS[group] ? group : "personal";
   editingId = null;
-  W.clearStatus(); O.clearStatus();
+  W.clearStatus(); O.clearStatus(); T.clearStatus();
   render();
 }
 
@@ -49,7 +53,7 @@ export function openPanel(name) {
   if (ALL_TABS.includes(name)) tab = name;
   landing = null;
   editingId = null;
-  W.clearStatus(); O.clearStatus();
+  W.clearStatus(); O.clearStatus(); T.clearStatus();
   render();
 }
 
@@ -63,14 +67,15 @@ export function render() {
   const keep = root.dataset.tab === tab ? scroller.scrollTop : 0;
   const focusId = document.activeElement && root.contains(document.activeElement) ? document.activeElement.id : "";
   root.innerHTML = `
-    <div class="panel-tabs${group === "trabajo" ? " four" : ""}${group === "ocio" ? " ocio" : ""}" role="tablist" aria-label="Paneles">
+    <div class="panel-tabs${group === "trabajo" ? " four" : ""}${group === "ocio" || group === "herramientas" ? " ocio" : ""}" role="tablist" aria-label="Paneles">
       ${GROUPS[group].map(([id, label]) => tabBtn(id, label)).join("")}
     </div>
     <div class="panel-body" id="panel-body" role="tabpanel" aria-label="${(GROUPS[group].find(([id]) => id === tab) || [, ""])[1]}">${body()}</div>`;
   root.dataset.tab = tab;
-  root.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => { tab = b.dataset.tab; editingId = null; W.clearStatus(); O.clearStatus(); render(); onNav({ from: "tabs", ...currentView() }); }));
+  root.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => { tab = b.dataset.tab; editingId = null; W.clearStatus(); O.clearStatus(); T.clearStatus(); render(); onNav({ from: "tabs", ...currentView() }); }));
   if (group === "trabajo") W.bind(tab, root.querySelector("#panel-body"));
   else if (group === "ocio") O.bind(tab, root.querySelector("#panel-body"));
+  else if (group === "herramientas") T.bind(tab, root.querySelector("#panel-body"));
   else bind();
   scroller.scrollTop = keep;
   if (focusId) { const el = document.getElementById(focusId); if (el && root.contains(el)) el.focus({ preventScroll: true }); }
@@ -86,6 +91,9 @@ const CARD = {
   bitacora: ["Bitácora", "Registro de rutas del día", '<path d="M6.5 4h11v16h-11zM9.5 8h5M9.5 11.5h5M9.5 15h3"/>'],
   damas: ["Damas chinas", "Tablero de estrella contra Antares", '<path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8L3.5 9.2l5.9-.9z"/>'],
   trivia: ["Trivia", "Preguntas para jugar en familia", '<path d="M9.2 9a2.9 2.9 0 1 1 4.2 2.6c-.9.5-1.4 1.2-1.4 2.2v.7M12 18h.01"/><circle cx="12" cy="12" r="8.5"/>'],
+  fotos: ["Fotos", "Recortar, ajustar, pintar y editar con IA", '<path d="M4 7.5h3l1.5-2h7l1.5 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>'],
+  codigo: ["Código", "Encontrar errores y corregir programas", '<path d="M8.5 7.5L4 12l4.5 4.5M15.5 7.5L20 12l-4.5 4.5M13.5 5l-3 14"/>'],
+  excel: ["Excel", "Sumas por ruta, errores, fórmulas y cambios", '<path d="M4.5 4.5h15v15h-15zM4.5 9.5h15M4.5 14.5h15M9.5 4.5v15"/>'],
   robotica: ["Robótica", "Retos paso a paso", '<path d="M7 8.5h10v9H7zM12 5v3.5M9.5 12h.01M14.5 12h.01M10 15h4M4.5 12v3M19.5 12v3"/>'],
 };
 function cardCount(id) {
@@ -98,7 +106,7 @@ function cardCount(id) {
 function renderLanding() {
   const g = landing;
   root.innerHTML = `
-    <p class="landing-intro">${{ personal: "Su día, avisos y compras.", trabajo: "Herramientas para la ruta de hoy.", ocio: "Juegos y retos para descansar." }[g]}</p>
+    <p class="landing-intro">${{ personal: "Su día, avisos y compras.", trabajo: "Herramientas para la ruta de hoy.", ocio: "Juegos y retos para descansar.", herramientas: "Fotos, programación y hojas de Excel." }[g]}</p>
     <ul class="group-cards ${g}" aria-label="${GROUP_LABEL[g]}">
       ${GROUPS[g].map(([id]) => { const [name, desc, icon] = CARD[id]; const c = cardCount(id);
         return `<li><button type="button" class="group-card" data-tab="${id}" data-open="${id}">
@@ -111,7 +119,7 @@ function renderLanding() {
   root.dataset.tab = `landing-${g}`;
   (root.closest(".settings-scroll") || root).scrollTop = 0;
   root.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => {
-    tab = b.dataset.open; landing = null; editingId = null; W.clearStatus(); O.clearStatus(); render(); onNav({ from: "landing", ...currentView() });
+    tab = b.dataset.open; landing = null; editingId = null; W.clearStatus(); O.clearStatus(); T.clearStatus(); render(); onNav({ from: "landing", ...currentView() });
   }));
 }
 
@@ -121,6 +129,7 @@ function tabBtn(id, label) {
 function body() {
   if (groupOf(tab) === "trabajo") return W.html(tab);
   if (groupOf(tab) === "ocio") return O.html(tab);
+  if (groupOf(tab) === "herramientas") return T.html(tab);
   if (tab === "compras") return shoppingHtml();
   if (tab === "noticias") return newsHtml();
   return remindersHtml();

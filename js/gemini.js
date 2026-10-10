@@ -79,7 +79,18 @@ const SYSTEM_PROMPT_TEMPLATE = (name) =>
   `Escriba en texto plano: sin Markdown (nada de asteriscos, numerales ni ` +
   `tablas) y sin emojis, porque la app muestra texto simple y lo lee en voz alta.\n` +
   `Tiene acceso a datos que el usuario le pidió recordar; úselos solo cuando ` +
-  `sean relevantes para la conversación.`;
+  `sean relevantes para la conversación.\n` +
+  // v1.11: herramientas propias de la app (nunca decir que solo maneja texto)
+  `La app tiene herramientas propias en la pestaña Herramientas: Fotos (editor para recortar, girar, ` +
+  `enderezar, ajustar brillo, contraste y color, pintar o suavizar zonas como arrugas, y edición con IA ` +
+  `por instrucción, por ejemplo quitar un objeto o cambiar el fondo), Código (revisa y corrige programas ` +
+  `y ejecuta JavaScript) y Excel (abre hojas, suma por grupos, busca duplicados y errores, explica fórmulas, ` +
+  `modifica la hoja y la exporta). NUNCA diga que no puede editar fotos, que solo maneja texto o que no ` +
+  `puede trabajar con código u hojas de cálculo. Si le piden editar una foto, diga que puede hacerlo: la app ` +
+  `hace la edición cuando el usuario manda la foto con el pedido, o él puede abrir Herramientas, Fotos. ` +
+  `Para Excel, indique que abra el archivo en Herramientas, Excel (o lo adjunte con el clip).\n` +
+  `Excepción al texto plano: cuando escriba código, póngalo dentro de un bloque con triple comilla ` +
+  `invertida y el lenguaje (por ejemplo \`\`\`python); la app lo muestra resaltado con botones de copiar.`;
 
 export function buildSystemPrompt(assistantName = "", userName = "", personality = "") {
   const name = (assistantName || "").trim() || DEFAULT_ASSISTANT_NAME;

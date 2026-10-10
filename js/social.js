@@ -76,7 +76,8 @@ export function parseReply(raw) {
   });
   text = text.replace(LOOSE_RE, (m) => { const inner = m.slice(1, -1); const [k, v] = inner.split(":"); if (/^s/i.test(k.trim())) { const s = sticker(v); if (s && !stickerId) stickerId = s.id; } else { const r = reaction(v); if (r && !react) react = r.e; } return ""; });
   text = text.replace(/\[\[[^\]\n]{0,60}\]\]/g, "").replace(/\[\[[^\]\n]{0,60}$/, ""); // etiquetas desconocidas o cortadas
-  text = text.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").replace(/[ \t]{2,}/g, " ").trim();
+  // v1.11: los espacios se normalizan solo fuera de los bloques de código (la sangría de Python importa)
+  text = text.split(/(```[\s\S]*?(?:```|$))/).map((seg, i) => (i % 2 ? seg : seg.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").replace(/[ \t]{2,}/g, " "))).join("").trim();
   return { text, react, sticker: stickerId };
 }
 // Durante el streaming: quitar etiquetas completas y una etiqueta a medio llegar al final

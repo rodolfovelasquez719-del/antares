@@ -107,6 +107,18 @@ Actualizar.
 - Funciona sin conexión para abrir la app (service worker "primero red" con espera de 3 s y
   respaldo en caché).
 
+## Novedades de la 1.11.0 (Herramientas: Fotos, Código y Excel)
+
+Nueva pestaña **Herramientas** (5.ª pestaña) con tres tarjetas:
+
+- **Fotos**: editor en el teléfono (recortar, girar, enderezar, brillo, contraste, saturación, calidez, pincel «Pintar color» con cuentagotas, pincel «Suavizar (arrugas)», deshacer, descargar y compartir / guardar en Fotos con el menú de compartir). **Edición con IA** por instrucción con los modelos de imagen de Gemini (`responseModalities: IMAGE`), con comparador antes/después. La IA tiene orden de cambiar solo lo pedido y conservar rostros e identidad.
+  - Si la key es del plan gratuito, Google no da cuota de imágenes (`limit: 0`). La app lo explica en español (hay que activar la facturación en Google AI Studio) y ofrece las herramientas locales.
+  - En el chat, una foto con un pedido de edición («quite la cortina», «ponga una pared blanca», «alise las arrugas»…) va directo a la edición con IA. Toda respuesta sobre una foto ofrece «Editar esta foto».
+- **Código**: pegue código o adjunte archivos (.js, .py, .html, .css, .java, .cs, .sql, .json…). Antares explica los errores en español sencillo y devuelve el código corregido. Los bloques de código del chat se ven resaltados, con Copiar, Descargar, Ver cambios (diferencia por líneas) y Ejecutar (solo JavaScript). JavaScript corre en un Worker aparte, sin red ni almacenamiento, y se corta a los 3 s.
+- **Excel**: abre .xlsx, .xls, .csv y .ods con SheetJS Community Edition 0.20.3 (`vendor/sheetjs/`, licencia Apache-2.0, se carga solo al abrirla). Ofrece vista previa, sumas por grupo, totales, duplicados, revisión de errores, ordenar, agregar columnas con cálculos (SI, REDONDEAR…), deshacer y exportar a .xlsx (las otras hojas se conservan). Las preguntas a Antares mandan solo el esquema y una muestra CSV. El modelo responde con un plan de operaciones y **las cuentas se hacen en el teléfono sobre todas las filas**. Las fórmulas sugeridas van en español con «;».
+- Arreglo: la primera línea de una respuesta larga ya no queda desvanecida arriba. El desvanecido solo aparece al desplazarse y mide 18 px, y una respuesta larga se muestra desde su primera línea.
+- Las fotos, el código y las hojas abiertas viven solo en memoria y se borran al bloquear. Las miniaturas de fotos editadas que quedan en la conversación se cifran como el resto.
+
 ## Novedades de la 1.10.0 (reacciones y stickers)
 
 - Antares puede reaccionar a sus mensajes con un emoji (👍 ❤️ 🎉 😂 ✅ 😮), como una persona: ante un

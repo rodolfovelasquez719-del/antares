@@ -20,8 +20,12 @@ import * as Cubic from "./cubic.js";
 import * as Mail from "./mail.js";
 import * as Logbook from "./logbook.js";
 import * as Social from "./social.js";
+import * as Tools from "./tools.js";
+import * as Photo from "./photo.js";
+import * as Code from "./code.js";
+import * as Sheet from "./sheet.js";
 
-const APP_VERSION = "1.10.0";
+const APP_VERSION = "1.11.0";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -68,7 +72,7 @@ const els = {
   attachments: $("attachments"), stop: $("stop-btn"), micZone: $("mic-zone"), mic: $("mic-btn"), micHint: $("mic-hint"),
   form: $("composer"), input: $("msg-input"), send: $("send-btn"),
   attachBtn: $("attach-btn"), attachMenu: $("attach-menu"),
-  pickPhoto: $("pick-photo"), pickVideo: $("pick-video"), pickGallery: $("pick-gallery"), pickPdf: $("pick-pdf"),
+  pickPhoto: $("pick-photo"), pickVideo: $("pick-video"), pickGallery: $("pick-gallery"), pickPdf: $("pick-pdf"), pickFile: $("pick-file"),
   closePanel: $("close-panel"), panelView: $("panel-view"), panelRoot: $("panel-root"), panelTitle: $("panel-title"), tabbar: $("tabbar"), wakeStatus: $("wake-status"),
   exportTxt: $("export-txt"), exportJson: $("export-json"),
   // configuración
@@ -310,9 +314,34 @@ function isNearBottom() {
   const m = els.messages;
   return m.scrollHeight - m.scrollTop - m.clientHeight < 140;
 }
-function scrollToBottom(smooth = true) {
-  requestAnimationFrame(() => els.messages.scrollTo({ top: els.messages.scrollHeight, behavior: smooth ? "smooth" : "auto" }));
+// v1.11: una respuesta larga queda "fijada" desde su primera línea un momento, aunque cambie el diseño
+// (estado, teclado); se suelta al tocar la conversación, al escribir otro mensaje o a los 2,5 s
+let replyPin = null;
+const pinValid = () => replyPin && replyPin.wrap.isConnected && Date.now() < replyPin.until && [...els.messages.querySelectorAll(".msg")].pop() === replyPin.wrap;
+function pinTop(wrap) {
+  const m = els.messages;
+  const top = m.scrollTop + wrap.getBoundingClientRect().top - m.getBoundingClientRect().top - 24; // debajo del desvanecido
+  m.scrollTo({ top: Math.max(0, top), behavior: "auto" });
 }
+function scrollToBottom(smooth = true) {
+  requestAnimationFrame(() => {
+    if (replyPin) { if (pinValid()) { pinTop(replyPin.wrap); return; } replyPin = null; }
+    els.messages.scrollTo({ top: els.messages.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+  });
+}
+// respuesta larga (más alta que el 80 % de la pantalla): se muestra desde su primera línea, no desde el final
+function scrollToReply(wrap) {
+  requestAnimationFrame(() => {
+    const m = els.messages;
+    if (!wrap.isConnected) return;
+    if (wrap.offsetHeight > m.clientHeight * 0.8) { replyPin = { wrap, until: Date.now() + 2500 }; pinTop(wrap); }
+    else { replyPin = null; m.scrollTo({ top: m.scrollHeight, behavior: "smooth" }); }
+  });
+}
+["touchstart", "wheel", "keydown", "pointerdown"].forEach((ev) => els.messages.addEventListener(ev, () => { replyPin = null; }, { passive: true }));
+// el desvanecido superior solo cuando hay mensajes ocultos arriba
+const syncFade = () => els.messages.classList.toggle("faded", els.messages.scrollTop > 2);
+els.messages.addEventListener("scroll", syncFade, { passive: true });
 function announce(text) {
   els.announcer.textContent = "";
   setTimeout(() => { els.announcer.textContent = text; }, 60);
@@ -329,6 +358,65 @@ function appendLinkified(parent, text) {
     last = m.index + m[0].length;
   }
   if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
+}
+
+// v1.11: texto con bloques ``` -> párrafos + bloques de código resaltados (Copiar, Descargar, Ver cambios, Ejecutar)
+let lastUserCode = null; // último código que mandó el usuario (para "Ver cambios")
+function appendRich(parent, text, role) {
+  if (!Code.hasFence(text)) { appendLinkified(parent, text); return false; }
+  for (const seg of Code.splitFences(text)) {
+    if (seg.type === "text") {
+      const t = document.createElement("span"); t.className = "t-seg";
+      appendLinkified(t, seg.text.replace(/^\n+|\n+$/g, ""));
+      parent.appendChild(t);
+    } else parent.appendChild(codeBlockEl(seg, role));
+  }
+  return true;
+}
+function codeBlockEl({ lang, code }, role) {
+  const prev = role === "bot" && lastUserCode && (lastUserCode.lang === lang || lastUserCode.lang === "text") && lastUserCode.code !== code ? lastUserCode : null;
+  if (role === "user") lastUserCode = { lang, code };
+  const box = document.createElement("div"); box.className = "code-block";
+  const head = document.createElement("div"); head.className = "code-head";
+  const lab = document.createElement("span"); lab.className = "code-lang"; lab.textContent = `${Code.LANG_LABEL[lang] || lang} · ${code.split("\n").length} líneas`;
+  head.appendChild(lab);
+  const pre = document.createElement("pre"); pre.className = "code-pre"; pre.tabIndex = 0;
+  pre.setAttribute("aria-label", `Código ${Code.LANG_LABEL[lang] || ""}`);
+  const el = document.createElement("code"); el.innerHTML = Code.highlight(code, lang); // highlight() escapa todo el texto
+  pre.appendChild(el);
+  const extra = document.createElement("div"); extra.className = "code-extra";
+  const btn = (label, fn, cls = "") => { const b = document.createElement("button"); b.type = "button"; b.className = "mini-btn " + cls; b.textContent = label; b.onclick = () => fn(b); head.appendChild(b); return b; };
+  btn("Copiar", async (b) => { if (await copyText(code)) { b.textContent = "Copiado"; setTimeout(() => { b.textContent = "Copiar"; }, 1500); } });
+  btn("Descargar", () => downloadFile(`codigo.${Code.LANG_EXT[lang] || "txt"}`, code, "text/plain"));
+  if (prev) {
+    btn("Ver cambios", (b) => {
+      const open = extra.dataset.mode === "diff";
+      extra.replaceChildren(); extra.dataset.mode = "";
+      b.setAttribute("aria-expanded", String(!open));
+      if (open) { b.textContent = "Ver cambios"; return; }
+      const d = Code.lineDiff(prev.code, code);
+      const wrap = document.createElement("div"); wrap.className = "code-diff"; wrap.tabIndex = 0;
+      if (!d) wrap.textContent = "El código es muy largo para comparar aquí.";
+      else { const st = Code.diffStats(d); const h = document.createElement("p"); h.className = "diff-sum"; h.textContent = `${st.add} líneas nuevas o cambiadas, ${st.del} quitadas`; extra.appendChild(h); wrap.innerHTML = Code.diffHtml(d); }
+      extra.appendChild(wrap); extra.dataset.mode = "diff"; b.textContent = "Ocultar cambios";
+    }).setAttribute("aria-expanded", "false");
+  }
+  if (Code.isRunnable(lang)) {
+    btn("Ejecutar", async (b) => {
+      b.disabled = true; b.textContent = "Ejecutando…";
+      const r = await Code.runJs(code, { timeoutMs: 3000 });
+      b.disabled = false; b.textContent = "Ejecutar";
+      extra.replaceChildren(); extra.dataset.mode = "run";
+      const out = document.createElement("pre"); out.className = "tl-console " + (r.ok ? "ok" : "ko"); out.setAttribute("role", "status");
+      const lines = r.logs.map((l) => `${l.level === "error" ? "✖ " : l.level === "warn" ? "⚠ " : ""}${l.text}`);
+      if (r.value !== undefined && r.value !== null) lines.push(`← ${r.value}`);
+      if (r.error) lines.push(`✖ ${r.error}`);
+      out.textContent = lines.join("\n") || "(sin salida: use console.log para ver valores)";
+      extra.appendChild(out);
+    }, "run");
+  }
+  box.append(head, pre, extra);
+  return box;
 }
 
 function safeHttps(uri) {
@@ -382,6 +470,7 @@ function renderMedia(b, media) {
 }
 
 function renderUser(text, media = null, { id = "", sticker = "", reactions = null } = {}) {
+  replyPin = null;
   const wrap = document.createElement("div");
   wrap.className = "msg user";
   if (id) wrap.dataset.id = id;
@@ -397,9 +486,11 @@ function renderUser(text, media = null, { id = "", sticker = "", reactions = nul
     if (!text) b.classList.add("media-only");
   }
   if (text) {
-    const t = document.createElement("span");
+    const rich = Code.hasFence(text);
+    const t = document.createElement(rich ? "div" : "span");
     t.className = "t";
-    appendLinkified(t, text);
+    appendRich(t, text, "user");
+    if (rich) { b.classList.add("has-code"); wrap.classList.add("wide"); }
     b.appendChild(t);
   }
   wrap.appendChild(b);
@@ -409,14 +500,15 @@ function renderUser(text, media = null, { id = "", sticker = "", reactions = nul
   return wrap;
 }
 
-function renderBot(text, { sources = [], meta = "", id = "", sticker = "", reactions = null } = {}) {
+function renderBot(text, { sources = [], meta = "", id = "", sticker = "", reactions = null, media = null, reply = false } = {}) {
   const wrap = document.createElement("div");
   wrap.className = "msg bot";
   if (id) wrap.dataset.id = id;
   const st = sticker ? Social.stickerEl(sticker) : null;
   const b = document.createElement("div");
   b.className = "bubble";
-  if (text) appendLinkified(b, text);
+  if (media && media.length) { b.classList.add("has-media"); renderMedia(b, media); }
+  if (text && appendRich(b, text, "bot")) { b.classList.add("has-code"); wrap.classList.add("wide"); }
   if (st && !text) { b.classList.add("sticker-only"); b.appendChild(st); }
   wrap.appendChild(b);
   if (st && text) { st.classList.add("after-text"); wrap.appendChild(st); }
@@ -440,7 +532,7 @@ function renderBot(text, { sources = [], meta = "", id = "", sticker = "", react
     wrap.appendChild(m);
   }
   els.messages.appendChild(wrap);
-  scrollToBottom();
+  if (reply) scrollToReply(wrap); else scrollToBottom();
   return wrap;
 }
 
@@ -717,8 +809,10 @@ async function runJob(job) {
       if (react) applyReaction(job.userMsgId, "a", react, { animate: true });
       let saved = null;
       if (text || sticker) {
-        const botWrap = renderBot(text, { sources: r.sources, meta: formatMeta(r, uploadMs), sticker });
+        const botWrap = renderBot(text, { sources: r.sources, meta: formatMeta(r, uploadMs), sticker, reply: true });
         if (job.kind === "mail") addMailActions(botWrap, text);
+        const photoItem = (job.items || []).find((i) => i.kind === "image" && i.blob);
+        if (photoItem) addActions(botWrap, [{ label: "Editar esta foto", run: () => openPhotoTool(photoItem, job.text || "") }]);
         saved = memory.addMessage("assistant", text, { sources: r.sources || [], sticker });
         handleSave(saved, "la respuesta");
         const st = sticker ? Social.sticker(sticker) : null;
@@ -732,7 +826,7 @@ async function runJob(job) {
         renderBot("", { meta: formatMeta(r, uploadMs) });
         handleSave(memory.addMessage("assistant", ""), "la respuesta");
       }
-      if (text && (wantsVoice() || job.speak) && !r.stopped) voice.speak(text);
+      if (text && (wantsVoice() || job.speak) && !r.stopped) voice.speak(Code.hasFence(text) ? Code.splitFences(text).map((x) => (x.type === "text" ? x.text : " Le dejé el código en la pantalla. ")).join(" ") : text);
       if (job.kind !== "mail" && job.text && looksLikeImportantFact(job.text)) {
         if (config.autoLearn) autoLearn(job.text, text); // en segundo plano, no bloquea
         else { pendingConfirm = job.text; renderConfirm(job.text); }
@@ -978,6 +1072,16 @@ function sendMessage(text, items = [], opts = {}) {
       .catch((e) => { console.warn("Antares local:", e); showNote("No pude completar eso. Intente de nuevo.", { warn: true }); });
     return true;
   }
+  // v1.11: archivos de código adjuntos -> van dentro del mensaje como bloque de código
+  const codeItems = items.filter((i) => i.kind === "code");
+  if (codeItems.length) {
+    items = items.filter((i) => i.kind !== "code");
+    text = codeItems.reduce((acc, c) => Tools.codeMessage(c.text, { name: c.name, lang: c.lang, task: "errores", detail: acc }), text);
+  }
+  // v1.11: foto + pedido de edición (quitar, cambiar fondo, poner pared, arrugas…) -> edición de imagen
+  const editPhoto = items.length && items.every((i) => i.kind === "image") && Photo.looksLikePhotoEdit(text) ? items.find((i) => i.blob) : null;
+  if (editPhoto) { currentJob = photoEditJob(text, items, editPhoto, { speak }); return true; }
+  const codeMode = Code.looksLikeCode(text) || /\b(c[oó]digo|script|programa|funci[oó]n|bug|depur\w*|python|javascript|html|css|sql|java|c#)\b/i.test(text) && /\b(arregl\w*|corrig\w*|error(es)?|falla|revis\w*|escrib\w*|haga|hag[aá]me|cr[eé]e?\w*|explique)\b/i.test(text);
   const label = items.map((i) => (i.kind === "video" ? "[video]" : i.kind === "pdf" ? "[pdf]" : "[foto]")).join(" ");
   const prompt = text || (items.some((i) => i.kind === "pdf") ? DEFAULT_PDF_PROMPT
     : items.length && items.every((i) => i.kind === "video") ? DEFAULT_VIDEO_PROMPT : DEFAULT_MEDIA_PROMPT);
@@ -991,9 +1095,96 @@ function sendMessage(text, items = [], opts = {}) {
   handleSave(saved, "el mensaje");
   if (items.length) rememberMedia(saved.id, items);
   const social = socialMode();
-  currentJob = runJob({ text, items, prompt, history, facts, speak, userMsgId: saved.id, social,
-    extraSystem: [tutorMode ? Robotics.TUTOR_SYSTEM : "", social ? Social.socialRules(social) : ""].filter(Boolean).join("\n\n") });
+  currentJob = runJob({ text, items, prompt, history, facts, speak, userMsgId: saved.id, social, kind: codeMode ? "code" : undefined,
+    extraSystem: [tutorMode ? Robotics.TUTOR_SYSTEM : "", codeMode ? Code.CODE_RULES : "", social ? Social.socialRules(social) : ""].filter(Boolean).join("\n\n") });
   return true;
+}
+
+// ---------- v1.11: herramientas desde el chat ----------
+function openPhotoTool(item, instruction = "", mode = "ia") {
+  if (!item || !item.blob) return false;
+  Tools.openPhotoWith(item.blob, { name: item.name || "foto.jpg", instruction, mode })
+    .then(() => showPanel("fotos"))
+    .catch(() => chatNotice("No pude abrir esa foto en el editor."));
+  return true;
+}
+// Sugerencia de herramientas locales según lo que pidió
+function localPhotoTip(text) {
+  const t = String(text || "").toLowerCase(), tips = [];
+  if (/quit|borr|elimin|pared|fondo|cortina|tap/.test(t)) tips.push("con el pincel «Pintar color» puede cubrir la zona (por ejemplo, la cortina) con el color de la pared; use «Tomar color» para copiar el tono exacto");
+  if (/arrug|alis|planch|suav|mancha|limpi/.test(t)) tips.push("con «Suavizar (arrugas)» pase el dedo sobre las arrugas para disimularlas");
+  if (/luz|oscur|aclar|ilumin|mejor|brillo|color/.test(t)) tips.push("en «Ajustes» puede subir el brillo, el contraste y la calidez");
+  if (/recort|endere|gir/.test(t)) tips.push("en «Ajustes» y «Recortar» puede girar, enderezar y recortar");
+  return tips.length ? `Mientras tanto, en el editor ${tips.join("; ")}.` : "Mientras tanto puede usar el editor: recortar, ajustar la luz, pintar o suavizar zonas.";
+}
+async function photoEditJob(text, items, item, { speak = false } = {}) {
+  setVista("chat");
+  renderUser(text, items.map((i) => ({ kind: i.kind, url: i.url, thumb: i.thumb, name: i.name, label: i.label })));
+  const thumbsToKeep = items.map((i) => ({ kind: i.kind, thumb: i.thumb && i.thumb.length < 16000 ? i.thumb : "" }));
+  const saved = memory.addMessage("user", `${items.map(() => "[foto]").join(" ")} ${text}`, { media: thumbsToKeep });
+  handleSave(saved, "el mensaje");
+  rememberMedia(saved.id, items);
+  busy = true;
+  const epoch = lockEpoch, t0 = performance.now();
+  abortCtrl = new AbortController();
+  setEstado("hablando");
+  updateComposer();
+  const stream = createStreamingBubble();
+  stream.bubble.classList.add("pending"); stream.bubble.textContent = "Editando la foto con IA…";
+  els.connSub.textContent = "Editando la foto…";
+  scrollToBottom(false);
+  try {
+    let blob = item.blob;
+    try { // la foto se envía como JPG de máximo 1536 px (también convierte HEIC si el navegador puede)
+      const c = await Photo.loadImage(blob);
+      const k = Math.min(1, 1536 / Math.max(c.width, c.height));
+      const o = Photo.canvas(Math.round(c.width * k), Math.round(c.height * k));
+      o.getContext("2d").drawImage(c, 0, 0, o.width, o.height);
+      blob = await Photo.toBlob(o, "image/jpeg", 0.9);
+    } catch { /* se envía tal cual */ }
+    const r = await Photo.aiEdit(config.geminiApiKey, blob, text, { signal: abortCtrl.signal, onStatus: (st) => { if (stream.bubble.isConnected) stream.bubble.textContent = st.replace(/^Editando con .*/, "Editando la foto con IA…"); } });
+    stream.wrap.remove();
+    if (epoch !== lockEpoch) return;
+    if (r.ok) {
+      const url = URL.createObjectURL(r.blob);
+      let thumb = "";
+      try { thumb = await Photo.thumbDataUrl(await Photo.loadImage(r.blob), 360); } catch { /* */ }
+      const msg = "Listo, aquí está la foto editada. Revise que todo se vea bien; puede compararla, descargarla o seguir ajustándola en el editor.";
+      const wrap = renderBot(msg, { media: [{ kind: "image", url }], meta: `${((performance.now() - t0) / 1000).toFixed(1).replace(".", ",")} s · ${r.model}`, reply: true });
+      const name = (item.name || "foto").replace(/\.\w+$/, "") + "-editada." + (r.blob.type === "image/png" ? "png" : "jpg");
+      addActions(wrap, [
+        { label: "Guardar / compartir", run: () => Photo.shareOrDownload(r.blob, name) },
+        { label: "Abrir en el editor", run: () => { Tools.openPhotoWith(r.blob, { name, mode: "ajustes" }).then(() => showPanel("fotos")); } },
+        { label: "Ver original", run: () => openPhotoTool(item, text, "ia") },
+      ]);
+      handleSave(memory.addMessage("assistant", msg, { media: thumb && thumb.length < 60000 ? [{ kind: "image", thumb }] : null }), "la respuesta");
+      announce(`${assistantName()}: ${msg}`);
+      if (speak || wantsVoice()) voice.speak("Listo, aquí está la foto editada.");
+    } else if (r.stopped) {
+      showNote("Respuesta detenida.");
+    } else {
+      const why = String(r.text || "").replace(/\s*Mientras tanto[^.]*\.\s*$/, "").replace(/ o use las herramientas del editor/, "");
+      const msg = `${r.title}. ${why} ${localPhotoTip(text)}`;
+      const wrap = renderBot(msg, { reply: true });
+      addActions(wrap, [{ label: "Abrir el editor de fotos", run: () => openPhotoTool(item, text, /quit|pared|fondo|cortina|arrug|alis|suav|borr/i.test(text) ? "pincel" : "ajustes") }]);
+      handleSave(memory.addMessage("assistant", msg), "la respuesta");
+      announce(`${assistantName()}: ${msg}`);
+      if (speak || wantsVoice()) voice.speak(msg);
+    }
+  } catch (e) {
+    if (stream.wrap.isConnected) stream.wrap.remove();
+    if (epoch !== lockEpoch) return;
+    if (e && e.name === "AbortError") showNote("Respuesta detenida.");
+    else {
+      const wrap = renderBot("No pude editar la foto por un error inesperado. " + localPhotoTip(text), { reply: true });
+      addActions(wrap, [{ label: "Abrir el editor de fotos", run: () => openPhotoTool(item, text, "pincel") }]);
+    }
+  } finally {
+    busy = false; abortCtrl = null;
+    if (epoch === lockEpoch) setEstado(baseEstado());
+    updateComposer();
+    setTimeout(maybeResumeWake, 50);
+  }
 }
 
 // ---------- v1.10: reacciones y stickers ----------
@@ -1165,9 +1356,9 @@ function renderAttachments() {
     const box = document.createElement("div");
     box.className = "att" + (a.loading ? " loading" : "");
     if (!a.loading) {
-      if (a.kind === "pdf") {
+      if (a.kind === "pdf" || a.kind === "code") {
         const chip = document.createElement("span");
-        chip.className = "pdf-chip"; chip.textContent = (a.name || "PDF").slice(0, 18);
+        chip.className = "pdf-chip" + (a.kind === "code" ? " code-chip" : ""); chip.textContent = (a.name || "PDF").slice(0, 18);
         box.appendChild(chip);
       } else if (a.thumb || (a.kind === "image" && a.url)) {
         const img = document.createElement("img");
@@ -1187,7 +1378,7 @@ function renderAttachments() {
       }
     }
     const rm = document.createElement("button");
-    rm.type = "button"; rm.className = "rm"; rm.setAttribute("aria-label", a.kind === "video" ? "Quitar el video" : "Quitar la foto");
+    rm.type = "button"; rm.className = "rm"; rm.setAttribute("aria-label", a.kind === "video" ? "Quitar el video" : a.kind === "code" ? `Quitar ${a.name || "el archivo"}` : a.kind === "pdf" ? "Quitar el documento" : "Quitar la foto");
     rm.innerHTML = '<span aria-hidden="true">×</span>';
     rm.onclick = () => {
       attachments = attachments.filter((x) => x !== a);
@@ -1200,8 +1391,29 @@ function renderAttachments() {
 }
 
 async function addFiles(fileList) {
-  const files = [...(fileList || [])];
+  let files = [...(fileList || [])];
   if (!files.length) return;
+  // v1.11: hojas de cálculo -> herramienta Excel (con el texto escrito como pregunta)
+  const sheets = files.filter((f) => Sheet.isSheetName(f.name));
+  if (sheets.length) {
+    files = files.filter((f) => !sheets.includes(f));
+    const q = els.input.value.trim();
+    Tools.openSheetWith(sheets[0], q).then((ok) => { if (ok && q) { els.input.value = ""; autosize(); } showPanel("excel"); });
+    if (!files.length) return;
+  }
+  // archivos de código -> se adjuntan como texto y van dentro del mensaje
+  const codeFiles = files.filter((f) => Code.langFromName(f.name) && !/^(image|video)\//.test(f.type) && !/\.pdf$/i.test(f.name));
+  if (codeFiles.length) {
+    files = files.filter((f) => !codeFiles.includes(f));
+    for (const f of codeFiles) {
+      if (attachments.length >= MAX_ATTACHMENTS) break;
+      const r = await Tools.readCodeFile(f);
+      if (!r.ok) { setVista("chat"); showNote(`No pude usar "${f.name}": ${r.error.replace(/^[A-Z]/, (c) => c.toLowerCase())}`, { warn: true }); continue; }
+      attachments.push({ kind: "code", name: r.name, text: r.text, lang: r.lang, size: f.size });
+    }
+    renderAttachments();
+    if (!files.length) return;
+  }
   const free = MAX_ATTACHMENTS - attachments.length;
   if (free <= 0) { chatNotice(`Puede adjuntar máximo ${MAX_ATTACHMENTS} archivos por mensaje.`); return; }
   if (files.length > free) chatNotice(`Solo se agregaron ${free}: el máximo es ${MAX_ATTACHMENTS} por mensaje.`);
@@ -1231,7 +1443,7 @@ els.attachBtn.addEventListener("click", () => setMenu(els.attachMenu.hidden));
 document.addEventListener("click", (ev) => {
   if (!els.attachMenu.hidden && !els.attachMenu.contains(ev.target) && !els.attachBtn.contains(ev.target)) setMenu(false);
 });
-const pickers = { photo: els.pickPhoto, video: els.pickVideo, gallery: els.pickGallery, pdf: els.pickPdf };
+const pickers = { photo: els.pickPhoto, video: els.pickVideo, gallery: els.pickGallery, pdf: els.pickPdf, file: els.pickFile };
 els.attachMenu.addEventListener("click", (ev) => {
   const btn = ev.target.closest("button[data-pick]");
   if (!btn) return;
@@ -1266,7 +1478,7 @@ function syncHistory() {
     else { history.pushState(navState(), ""); panelPushed = true; }
   });
 }
-const PANEL_NAME = { noticias: "Resumen del día", recordatorios: "Recordatorios", compras: "Compras", rutas: "Rutas", cubica: "Cúbica", correo: "Correo", bitacora: "Bitácora", damas: "Damas chinas", trivia: "Trivia", robotica: "Robótica" };
+const PANEL_NAME = { noticias: "Resumen del día", recordatorios: "Recordatorios", compras: "Compras", rutas: "Rutas", cubica: "Cúbica", correo: "Correo", bitacora: "Bitácora", damas: "Damas chinas", trivia: "Trivia", robotica: "Robótica", fotos: "Fotos", codigo: "Código", excel: "Excel" };
 function markTab(section) {
   els.tabbar.querySelectorAll(".tab").forEach((t) => { if (t.dataset.section === section) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current"); });
 }
@@ -1381,7 +1593,23 @@ initPanels(els.panelRoot, (what) => { if (what === "reminders" || what === "noti
     sendMessage(q);
   },
   setTutor: (on) => { setTutor(on); hidePanelNow(); },
-}, onPanelNav);
+}, onPanelNav, {
+  hasKey: () => !!(client && client.isConfigured()),
+  getKey: () => (isUnlocked() && config ? config.geminiApiKey || "" : ""),
+  // Excel: plan de operaciones en JSON; se descarta si se bloquea a mitad
+  askJson: async (system, content, { signal } = {}) => {
+    const epoch = lockEpoch;
+    const r = await client.askJson(system, content, { signal, maxTokens: 3072 });
+    return epoch === lockEpoch ? r : { ok: false, stopped: true };
+  },
+  // Código: se envía al chat como mensaje (con las reglas del modo programación)
+  sendCode: (msg) => {
+    if (!client.isConfigured()) { hidePanelNow(); setEstado("sinkey"); return; }
+    if (busy) { chatNotice("Espere a que termine la respuesta en curso."); return; }
+    hidePanelNow();
+    sendMessage(msg);
+  },
+});
 function hidePanelNow() { goHome(); setVista("chat"); }
 
 // ---------- Modo tutor de robótica ----------
@@ -2214,11 +2442,12 @@ function loadData() {
   config = memory.getConfig();
   applyConfig();
   els.messages.replaceChildren();
+  lastUserCode = null;
   for (const m of memory.getHistory(40)) {
     if (m.role === "user") {
       const text = String(m.content || "").replace(/^(\[(foto|video|pdf)\]\s*)+/, "").replace(DEFAULT_PROMPTS_RE, "");
       renderUser(m.media ? text : m.content, m.media, { id: m.id, sticker: m.sticker, reactions: m.reactions });
-    } else if (m.content || m.sticker) renderBot(m.content, { sources: m.sources || [], id: m.id, sticker: m.sticker, reactions: m.reactions });
+    } else if (m.content || m.sticker) renderBot(m.content, { sources: m.sources || [], id: m.id, sticker: m.sticker, reactions: m.reactions, media: m.media });
   }
   vista = "inicio";
   setEstado(baseEstado());
