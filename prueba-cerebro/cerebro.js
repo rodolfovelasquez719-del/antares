@@ -192,6 +192,7 @@ async function runTest(kind) {
     if (heap0 != null && heap1 != null) t.heapMB = heap1;
     if (t.decodeTps != null && t.decodeTps < 3) t.warnings.push("Muy lento para conversar (menos de 3 palabras por segundo, aprox.).");
     setProgress(1, t.ok ? `Listo: ${fmtNum(t.decodeTps)} tokens por segundo.` : t.error);
+    renderSummary(); // el resultado se muestra ya; liberar el motor puede tardar en teléfonos lentos
   } catch (e) {
     console.warn("prueba-cerebro:", e);
     t.ok = false; t.error = friendly(e); t.detail = String((e && e.message) || e).slice(0, 300);
