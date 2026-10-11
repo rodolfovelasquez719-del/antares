@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#02090d">
+<meta name="robots" content="noindex">
+<title>Antares · Prueba de cerebro propio</title>
+<link rel="stylesheet" href="cerebro.css?v=2">
+</head>
+<body>
+<header class="top">
+  <div class="core" aria-hidden="true"><span></span></div>
+  <div>
+    <h1>ANTARES <small>PRUEBA DE CEREBRO PROPIO</small></h1>
+    <p class="sub">Revisa si este teléfono puede correr un modelo de IA sin internet. No toca los datos de la app.</p>
+  </div>
+</header>
+
+<main>
+  <p class="warn" id="resume-warn" hidden role="alert"></p>
+
+  <section class="card" aria-labelledby="h-tel">
+    <h2 id="h-tel"><span class="n">1</span> Su teléfono</h2>
+    <div id="detect" class="grid" aria-live="polite"><p class="muted">Revisando el teléfono…</p></div>
+  </section>
+
+  <section class="card" aria-labelledby="h-small">
+    <h2 id="h-small"><span class="n">2</span> Modelo pequeño (0.5B)</h2>
+    <p class="muted">Qwen2.5 0.5B. Descarga de unos 300–400 MB, una sola vez (queda guardado para la próxima). Mide la velocidad con una pregunta fija en español.</p>
+    <button type="button" class="btn primary" id="run-small" disabled>Probar modelo pequeño</button>
+  </section>
+
+  <section class="card" aria-labelledby="h-big">
+    <h2 id="h-big"><span class="n">3</span> Modelo mediano (1.5B) <span class="tag">opcional</span></h2>
+    <p class="muted">Qwen2.5 1.5B. Descarga de <strong>1 GB o más</strong>: use Wi-Fi y deje la pantalla encendida. Hágala después de la prueba pequeña.</p>
+    <button type="button" class="btn" id="run-big" disabled>Probar modelo mediano</button>
+  </section>
+
+  <section class="card" id="run-card" hidden aria-labelledby="h-run">
+    <h2 id="h-run">Prueba en curso</h2>
+    <p id="run-model" class="muted"></p>
+    <div class="bar" role="progressbar" aria-label="Descarga del modelo" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="bar"><span id="bar-fill"></span></div>
+    <p id="run-status" class="status" role="status" aria-live="polite"></p>
+    <pre id="run-out" class="out" aria-label="Respuesta del modelo" hidden></pre>
+    <button type="button" class="btn" id="run-stop" hidden>Detener</button>
+  </section>
+
+  <section class="card" aria-labelledby="h-res">
+    <h2 id="h-res"><span class="n">4</span> Resultado</h2>
+    <div id="summary" aria-live="polite"></div>
+    <div class="row">
+      <button type="button" class="btn primary" id="copy">Copiar resultados</button>
+      <button type="button" class="btn" id="clear-models">Borrar modelos descargados</button>
+    </div>
+    <p id="copy-msg" class="status" role="status"></p>
+    <details><summary>Ver el texto que se copia</summary><pre id="report" class="out"></pre></details>
+  </section>
+
+  <p class="foot">La prueba usa WebLLM (MLC, licencia Apache-2.0) dentro de Chrome. Los modelos se descargan de Hugging Face y quedan guardados en este navegador hasta que los borre. <a href="../">Volver a Antares</a></p>
+</main>
+<script type="module" src="cerebro.js?v=2"></script>
+</body>
+</html>

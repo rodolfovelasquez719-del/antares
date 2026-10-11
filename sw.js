@@ -121,6 +121,8 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  // la página de prueba de "cerebro propio" es independiente: el SW de la app no la toca ni la guarda
+  if (url.pathname.includes("/prueba-cerebro/")) return;
   const isPage = req.mode === "navigate" || url.pathname.endsWith("/") || url.pathname.endsWith("/index.html");
   event.respondWith(networkFirst(req, isPage, event));
 });
