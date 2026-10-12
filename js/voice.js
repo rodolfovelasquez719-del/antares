@@ -176,7 +176,7 @@ export class Voice {
   stopListening() { if (this.listening && this.recognition) { try { this.recognition.stop(); } catch { /* */ } } }
 
   // onInterim(texto) mientras habla, onFinal(texto) al terminar, onState(escuchando), onError(código, mensaje)
-  listen({ lang = "es-CR", onInterim, onFinal, onState, onError } = {}) {
+  listen({ lang = "es-CR", onInterim, onFinal, onState, onError, onEnd, silenceMs = 0 } = {}) {
     if (!this.SR) { onError && onError("unsupported", "Este navegador no permite dictado por voz. Use el micrófono del teclado."); return; }
     if (this.listening) { this.stopListening(); return; }
     this.stop();
@@ -184,7 +184,7 @@ export class Voice {
     const chain = [...LANG_CHAIN.slice(start), ...LANG_CHAIN.slice(0, start)];
     if (this.workingLang && chain.indexOf(this.workingLang) > 0) chain.unshift(...chain.splice(chain.indexOf(this.workingLang), 1));
     const attempt = (i) => {
-      let finalText = "", heard = false, retrying = false;
+      let finalText = "", lastInterim = "", heard = false, retrying = false, silence = null, errCode = "";
       try {
         const rec = new this.SR();
         rec.lang = chain[i];
@@ -199,7 +199,10 @@ export class Voice {
             const t = ev.results[k][0].transcript;
             if (ev.results[k].isFinal) finalText += t; else interim += t;
           }
-          onInterim && onInterim((finalText + interim).trim());
+          lastInterim = (finalText + interim).trim();
+          onInterim && onInterim(lastInterim);
+          // v1.16: fin de frase por silencio (modo conversación)
+          if (silenceMs) { clearTimeout(silence); silence = setTimeout(() => { try { rec.stop(); } catch { /* */ } }, silenceMs); }
         };
         rec.onerror = (ev) => {
           console.warn("Antares voz (reconocimiento):", rec.lang, ev.error);
@@ -207,15 +210,20 @@ export class Voice {
             retrying = true; // probar el siguiente idioma de la cadena es-CR -> es-MX -> es-US
             return;
           }
+          errCode = ev.error || "error";
           if (ev.error === "aborted") return;
+          if (onEnd && (ev.error === "no-speech" || ev.error === "network" || ev.error === "audio-capture")) return; // el modo conversación reintenta solo
           onError && onError(ev.error, speechErrorMessage(ev.error));
         };
         rec.onend = () => {
-          this.listening = false;
+          this.listening = false; clearTimeout(silence);
           if (retrying) { attempt(i + 1); return; }
           if (heard) this.workingLang = rec.lang;
           onState && onState(false);
-          if (finalText.trim()) onFinal && onFinal(finalText.trim());
+          // iOS a veces termina sin resultado "final": se usa lo último que se oyó
+          const text = finalText.trim() || (silenceMs ? lastInterim : "");
+          if (text) onFinal && onFinal(text);
+          onEnd && onEnd({ heard: !!text, error: errCode });
         };
         this.recognition = rec;
         rec.start();
@@ -223,7 +231,8 @@ export class Voice {
         console.warn("Antares voz (reconocimiento):", e);
         this.listening = false;
         onState && onState(false);
-        onError && onError("start", "No pude iniciar el dictado. Intente de nuevo.");
+        if (onEnd) onEnd({ heard: false, error: "start" });
+        else onError && onError("start", "No pude iniciar el dictado. Intente de nuevo.");
       }
     };
     attempt(0);

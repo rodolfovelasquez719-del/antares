@@ -107,6 +107,11 @@ Actualizar.
 - Funciona sin conexión para abrir la app (service worker "primero red" con espera de 3 s y
   respaldo en caché).
 
+## Novedades de la 1.16.0 (Modo conversación)
+
+- Manos libres: mantenga presionado el micrófono, toque «Modo conversación» o diga «modo conversación». Antares escucha, detecta el silencio, responde en voz alta y vuelve a escuchar solo.
+- Para salir: «listo», «adiós», «terminar», «salir», el botón Salir, un toque o 30 s sin hablar. Si toca mientras habla, se calla y le escucha.
+
 ## Novedades de la 1.15.0 (Voz)
 
 - Voz arreglada en iPhone: se habilita en cada toque, lee por trozos cortos, limpia emojis/enlaces/markdown y se reanuda si iOS la pausa.

@@ -39,6 +39,7 @@ export function mountBrain(wrap, opts = {}) {
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     if (w === inst.W && h === inst.H && dpr === inst.dpr) return;
     inst.W = w; inst.H = h; inst.dpr = dpr; cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    try { draw(inst, performance.now() / 1000, effMode(), 0); } catch { /* */ } // v1.16: sin parpadeo al cambiar de tamaño
   };
   if ("ResizeObserver" in window) new ResizeObserver(fit).observe(wrap); else addEventListener("resize", fit);
   fit(); instances.push(inst); start();

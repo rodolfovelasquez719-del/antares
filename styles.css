@@ -1058,3 +1058,15 @@ body { background-color: var(--bg); }
 .stop-voice[hidden] { display: none; }
 .stop-voice i { width: 10px; height: 10px; background: var(--accent); border-radius: 2px; }
 input.range { width: 100%; min-height: 40px; accent-color: var(--cyan); }
+
+/* v1.16: modo conversación */
+.conv-start { margin-top: 2px; font-size: 14px; color: var(--cyan-2); background: none; border: 0; cursor: pointer; min-height: 36px; }
+.conv-start small { color: var(--muted); font-size: 12px; }
+body.conv-on .conv-start { display: none; }
+.conv-pill { display: flex; align-items: center; gap: 8px; margin: 0 auto 8px; width: max-content; max-width: 92%; padding: 4px 4px 4px 12px; border-radius: 20px;
+  font-family: var(--font-hud); font-size: 11px; letter-spacing: 1.4px; color: var(--text); background: rgba(0,255,156,.10); border: 1px solid rgba(0,255,156,.45); box-shadow: 0 0 12px rgba(0,255,156,.25); }
+.conv-pill[hidden] { display: none; }
+.conv-pill .conv-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: blink 1.4s infinite; }
+.conv-pill button { min-height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid var(--accent); background: rgba(255,45,74,.18); color: #fff; font-family: var(--font-ui); font-size: 14px; cursor: pointer; }
+@keyframes blink { 50% { opacity: .3; } }
+body.conv-on #stage .reactor-wrap { cursor: pointer; }

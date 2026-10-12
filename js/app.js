@@ -26,7 +26,7 @@ import * as Code from "./code.js";
 import * as Sheet from "./sheet.js";
 import * as Brain from "./brain.js";
 
-const APP_VERSION = "1.15.0";
+const APP_VERSION = "1.16.0";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -182,6 +182,7 @@ function updateMic() {
   els.mic.disabled = estado === "sinkey" || estado === "hablando";
   els.mic.setAttribute("aria-label", estado === "escuchando" ? "Terminar de hablar" : "Hablar");
   if (voice.speaking && (estado === "reposo" || estado === "error")) { els.micHint.textContent = "Toque para callar"; els.mic.setAttribute("aria-label", "Callar la lectura"); }
+  if (conv && conv.on) { els.micHint.textContent = voice.speaking ? "Toque para interrumpir y hablar" : "Conversación: toque para salir"; els.mic.disabled = false; }
 }
 
 function updateComposer() {
@@ -1358,9 +1359,105 @@ function stopResponse() {
 }
 els.stop.addEventListener("click", stopResponse);
 
+// ---------- v1.16: Modo conversación (manos libres: escuchar → enviar → hablar → volver a escuchar) ----------
+var conv = { on: false, lastHeard: 0, fails: 0, timer: null, turn: 0 };
+const CONV_EXIT = /^\s*(?:listo|adi[oó]s|terminar|termina|termine|salir|salga|ya terminamos|eso es todo|hasta luego|chao|chau)\b[\s.!¡]*$/i;
+const CONV_START = /\bmodo (?:de )?conversaci[oó]n\b/i;
+const isStandalone = () => window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone === true;
+function paintConv() {
+  const pill = $("conv-pill"); if (pill) pill.hidden = !conv.on;
+  document.body.classList.toggle("conv-on", conv.on);
+  updateMic();
+}
+function startConv() {
+  voice.unlock(); // dentro del toque: habilita la voz en iPhone
+  if (conv.on) return;
+  if (!client || !client.isConfigured()) { setVista("chat"); showNote("Primero configure su API key para conversar.", { warn: true }); return; }
+  if (!voice.canListen) {
+    setVista("chat");
+    showNote(isIOS() && isStandalone()
+      ? "En la app instalada del iPhone el dictado no está disponible. Abra Antares en Safari (misma dirección) para el modo conversación, o use el micrófono del teclado."
+      : "Este navegador no permite dictado por voz. Pruebe con Chrome o Safari.", { warn: true });
+    return;
+  }
+  if (panelOpen) hidePanelNow();
+  conv.on = true; conv.fails = 0; conv.lastHeard = Date.now(); conv.turn++;
+  if (wake && wake.enabled) wake.pause("conversacion");
+  paintConv();
+  chatNotice("Conversación activa");
+  const t = conv.turn;
+  voice.speak("Modo conversación. Le escucho.").finally(() => { if (conv.on && conv.turn === t) convListen(250); });
+}
+function stopConv(say = "") {
+  if (!conv.on) return;
+  conv.on = false; conv.turn++; clearTimeout(conv.timer);
+  voice.stopListening();
+  els.interimText.textContent = "";
+  if (estado === "escuchando") setEstado(baseEstado());
+  paintConv();
+  chatNotice("Conversación terminada");
+  if (say) voice.speak(say).finally(() => setTimeout(maybeResumeWake, 500)); else setTimeout(maybeResumeWake, 500);
+}
+function convListen(delay = 600) {
+  clearTimeout(conv.timer);
+  const t = conv.turn;
+  conv.timer = setTimeout(() => {
+    if (!conv.on || conv.turn !== t) return;
+    if (busy || voice.speaking) { convListen(300); return; } // espera a que termine de responder/hablar
+    if (voice.listening) return;
+    if (Date.now() - conv.lastHeard > 30000) { stopConv("No le escuché. Salgo del modo conversación."); return; }
+    voice.listen({
+      lang: config.speechLang || "es-CR",
+      silenceMs: 1200,
+      onState: (on) => { if (!conv.on) return; if (on) { els.interimText.textContent = "Le escucho…"; setEstado("escuchando"); } else if (estado === "escuchando") setEstado(baseEstado()); },
+      onInterim: (txt) => { conv.lastHeard = Date.now(); els.interimText.textContent = txt ? `“${txt}` : "Le escucho…"; },
+      onFinal: (txt) => { if (conv.on && conv.turn === t) convHandle(txt); },
+      onEnd: ({ heard, error }) => {
+        if (!conv.on || conv.turn !== t || heard) return;
+        // sin voz o error pasajero (iOS instalado es inestable): reintentar con espera creciente
+        conv.fails = error && error !== "no-speech" ? conv.fails + 1 : 0;
+        if (conv.fails >= 6) { stopConv(); setVista("chat"); showNote(isIOS() && isStandalone() ? "El dictado se cortó varias veces en la app instalada. Abra Antares en Safari para conversar sin tocar." : "El dictado se cortó varias veces. Toque el micrófono para seguir.", { warn: true }); return; }
+        convListen(Math.min(3000, 250 + conv.fails * 500));
+      },
+      onError: (code, msg) => { stopConv(); if (msg) { setVista("chat"); showNote(msg, { warn: true }); } },
+    });
+  }, delay);
+}
+function convHandle(text) {
+  conv.lastHeard = Date.now(); conv.fails = 0;
+  els.interimText.textContent = "";
+  const t = text.trim();
+  if (CONV_EXIT.test(t)) { stopConv("Listo. Salgo del modo conversación."); return; }
+  if (/^(?:silencio|c[aá]llese|c[aá]llate|basta)\b/i.test(t)) { voice.stop(); convListen(400); return; }
+  if (!sendMessage(t, [], { speak: true })) { stopConv(); return; }
+  // al terminar la respuesta y la voz, vuelve a escuchar (con un respiro para no oírse a sí mismo)
+  Promise.resolve(currentJob).finally(() => convListen(700));
+}
+$("conv-exit")?.addEventListener("click", () => stopConv());
+$("conv-start")?.addEventListener("click", () => startConv());
+$("conv-start-settings")?.addEventListener("click", () => { closeSettingsIfOpen(); startConv(); });
+function closeSettingsIfOpen() { if (!els.settingsView.hidden) { const back = $("close-settings") || document.querySelector("#settings-view .back, #settings-view [data-close]"); if (back) back.click(); } }
+// pulsación larga en el micrófono = modo conversación
+{
+  let lp = null, longFired = false;
+  els.mic.addEventListener("pointerdown", () => { longFired = false; clearTimeout(lp); lp = setTimeout(() => { longFired = true; if (navigator.vibrate) navigator.vibrate(30); conv.on ? stopConv() : startConv(); }, 650); });
+  ["pointerup", "pointerleave", "pointercancel"].forEach((e) => els.mic.addEventListener(e, () => clearTimeout(lp)));
+  els.mic.addEventListener("click", (ev) => { if (longFired) { longFired = false; ev.stopImmediatePropagation(); } }, true);
+  els.mic.addEventListener("contextmenu", (ev) => ev.preventDefault());
+}
+// tocar el cerebro durante la conversación: si habla, lo interrumpe y escucha; si no, sale
+document.querySelector("#stage .reactor-wrap")?.addEventListener("click", () => { if (conv.on) convTap(); });
+function convTap() {
+  voice.unlock();
+  if (voice.speaking) { voice.stop(); convListen(200); return; }
+  if (busy) { stopResponse(); stopConv(); return; }
+  stopConv();
+}
+
 // ---------- Micrófono ----------
 els.mic.addEventListener("click", () => {
   voice.unlock();
+  if (conv.on) { convTap(); return; }
   if (estado === "hablando") { stopResponse(); return; }
   if (voice.speaking) { voice.stop(); return; } // callar la lectura en voz alta
   if (!voice.canListen) { showNote("Este navegador no permite dictado por voz. Use el micrófono del teclado.", { warn: true }); setVista("chat"); return; }
@@ -1373,7 +1470,7 @@ els.mic.addEventListener("click", () => {
       else { if (estado === "escuchando") setEstado(baseEstado()); setTimeout(maybeResumeWake, 300); }
     },
     onInterim: (t) => { els.interimText.textContent = t ? `“${t}` : ""; },
-    onFinal: (t) => { els.interimText.textContent = ""; sendMessage(t, [], { speak: micSpeaks() }); },
+    onFinal: (t) => { els.interimText.textContent = ""; if (CONV_START.test(t) && t.length < 40) { startConv(); return; } sendMessage(t, [], { speak: micSpeaks() }); },
     onError: (code, msg) => { if (msg) { setVista("chat"); showNote(msg, { warn: true }); } },
   });
 });
@@ -1866,7 +1963,7 @@ function startWake() {
 }
 function maybeResumeWake() {
   if (!wake || !wake.enabled || !wake.paused) return;
-  if (busy || voice.speaking || voice.listening || !wakeAllowed() || !els.settingsView.hidden) return;
+  if (conv.on || busy || voice.speaking || voice.listening || !wakeAllowed() || !els.settingsView.hidden) return;
   wake.resume();
   paintWake();
 }
@@ -1881,6 +1978,7 @@ function handleWakeCommand(text) {
     return;
   }
   if (busy) { chatNotice("Espere a que termine la respuesta en curso."); return; }
+  if (CONV_START.test(t) && t.length < 40) { startConv(); return; }
   if (panelOpen) hidePanelNow();
   if (!els.settingsView.hidden) return;
   if (wake) wake.pause("respondiendo");
