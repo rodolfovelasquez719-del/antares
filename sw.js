@@ -128,6 +128,7 @@ self.addEventListener("fetch", (event) => {
   // la página de prueba de "cerebro propio" es independiente: el SW de la app no la toca ni la guarda
   if (url.pathname.includes("/prueba-cerebro/")) return;
   if (url.pathname.includes("/muestra-cerebro/")) return;
+  if (url.pathname.includes("/muestra-verde/")) return;
   const isPage = req.mode === "navigate" || url.pathname.endsWith("/") || url.pathname.endsWith("/index.html");
   event.respondWith(networkFirst(req, isPage, event));
 });
