@@ -2236,6 +2236,8 @@ async function forceUpdate() {
   try { flushWrites && (await flushWrites()); } catch { /* */ }
   try { const reg = await navigator.serviceWorker?.getRegistration(); if (reg) { await reg.update().catch(() => {}); if (reg.waiting) reg.waiting.postMessage("SKIP_WAITING"); } } catch { /* */ }
   try { const ks = await caches.keys(); await Promise.all(ks.filter((k) => k.startsWith("antares-")).map((k) => caches.delete(k))); } catch { /* */ }
+  // se reinstala el service worker desde cero para que vuelva a guardar la copia sin conexión de la versión nueva
+  try { const rs = await navigator.serviceWorker?.getRegistrations(); if (rs) await Promise.all(rs.map((r) => r.unregister())); } catch { /* */ }
   try { sessionStorage.setItem("antares.swReloaded", String(Date.now())); } catch { /* */ }
   setTimeout(() => location.replace(location.pathname + "?v=" + Date.now() + location.hash), 900);
 }
