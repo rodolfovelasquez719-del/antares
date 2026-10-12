@@ -407,3 +407,7 @@ js/robotics.js         Ruta de robótica, proyectos y modo tutor
 js/wake.js             Modo «Hey Antares» (escucha continua y palabra de activación)
 icons/                 Íconos 192/512, maskable, apple-touch-icon, favicon
 ```
+
+### v1.17.1
+- Micrófono: fin de frase por silencio propio (1,8 s en iOS, máx. 15 s); tocar «terminar» envía lo oído; filtro de eco solo tras hablar Antares.
+- Diseño: micrófono 84 px (70 px en pantallas bajas), transcripción visible encima (3 líneas).

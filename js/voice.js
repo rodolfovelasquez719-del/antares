@@ -120,7 +120,7 @@ export class Voice {
     if (!parts.length) return Promise.resolve(false);
     // v1.17: lo que Antares dijo hace poco (para descartar el eco si el micrófono lo oye)
     this.recentSpoken = [...(this.recentSpoken || []).slice(-4), { text: parts.join(" "), at: Date.now() }];
-    if (this.listening) this.stopListening(); // nunca escuchar mientras habla
+    if (this.listening) this.cancelListening(); // nunca escuchar mientras habla
     return new Promise((resolve) => {
       let done = false, guard = null, keep = null, idx = 0, audible = false;
       const token = (this.utterId = (this.utterId || 0) + 1);
@@ -172,17 +172,15 @@ export class Voice {
   }
 
   // ¿El texto oído es eco de lo que Antares acaba de decir?
-  isEcho(heard, withinMs = 20000) {
+  isEcho(heard, withinMs = 6000) {
     const norm = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9ñ ]/g, " ").split(/\s+/).filter(Boolean);
-    const h = norm(heard); if (!h.length) return false;
-    const now = Date.now();
-    for (const s of this.recentSpoken || []) {
-      if (now - s.at > withinMs + s.text.length * 90) continue;
-      const set = new Set(norm(s.text));
-      const hit = h.filter((w) => set.has(w)).length;
-      if (h.length >= 2 && hit / h.length >= 0.75) return true;
-    }
-    return false;
+    const h = norm(heard); if (h.length < 3) return false; // frases cortas como «cómo estás» nunca se toman por eco
+    if (!this.lastSpokeEnd || Date.now() - this.lastSpokeEnd > withinMs) return false; // solo justo después de que Antares habló
+    const last = (this.recentSpoken || [])[this.recentSpoken.length - 1];
+    if (!last) return false;
+    const spoken = norm(last.text), set = new Set(spoken);
+    const hit = h.filter((w) => set.has(w)).length;
+    return hit / h.length >= 0.8 && h.length <= spoken.length * 1.2;
   }
 
   stop() {
@@ -192,39 +190,67 @@ export class Voice {
     if (this.speaking) { this.speaking = false; try { this.onSpeaking && this.onSpeaking(false); } catch { /* */ } }
   }
 
-  stopListening() { if (this.listening && this.recognition) { try { this.recognition.stop(); } catch { /* */ } } }
+  stopListening() { // «Toque para terminar»: envía lo que oyó
+    if (this._deliver) { this._deliver(true); return; }
+    if (this.listening && this.recognition) { try { this.recognition.stop(); } catch { /* */ } }
+  }
+  cancelListening() { // descarta lo oído (al hablar Antares o al salir del modo conversación)
+    this.listenId = (this.listenId || 0) + 1;
+    if (this._deliver) { this._deliver(false); return; }
+    if (this.recognition) { try { this.recognition.abort(); } catch { /* */ } }
+    this.listening = false;
+  }
 
   // onInterim(texto) mientras habla, onFinal(texto) al terminar, onState(escuchando), onError(código, mensaje)
-  listen({ lang = "es-CR", onInterim, onFinal, onState, onError, onEnd, silenceMs = 0 } = {}) {
+  // v1.17.1: fin de frase propio. En iOS el dictado a menudo nunca marca «final» ni llama onend: cuando el texto deja de
+  // cambiar ~1,8 s (o a los 15 s, o al tocar «terminar») se detiene y se envía lo mejor que se oyó, sin esperar a onend.
+  listen({ lang = "es-CR", onInterim, onFinal, onState, onError, onEnd, silenceMs = 0, maxMs = 15000 } = {}) {
     if (!this.SR) { onError && onError("unsupported", "Este navegador no permite dictado por voz. Use el micrófono del teclado."); return; }
-    if (this.listening) { this.stopListening(); return; }
+    if (this.listening || this._deliver) { this.stopListening(); return; }
     this.stop();
+    const endMs = silenceMs || (isIOS() ? 1800 : 1500);
     const start = LANG_CHAIN.includes(lang) ? LANG_CHAIN.indexOf(lang) : 0;
     const chain = [...LANG_CHAIN.slice(start), ...LANG_CHAIN.slice(0, start)];
     if (this.workingLang && chain.indexOf(this.workingLang) > 0) chain.unshift(...chain.splice(chain.indexOf(this.workingLang), 1));
+    const session = (this.listenId = (this.listenId || 0) + 1);
     const attempt = (i) => {
-      let finalText = "", lastInterim = "", heard = false, retrying = false, silence = null, errCode = "";
+      let finalText = "", lastInterim = "", heard = false, retrying = false, silence = null, hard = null, errCode = "", delivered = false;
       try {
         const rec = new this.SR();
         rec.lang = chain[i];
         rec.interimResults = true;
         rec.continuous = false;
         rec.maxAlternatives = 1;
-        rec.onstart = () => { this.listening = true; onState && onState(true); };
+        const best = () => { const fin = finalText.trim(); return lastInterim.length > fin.length ? lastInterim : fin; };
+        // entrega única: envía lo oído (o nada) y apaga el dictado sin esperar a onend
+        const deliver = (send = true) => {
+          if (delivered) return; delivered = true;
+          clearTimeout(silence); clearTimeout(hard);
+          if (this._deliver === deliver) this._deliver = null;
+          this.listening = false;
+          if (heard) this.workingLang = rec.lang;
+          try { rec.abort(); } catch { try { rec.stop(); } catch { /* */ } }
+          onState && onState(false);
+          const text = send && session === this.listenId ? best() : "";
+          if (text) onFinal && onFinal(text);
+          onEnd && onEnd({ heard: !!text, error: errCode });
+        };
+        this._deliver = deliver;
+        rec.onstart = () => { this.listening = true; onState && onState(true); clearTimeout(hard); hard = setTimeout(() => deliver(true), maxMs); };
         rec.onresult = (ev) => {
           heard = true;
-          // v1.17: se reconstruye todo el texto en cada evento (iOS repite resultados ya finales con resultIndex 0,
-          // y sumar desde resultIndex duplicaba frases: «qué hora es qué hora es»)
+          // se reconstruye todo el texto en cada evento (iOS repite resultados ya finales con resultIndex 0)
           let fin = "", interim = "";
           for (let k = 0; k < ev.results.length; k++) {
             const t = ev.results[k][0].transcript;
             if (ev.results[k].isFinal) fin += t; else interim += t;
           }
+          const prev = best();
           finalText = fin;
           lastInterim = (fin + " " + interim).replace(/\s+/g, " ").trim();
           onInterim && onInterim(lastInterim);
-          // v1.16: fin de frase por silencio (modo conversación)
-          if (silenceMs) { clearTimeout(silence); silence = setTimeout(() => { try { rec.stop(); } catch { /* */ } }, silenceMs); }
+          // el reloj de silencio solo se reinicia si el texto cambió
+          if (best() !== prev || !silence) { clearTimeout(silence); silence = setTimeout(() => deliver(true), endMs); }
         };
         rec.onerror = (ev) => {
           console.warn("Antares voz (reconocimiento):", rec.lang, ev.error);
@@ -233,26 +259,21 @@ export class Voice {
             return;
           }
           errCode = ev.error || "error";
-          if (ev.error === "aborted") return;
+          if (ev.error === "aborted" || delivered) return;
+          if (best()) return; // ya hay texto: onend/deliver lo envía
           if (onEnd && (ev.error === "no-speech" || ev.error === "network" || ev.error === "audio-capture")) return; // el modo conversación reintenta solo
           onError && onError(ev.error, speechErrorMessage(ev.error));
         };
         rec.onend = () => {
-          this.listening = false; clearTimeout(silence);
-          if (retrying) { attempt(i + 1); return; }
-          if (heard) this.workingLang = rec.lang;
-          onState && onState(false);
-          // iOS a veces termina sin resultado "final": se usa lo último que se oyó
-          // en modo conversación se toma lo más completo entre final e interino (iOS a veces no marca el final)
-          const fin = finalText.trim();
-          const text = silenceMs ? (lastInterim.length > fin.length ? lastInterim : fin) : fin;
-          if (text) onFinal && onFinal(text);
-          onEnd && onEnd({ heard: !!text, error: errCode });
+          if (retrying && !delivered) { delivered = true; clearTimeout(silence); clearTimeout(hard); this.listening = false; attempt(i + 1); return; }
+          deliver(true);
         };
         this.recognition = rec;
         rec.start();
+        hard = setTimeout(() => deliver(true), maxMs + 3000); // por si onstart nunca llega
       } catch (e) {
         console.warn("Antares voz (reconocimiento):", e);
+        this._deliver = null;
         this.listening = false;
         onState && onState(false);
         if (onEnd) onEnd({ heard: false, error: "start" });

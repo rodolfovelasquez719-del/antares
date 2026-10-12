@@ -28,7 +28,7 @@ import * as Brain from "./brain.js";
 import * as Agent from "./agent.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.17.0";
+const APP_VERSION = "1.17.1";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -1478,7 +1478,7 @@ function startConv() {
 function stopConv(say = "") {
   if (!conv.on) return;
   conv.on = false; conv.turn++; clearTimeout(conv.timer);
-  voice.stopListening();
+  voice.cancelListening();
   els.interimText.textContent = "";
   if (estado === "escuchando") setEstado(baseEstado());
   paintConv();
@@ -1498,7 +1498,7 @@ function convListen(delay = 600) {
     if (Date.now() - conv.lastHeard > 30000) { stopConv("No le escuché. Salgo del modo conversación."); return; }
     voice.listen({
       lang: config.speechLang || "es-CR",
-      silenceMs: isIOS() ? 2000 : 1700, // v1.17: 1,2 s lo cortaba a media frase
+      silenceMs: isIOS() ? 1900 : 1700, // v1.17: 1,2 s lo cortaba a media frase
       onState: (on) => { if (!conv.on) return; if (on) { els.interimText.textContent = "Le escucho…"; setEstado("escuchando"); } else if (estado === "escuchando") setEstado(baseEstado()); },
       onInterim: (txt) => { conv.lastHeard = Date.now(); els.interimText.textContent = txt ? `“${txt}` : "Le escucho…"; },
       onFinal: (txt) => { if (conv.on && conv.turn === t) convHandle(txt); },
@@ -2696,7 +2696,7 @@ function lockApp(reason = "manual") {
   if (wake) wake.stop("lock");
   paintWake();
   setTutor(false, { note: false });
-  if (estado === "escuchando") voice.stopListening();
+  if (estado === "escuchando") voice.cancelListening();
   voice.stop();
   if (!els.modal.hidden) closeModal();
   if (!els.settingsView.hidden) {
