@@ -1,4 +1,4 @@
-// Paneles: Personal (Recordatorios, Compras, Resumen del día), Trabajo (Rutas, Cúbica, Correo, Bitácora), Ocio (Damas chinas, Trivia, Robótica)
+// Paneles: Personal (Recordatorios, Compras, Resumen del día), Trabajo (Rutas, Cúbica, Correo, Bitácora), Ocio (Damas, Trivia, Robótica)
 // y Herramientas (Fotos, Código, Excel).
 import * as R from "./reminders.js";
 import * as S from "./shopping.js";
@@ -20,7 +20,7 @@ const timeVal = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 const GROUPS = {
   personal: [["noticias", "Resumen"], ["recordatorios", "Recordatorios"], ["compras", "Compras"]],
   trabajo: [["rutas", "Rutas"], ["cubica", "Cúbica"], ["correo", "Correo"], ["bitacora", "Bitácora"]],
-  ocio: [["damas", "Damas chinas"], ["trivia", "Trivia"], ["robotica", "Robótica"]],
+  ocio: [["damas", "Damas"], ["trivia", "Trivia"], ["robotica", "Robótica"]],
   herramientas: [["fotos", "Fotos"], ["codigo", "Código"], ["excel", "Excel"]],
 };
 const GROUP_LABEL = { personal: "Personal", trabajo: "Trabajo", ocio: "Ocio", herramientas: "Herramientas" };
@@ -89,7 +89,7 @@ const CARD = {
   cubica: ["Cúbica", "Carga del camión", '<path d="M12 3.5l7.5 4v9L12 20.5l-7.5-4v-9zM4.5 7.5L12 11.5l7.5-4M12 11.5v9"/>'],
   correo: ["Correo", "Redactar y revisar correos", '<path d="M4 6.5h16v11H4zM4 7l8 6 8-6"/>'],
   bitacora: ["Bitácora", "Registro de rutas del día", '<path d="M6.5 4h11v16h-11zM9.5 8h5M9.5 11.5h5M9.5 15h3"/>'],
-  damas: ["Damas chinas", "Tablero de estrella contra Antares", '<path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8L3.5 9.2l5.9-.9z"/>'],
+  damas: ["Damas", "Damas internacionales 10×10 contra Antares", '<path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8L3.5 9.2l5.9-.9z"/>'],
   trivia: ["Trivia", "Preguntas para jugar en familia", '<path d="M9.2 9a2.9 2.9 0 1 1 4.2 2.6c-.9.5-1.4 1.2-1.4 2.2v.7M12 18h.01"/><circle cx="12" cy="12" r="8.5"/>'],
   fotos: ["Fotos", "Recortar, ajustar, pintar y editar con IA", '<path d="M4 7.5h3l1.5-2h7l1.5 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>'],
   codigo: ["Código", "Encontrar errores y corregir programas", '<path d="M8.5 7.5L4 12l4.5 4.5M15.5 7.5L20 12l-4.5 4.5M13.5 5l-3 14"/>'],

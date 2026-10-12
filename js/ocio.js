@@ -1,11 +1,11 @@
-// Paneles de Ocio: Damas chinas contra Antares, Trivia de historia y misterios, y Robótica.
+// Paneles de Ocio: Damas internacionales contra Antares, Trivia de historia y misterios, y Robótica.
 import { memory } from "./memory.js";
-import * as CC from "./chinese-checkers.js";
+import * as CC from "./draughts.js";
 import * as TV from "./trivia.js";
 import * as RB from "./robotics.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-export const K_CC = "antares.games.cc.v1";
+export const K_CC = "antares.games.damas.v1";
 
 let deps = { askJson: null, hasKey: () => false, askTutor: () => {}, setTutor: () => {}, onChange: () => {} };
 let rerender = () => {};
@@ -16,7 +16,7 @@ let cc = null, sel = -1, aiTimer = null, ccMsg = "";
 let tv = { topic: "mezcla", queue: [], cur: null, chosen: null, busy: false, ctrl: null, error: "", note: "" };
 let rbOpen = null;
 export function resetOcio() {
-  clearTimeout(aiTimer); aiTimer = null;
+  clearTimeout(aiTimer); aiTimer = null; aiReq++;
   if (tv.ctrl) tv.ctrl.abort();
   cc = null; sel = -1; ccMsg = "";
   tv = { topic: "mezcla", queue: [], cur: null, chosen: null, busy: false, ctrl: null, error: "", note: "" };
@@ -24,12 +24,15 @@ export function resetOcio() {
 }
 export function clearStatus() { ccMsg = ""; }
 
-// ================= Damas chinas =================
+// ================= Damas (internacionales 10x10) =================
 const stats = () => (cc && cc.score) || { w: 0, l: 0, d: 0 };
+const DIFF_LABEL = { normal: "Normal", medio: "Medio", pro: "Pro" };
+let aiWorker = null, aiReq = 0, animKey = "";
 function loadCC() {
   if (cc) return cc;
   const saved = CC.deserialize(memory.getData(K_CC, null));
   cc = saved || CC.newGame();
+  if (!DIFF_LABEL[cc.difficulty]) cc.difficulty = "medio";
   if (!cc.score) cc.score = { w: 0, l: 0, d: 0 };
   return cc;
 }
@@ -43,134 +46,144 @@ function finishIfWon() {
   if (cc.winner === CC.HUMAN) s.w++; else if (cc.winner === CC.AI) s.l++; else s.d++;
   cc.score = s; cc.counted = true;
 }
+function computeAI(game, difficulty) {
+  return new Promise((resolve) => {
+    try {
+      if (!aiWorker) aiWorker = new Worker(new URL("./draughts-worker.js", import.meta.url), { type: "module" });
+      const id = ++aiReq;
+      const t = setTimeout(() => { resolve(CC.aiMove(game, difficulty)); }, 8000);
+      aiWorker.onmessage = (e) => { if (e.data.id !== id) return; clearTimeout(t); resolve(e.data.move); };
+      aiWorker.onerror = () => { clearTimeout(t); aiWorker = null; resolve(CC.aiMove(game, difficulty)); };
+      aiWorker.postMessage({ id, game: { board: game.board, turn: game.turn }, difficulty });
+    } catch { setTimeout(() => resolve(CC.aiMove(game, difficulty)), 0); }
+  });
+}
 function scheduleAI() {
   clearTimeout(aiTimer);
   if (!cc || cc.winner || cc.turn !== CC.AI) return;
-  aiTimer = setTimeout(() => {
+  const plies = cc.plies;
+  aiTimer = setTimeout(async () => {
+    if (!cc || cc.turn !== CC.AI || cc.winner) { aiTimer = null; return; }
+    const m = await computeAI(cc, cc.difficulty);
     aiTimer = null;
-    if (!cc || cc.turn !== CC.AI || cc.winner) return;
-    const m = CC.aiMove(cc, cc.difficulty);
-    if (!m) { cc = { ...cc, winner: CC.HUMAN }; finishIfWon(); saveCC(); rerender(); return; }
+    if (!cc || cc.turn !== CC.AI || cc.plies !== plies) return; // se deshizo o se reinició mientras pensaba
+    const legal = m && CC.legalMoves(cc).find((x) => x.from === m.from && x.to === m.to && x.caps.join() === m.caps.join());
+    if (!legal) { cc = { ...cc, winner: CC.HUMAN }; finishIfWon(); saveCC(); rerender(); return; }
     const score = cc.score;
-    cc = CC.applyMove(cc, m); cc.score = score;
+    cc = CC.applyMove(cc, legal); cc.score = score;
+    ccMsg = legal.caps.length ? `Antares capturó ${legal.caps.length} ${legal.caps.length === 1 ? "pieza" : "piezas"}.` : "";
+    if (cc.last.promoted) ccMsg = (ccMsg + " Antares coronó una dama.").trim();
     finishIfWon(); saveCC(); rerender();
-  }, 550);
+  }, 450);
+  aiTimer = aiTimer || 1;
 }
-
-const VB = (() => {
-  const xs = CC.CELLS.map((c) => c.px), ys = CC.CELLS.map((c) => c.py);
-  const m = 1.3;
-  const minX = Math.min(...xs) - m, minY = Math.min(...ys) - m;
-  return { minX, minY, w: Math.max(...xs) - minX + m, h: Math.max(...ys) - minY + m };
-})();
-const f2 = (n) => Number(n.toFixed(3));
-function starPolys() {
-  // dos triángulos grandes que forman la estrella
-  const tri = (pts) => pts.map(([x, z]) => `${f2(Math.sqrt(3) * (x + z / 2))},${f2(1.5 * z)}`).join(" ");
-  const pad = 1.1;
-  return `<polygon class="star" points="${tri([[4 * pad, -8 * pad], [4 * pad, 4 * pad], [-8 * pad, 4 * pad]])}"/>` +
-         `<polygon class="star" points="${tri([[-4 * pad, 8 * pad], [-4 * pad, -4 * pad], [8 * pad, -4 * pad]])}"/>`;
-}
+const xy = (i) => [(i % 10) + 0.5, ((i / 10) | 0) + 0.5];
 function boardSvg() {
-  const g = cc;
-  const dests = sel >= 0 ? CC.destinations(g, sel) : new Map();
-  const last = g.last;
-  const lastPath = last && last.path ? last.path.map((i) => `${f2(CC.CELLS[i].px)},${f2(CC.CELLS[i].py)}`).join(" ") : "";
-  const cells = CC.CELLS.map((c) => {
-    const v = g.board[c.i];
-    const cls = ["cell", CC.inGoal(CC.HUMAN, c.i) ? "goal-h" : CC.inGoal(CC.AI, c.i) ? "goal-a" : "",
-      dests.has(c.i) ? "dest" : "", sel === c.i ? "sel" : "", last && (last.to === c.i) ? "last-to" : "", last && last.from === c.i ? "last-from" : ""].filter(Boolean).join(" ");
-    const piece = v ? `<circle class="peg ${v === CC.HUMAN ? "p1" : "p2"}" cx="${f2(c.px)}" cy="${f2(c.py)}" r="0.62"/>` : "";
-    return `<g class="${cls}" data-i="${c.i}"><circle class="hole" cx="${f2(c.px)}" cy="${f2(c.py)}" r="${dests.has(c.i) ? 0.5 : 0.36}"/>${piece}</g>`;
-  }).join("");
-  const mine = CC.inGoalCount(g.board, CC.HUMAN), theirs = CC.inGoalCount(g.board, CC.AI);
-  return `<svg class="cc-board" id="cc-board" viewBox="${f2(VB.minX)} ${f2(VB.minY)} ${f2(VB.w)} ${f2(VB.h)}" role="img"
-    aria-label="Tablero de damas chinas. Sus fichas en la meta: ${mine} de 10. Fichas de Antares en su meta: ${theirs} de 10.">
-    ${starPolys()}
-    ${lastPath ? `<polyline class="last-path ${last.player === CC.AI ? "p2" : "p1"}" points="${lastPath}"/>` : ""}
-    ${cells}
-  </svg>`;
+  const g = cc, moves = g.turn === CC.HUMAN && !g.winner ? CC.legalMoves(g) : [];
+  const movable = new Set(moves.map((m) => m.from));
+  const dests = sel >= 0 ? moves.filter((m) => m.from === sel) : [];
+  const last = g.last, k = last ? `${g.plies}` : "";
+  const animate = k && k !== animKey; if (animate) animKey = k;
+  let sq = "";
+  for (let i = 0; i < 100; i++) {
+    const [x, y] = xy(i), dark = CC.isDark(i);
+    const cls = ["sq", dark ? "dk" : "lt", last && (last.from === i || last.to === i) ? "last" : "", dests.some((m) => m.to === i) ? "dest" : ""].filter(Boolean).join(" ");
+    sq += `<rect class="${cls}" data-i="${i}" x="${x - .5}" y="${y - .5}" width="1" height="1"/>`;
+  }
+  let path = "";
+  if (last && last.path.length > 1) path = `<polyline class="d-path ${last.player === CC.AI ? "p2" : "p1"}" points="${last.path.map((i) => xy(i).join(",")).join(" ")}"/>`;
+  let pcs = "";
+  for (let i = 0; i < 100; i++) {
+    const v = g.board[i]; if (!v) continue;
+    const [x, y] = xy(i);
+    let style = "";
+    if (animate && last.to === i) { const [fx, fy] = xy(last.from); style = ` style="--dx:${fx - x}px;--dy:${fy - y}px"`; }
+    const cls = ["pc", v > 0 ? "p1" : "p2", Math.abs(v) === 2 ? "king" : "", sel === i ? "sel" : "", movable.has(i) && sel < 0 ? "can" : "", style ? "moving" : ""].filter(Boolean).join(" ");
+    pcs += `<g class="${cls}" data-i="${i}"${style}><g transform="translate(${x} ${y})"><circle r=".41" class="rim"/><circle r=".33" class="top"/><circle r=".2" class="ring"/>${Math.abs(v) === 2 ? `<path class="crown" d="M-.2 .08 L-.22 -.12 L-.11 -.02 L0 -.17 L.11 -.02 L.22 -.12 L.2 .08 Z"/>` : ""}</g></g>`;
+  }
+  if (animate && last.caps.length) for (const c of last.caps) { const [x, y] = xy(c); pcs += `<g class="pc ghost ${last.player === CC.AI ? "p1" : "p2"}"><g transform="translate(${x} ${y})"><circle r=".41" class="rim"/><circle r=".33" class="top"/></g></g>`; }
+  const dots = dests.map((m) => { const [x, y] = xy(m.to); return `<circle class="d-dot" cx="${x}" cy="${y}" r=".16" data-i="${m.to}"/>`; }).join("");
+  const h = g.board.filter((v) => v > 0).length, a = g.board.filter((v) => v < 0).length;
+  return `<svg class="dr-board" id="cc-board" viewBox="-0.25 -0.25 10.5 10.5" role="img" aria-label="Tablero de damas internacionales. Sus piezas: ${h}. Piezas de Antares: ${a}.">
+    <rect class="frame" x="-.25" y="-.25" width="10.5" height="10.5" rx=".18"/>${sq}${path}${pcs}${dots}</svg>`;
 }
 function ccStatus() {
   const g = cc;
   if (g.winner === CC.HUMAN) return "¡Ganó usted! Excelente partida.";
   if (g.winner === CC.AI) return "Ganó Antares esta vez. ¿La revancha?";
-  if (g.winner === -1) return "Tablas: se alcanzó el límite de jugadas.";
-  if (g.turn === CC.AI) return "Antares está pensando…";
-  if (sel >= 0) { const n = CC.destinations(g, sel).size; return n ? `Toque una casilla marcada (${n} ${n === 1 ? "opción" : "opciones"}).` : "Esa ficha no tiene jugadas. Elija otra."; }
-  return "Su turno: toque una de sus fichas cian. Puede saltar en cadena.";
+  if (g.winner === CC.DRAW) return "Tablas.";
+  if (g.turn === CC.AI) return "Turno de Antares: está pensando…";
+  const moves = CC.legalMoves(g), n = moves[0]?.caps.length || 0;
+  if (sel >= 0) { const c = moves.filter((m) => m.from === sel).length; return c ? `Toque una casilla marcada (${c} ${c === 1 ? "opción" : "opciones"}).` : "Esa pieza no puede mover ahora. Elija una que brille."; }
+  return n ? `Su turno: captura obligatoria de ${n} ${n === 1 ? "pieza" : "piezas"}.` : "Su turno: toque una de sus piezas doradas.";
 }
 function ccHtml() {
   loadCC();
   const s = stats();
   if (cc.turn === CC.AI && !cc.winner && !aiTimer) scheduleAI();
+  const diff = Object.entries(DIFF_LABEL).map(([id, l]) => `<button type="button" class="pick${cc.difficulty === id ? " on" : ""}" data-diff="${id}" aria-pressed="${cc.difficulty === id}">${l}</button>`).join("");
+  const cap = cc.captured || { h: 0, a: 0 };
   return `
     <div class="cc-head">
-      <div class="seg-mini" role="group" aria-label="Dificultad">
-        <button type="button" class="pick${cc.difficulty === "facil" ? " on" : ""}" data-diff="facil" aria-pressed="${cc.difficulty === "facil"}">Fácil</button>
-        <button type="button" class="pick${cc.difficulty === "normal" ? " on" : ""}" data-diff="normal" aria-pressed="${cc.difficulty === "normal"}">Normal</button>
-      </div>
+      <div class="seg-mini" role="group" aria-label="Dificultad">${diff}</div>
       <p class="cc-score" aria-label="Marcador">Usted ${s.w} · Antares ${s.l}${s.d ? ` · Tablas ${s.d}` : ""}</p>
     </div>
+    <div class="dr-turn"><span class="turn-chip p1${cc.turn === CC.HUMAN && !cc.winner ? " on" : ""}"><i></i>Usted · capturó ${cap.h}</span><span class="turn-chip p2${cc.turn === CC.AI && !cc.winner ? " on" : ""}"><i></i>Antares · capturó ${cap.a}</span></div>
     <p class="cc-status${cc.winner ? " done" : ""}" id="cc-status" role="status" aria-live="polite">${esc(ccStatus())}</p>
     <div class="cc-wrap">${boardSvg()}</div>
-    <p class="cc-legend"><span class="dot p1"></span>Usted: de abajo hacia arriba · <span class="dot p2"></span>Antares: de arriba hacia abajo · En meta: ${CC.inGoalCount(cc.board, CC.HUMAN)}/10 contra ${CC.inGoalCount(cc.board, CC.AI)}/10</p>
     ${ccMsg ? `<p class="wp-status">${esc(ccMsg)}</p>` : ""}
     <div class="btn-row">
       <button type="button" class="btn" id="cc-undo"${cc.undo.length && cc.turn === CC.HUMAN ? "" : " disabled"}>Deshacer</button>
       <button type="button" class="btn primary" id="cc-new">Nueva partida</button>
     </div>
     <details class="howto"><summary>Cómo se juega</summary>
-      <p>Gana quien lleve primero sus 10 fichas a la punta opuesta. En cada turno mueve una ficha a una casilla vecina libre,
-      o salta sobre una ficha vecina (suya o de Antares) a la casilla libre del otro lado; puede encadenar varios saltos.
-      Las fichas no se comen. Una ficha que ya entró a la meta no puede salir. La partida se guarda sola.</p>
-      <p>Fácil: Antares avanza a lo más directo. Normal: piensa también en su mejor respuesta.</p>
+      <p>Damas internacionales: tablero de 10×10, 20 piezas por lado. Usted juega con las doradas y empieza.
+      Los peones avanzan en diagonal una casilla, pero capturan hacia adelante y hacia atrás. Capturar es obligatorio y
+      debe tomar la jugada que capture más piezas; puede encadenar saltos.</p>
+      <p>Un peón se corona dama solo si termina su jugada en la última fila. La dama «vuela»: se mueve y captura a cualquier distancia en diagonal.
+      Pierde quien se queda sin piezas o sin jugadas. Hay tablas por triple repetición o 25 jugadas seguidas solo con damas sin capturar.</p>
+      <p>Normal: Antares juega suelto y a veces se equivoca. Medio: calcula unas 4 jugadas. Pro: piensa hasta 1,5 segundos y calcula a fondo.</p>
     </details>`;
 }
 function ccBind(body) {
   const svg = body.querySelector("#cc-board");
   svg?.addEventListener("click", (ev) => {
     if (!cc || cc.winner || cc.turn !== CC.HUMAN) return;
-    let i = Number(ev.target.closest("[data-i]")?.dataset.i);
-    if (!Number.isInteger(i)) {
-      // tocar cerca de una casilla también vale
-      const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
-      const m = svg.getScreenCTM(); if (!m) return;
-      const p = pt.matrixTransform(m.inverse());
-      let best = -1, bd = 1.0;
-      for (const c of CC.CELLS) { const d = Math.hypot(c.px - p.x, c.py - p.y); if (d < bd) { bd = d; best = c.i; } }
-      i = best;
-    }
-    if (i < 0) { sel = -1; rerender(); return; }
-    if (cc.board[i] === CC.HUMAN) { sel = sel === i ? -1 : i; ccMsg = ""; rerender(); return; }
+    const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
+    const mtx = svg.getScreenCTM(); if (!mtx) return;
+    const p = pt.matrixTransform(mtx.inverse());
+    const c = Math.floor(p.x), r = Math.floor(p.y);
+    if (c < 0 || c > 9 || r < 0 || r > 9) { sel = -1; rerender(); return; }
+    const i = r * 10 + c;
+    const moves = CC.legalMoves(cc);
+    if (cc.board[i] > 0) { sel = sel === i ? -1 : i; ccMsg = ""; rerender(); return; }
     if (sel >= 0) {
-      const path = CC.destinations(cc, sel).get(i);
-      if (path) {
+      const m = moves.find((x) => x.from === sel && x.to === i);
+      if (m) {
         const score = cc.score;
-        cc = CC.applyMove(cc, { from: sel, to: i, path }); cc.score = score;
-        sel = -1;
-        const jumps = CC.NB[path[0]].includes(path[1]) ? 0 : path.length - 1;
-        ccMsg = jumps > 1 ? `Salto en cadena: ${jumps} saltos.` : jumps === 1 ? "Salto." : "";
+        cc = CC.applyMove(cc, m); cc.score = score; sel = -1;
+        ccMsg = m.caps.length > 1 ? `¡Captura múltiple: ${m.caps.length} piezas!` : m.caps.length ? "Captura." : "";
+        if (cc.last.promoted) ccMsg = (ccMsg + " ¡Coronó una dama!").trim();
         finishIfWon(); saveCC(); rerender(); scheduleAI(); return;
       }
       sel = -1; rerender();
     }
   });
   body.querySelector("#cc-undo")?.addEventListener("click", () => {
-    clearTimeout(aiTimer); aiTimer = null;
-    const score = cc.score;
-    cc = CC.undoMove(cc); cc.score = score; cc.counted = false; sel = -1; ccMsg = "Jugada deshecha.";
+    clearTimeout(aiTimer); aiTimer = null; aiReq++;
+    const score = cc.score, counted = cc.counted;
+    cc = CC.undoMove(cc); cc.score = score; cc.counted = cc.winner ? counted : false; sel = -1; animKey = String(cc.plies); ccMsg = "Jugada deshecha.";
     saveCC(); rerender();
   });
   body.querySelector("#cc-new")?.addEventListener("click", () => {
     if (!cc.winner && cc.plies > 0 && !confirm("¿Empezar una partida nueva? La actual se pierde.")) return;
-    clearTimeout(aiTimer); aiTimer = null;
+    clearTimeout(aiTimer); aiTimer = null; aiReq++;
     const score = stats(), difficulty = cc.difficulty;
-    cc = CC.newGame({ difficulty }); cc.score = score; sel = -1; ccMsg = "Nueva partida. Usted empieza.";
+    cc = CC.newGame({ difficulty }); cc.score = score; sel = -1; ccMsg = "Nueva partida. Usted empieza con las doradas.";
     saveCC(); rerender();
   });
   body.querySelectorAll("[data-diff]").forEach((b) => b.addEventListener("click", () => {
-    cc = { ...cc, difficulty: b.dataset.diff }; ccMsg = `Dificultad: ${b.dataset.diff === "facil" ? "fácil" : "normal"}.`; saveCC(); rerender();
+    cc = { ...cc, difficulty: b.dataset.diff }; ccMsg = `Dificultad: ${DIFF_LABEL[b.dataset.diff]}.`; saveCC(); rerender();
   }));
 }
 

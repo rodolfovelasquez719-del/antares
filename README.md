@@ -107,6 +107,11 @@ Actualizar.
 - Funciona sin conexión para abrir la app (service worker "primero red" con espera de 3 s y
   respaldo en caché).
 
+## Novedades de la 1.12.0 (Damas internacionales)
+
+- En Ocio, «Damas chinas» se reemplazó por **Damas** internacionales: tablero 10×10 de madera, 20 piezas por lado (doradas contra cafés), captura obligatoria de la mayoría, saltos en cadena, peones que capturan hacia atrás, dama voladora y coronación solo al terminar en la última fila.
+- Dificultad Normal, Medio y Pro (Pro piensa hasta 1,5 s). Antares piensa en segundo plano sin congelar la pantalla. Deshacer, nueva partida, turno y capturas a la vista.
+
 ## Novedades de la 1.11.0 (Herramientas: Fotos, Código y Excel)
 
 Nueva pestaña **Herramientas** (5.ª pestaña) con tres tarjetas:

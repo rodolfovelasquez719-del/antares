@@ -25,7 +25,7 @@ import * as Photo from "./photo.js";
 import * as Code from "./code.js";
 import * as Sheet from "./sheet.js";
 
-const APP_VERSION = "1.11.0";
+const APP_VERSION = "1.12.0";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -1478,7 +1478,7 @@ function syncHistory() {
     else { history.pushState(navState(), ""); panelPushed = true; }
   });
 }
-const PANEL_NAME = { noticias: "Resumen del día", recordatorios: "Recordatorios", compras: "Compras", rutas: "Rutas", cubica: "Cúbica", correo: "Correo", bitacora: "Bitácora", damas: "Damas chinas", trivia: "Trivia", robotica: "Robótica", fotos: "Fotos", codigo: "Código", excel: "Excel" };
+const PANEL_NAME = { noticias: "Resumen del día", recordatorios: "Recordatorios", compras: "Compras", rutas: "Rutas", cubica: "Cúbica", correo: "Correo", bitacora: "Bitácora", damas: "Damas", trivia: "Trivia", robotica: "Robótica", fotos: "Fotos", codigo: "Código", excel: "Excel" };
 function markTab(section) {
   els.tabbar.querySelectorAll(".tab").forEach((t) => { if (t.dataset.section === section) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current"); });
 }
