@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="es"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#03060b"><title>Antares · Muestra cerebro 3D</title>
+<style>
+@font-face{font-family:"Orbitron";src:url("../fonts/orbitron-latin.woff2") format("woff2");font-weight:400 900;font-display:swap}
+@font-face{font-family:"Rajdhani";src:url("../fonts/rajdhani-600-latin.woff2") format("woff2");font-weight:600;font-display:swap}
+:root{--bg:#03060b;--panel:#07131d;--line:rgba(0,229,255,.30);--line-soft:rgba(0,229,255,.14);--cyan:#00e5ff;--cyan-ink:#00131a;--text:#e6f8ff;--muted:#a3c8d6;--dim:#86aebd;--ok:#4dffb8;--amber:#ffc457;
+--font-ui:"Rajdhani","Segoe UI",system-ui,sans-serif;--font-hud:"Orbitron","Rajdhani",monospace}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:radial-gradient(ellipse at 50% 40%,#06202a 0%,#041219 45%,var(--bg) 100%);color:var(--text);font-family:var(--font-ui);font-size:17px;overflow:hidden}
+.app{display:flex;flex-direction:column;height:100dvh;max-width:480px;margin:0 auto;padding-top:env(safe-area-inset-top)}
+header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line-soft)}
+header h1{margin:0;font-family:var(--font-hud);font-size:18px;letter-spacing:4px;text-shadow:0 0 10px rgba(0,229,255,.55)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok);display:inline-block;margin-right:6px}
+.tag{font-family:var(--font-hud);font-size:9px;letter-spacing:1.5px;color:var(--amber);border:1px solid rgba(255,196,87,.4);padding:3px 6px;border-radius:6px}
+.card{margin:10px 14px 0;padding:9px 12px;background:rgba(7,19,29,.85);border:1px solid var(--line-soft);border-radius:12px;display:flex;justify-content:space-between;align-items:center}
+.lbl{font-family:var(--font-hud);font-size:10px;letter-spacing:1.6px;color:var(--muted)}
+#st{font-family:var(--font-hud);font-size:13px;letter-spacing:2px;color:var(--cyan);text-shadow:0 0 8px rgba(0,229,255,.6)}
+.stage{position:relative;flex:1;min-height:0}
+canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+#tip{position:absolute;pointer-events:none;max-width:200px;padding:8px 10px;background:rgba(7,19,29,.95);border:1px solid var(--line);border-radius:10px;font-size:14px;color:var(--text);box-shadow:0 0 12px rgba(0,229,255,.35);opacity:0;transition:opacity .2s;transform:translate(-50%,-115%)}
+#tip b{font-family:var(--font-hud);font-size:11px;letter-spacing:1.5px;color:var(--cyan);display:block;margin-bottom:3px}
+.ctr{position:absolute;left:0;right:0;bottom:6px;display:flex;justify-content:center;gap:6px;flex-wrap:wrap}
+.ctr button{font-family:var(--font-hud);font-size:9.5px;letter-spacing:1px;color:var(--muted);background:rgba(7,19,29,.8);border:1px solid var(--line-soft);border-radius:8px;padding:6px 8px}
+.ctr button.on{color:var(--cyan-ink);background:var(--cyan);border-color:var(--cyan)}
+.ctr button.learn{color:var(--ok);border-color:rgba(77,255,184,.5)}
+.greet{text-align:center;font-size:21px;padding:6px 16px 4px;color:var(--text)}
+.mic{display:flex;justify-content:center;padding:6px}
+.mic button{width:64px;height:64px;border-radius:50%;border:2px solid var(--cyan);background:radial-gradient(circle,#0a3a48,#041219);box-shadow:0 0 16px rgba(0,229,255,.5);color:var(--cyan)}
+.inp{display:flex;gap:8px;margin:6px 14px 10px}
+.inp input{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 12px;color:var(--text);font:inherit;font-size:16px}
+.inp button{background:var(--cyan);color:var(--cyan-ink);border:0;border-radius:12px;padding:0 14px;font-family:var(--font-hud);font-size:11px;font-weight:700}
+nav{display:flex;border-top:1px solid var(--line-soft);background:rgba(3,6,11,.9);padding-bottom:env(safe-area-inset-bottom)}
+nav a{flex:1;text-align:center;padding:9px 0 10px;font-family:var(--font-hud);font-size:9.5px;letter-spacing:1px;color:var(--dim);text-decoration:none}
+nav a.on{color:var(--cyan);text-shadow:0 0 8px rgba(0,229,255,.6)}
+nav a span{display:block;font-size:18px;margin-bottom:2px;font-family:system-ui}
+</style></head><body>
+<div class="app">
+<header><h1>ANTARES</h1><span class="tag">MUESTRA</span><span><span class="dot"></span><span class="lbl">EN LÍNEA</span></span></header>
+<div class="card"><span class="lbl">ESTADO</span><span id="st">EN ESPERA</span><span class="lbl" id="cnt"></span></div>
+<div class="stage" id="stage"><canvas id="c"></canvas><div id="tip"></div>
+<div class="ctr"><button data-s="0" class="on">ESPERA</button><button data-s="1">ESCUCHA</button><button data-s="2">PIENSA</button><button data-s="3">RESPONDE</button><button class="learn" id="learn">+ APRENDER</button></div></div>
+<div class="greet">Buenas tardes. ¿En qué le puedo ayudar?</div>
+<div class="mic"><button aria-label="Micrófono"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button></div>
+<div class="inp"><input placeholder="Escriba un mensaje…"><button>ENVIAR</button></div>
+<nav><a class="on"><span>◉</span>INICIO</a><a><span>☰</span>NOTAS</a><a><span>⏰</span>RECORD.</a><a><span>⚙</span>AJUSTES</a></nav>
+</div>
+<script>
+(()=>{
+const cv=document.getElementById('c'),ctx=cv.getContext('2d'),stage=document.getElementById('stage'),tip=document.getElementById('tip');
+const NAMES=['EN ESPERA','ESCUCHANDO','PENSANDO','RESPONDIENDO'];
+const CATS=[['Recuerdos','Momentos y datos personales que me ha contado.'],['Rutas','Lugares, trayectos y direcciones frecuentes.'],['Trabajo','Proyectos, reuniones y pendientes laborales.'],['Evangeline','Todo lo relacionado con Evangeline.'],['Recordatorios','Avisos y alarmas programadas.'],['Compras','Listas y cosas por comprar.'],['Robótica','Ideas, piezas y proyectos de robótica.']];
+let W=0,H=0,R=0,dpr=1,state=0,t0=performance.now();
+function resize(){dpr=Math.min(window.devicePixelRatio||1,2.5);W=stage.clientWidth;H=stage.clientHeight;cv.width=W*dpr;cv.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);R=Math.min(W,H-40)*0.40}
+addEventListener('resize',resize);resize();
+// nodes
+const N=[],E=[],hubs=[];
+function rnd(a,b){return a+Math.random()*(b-a)}
+function fib(i,n){const y=1-2*(i+.5)/n,r=Math.sqrt(1-y*y),th=i*2.39996;return [Math.cos(th)*r,y,Math.sin(th)*r]}
+CATS.forEach((c,i)=>{const p=fib(i,CATS.length);hubs.push(N.length);N.push({x:p[0]*.82,y:p[1]*.82,z:p[2]*.82,hub:1,cat:i,g:1,label:c[0],desc:c[1]})});
+function addNode(cat,grow){const h=N[hubs[cat]];let x,y,z,l;do{x=h.x+rnd(-.55,.55);y=h.y+rnd(-.55,.55);z=h.z+rnd(-.55,.55);l=Math.hypot(x,y,z)}while(l>1);
+ if(Math.random()<.6){const s=rnd(.88,1)/l;x*=s;y*=s;z*=s}
+ const n={x,y,z,cat,g:grow?0:1,hub:0};N.push(n);const id=N.length-1;
+ // connect to hub + nearest few
+ E.push([hubs[cat],id]);const d=[];for(let j=0;j<id;j++){const m=N[j];d.push([(m.x-x)**2+(m.y-y)**2+(m.z-z)**2,j])}
+ d.sort((a,b)=>a[0]-b[0]);for(let k=0;k<2&&k<d.length;k++)if(d[k][1]!==hubs[cat])E.push([d[k][1],id]);return id}
+for(let i=0;i<280;i++)addNode(i%CATS.length,false);
+for(let i=0;i<hubs.length;i++)E.push([hubs[i],hubs[(i+2)%hubs.length]]);
+const COL=[[0,229,255],[77,255,184],[120,170,255],[255,140,220],[255,196,87],[160,255,120],[190,140,255]];
+// rotation
+let ry=0,rx=-.25,vy=.0025,drag=null;
+cv.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,sx:e.clientX,sy:e.clientY,t:performance.now()};cv.setPointerCapture(e.pointerId)});
+cv.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;ry+=dx*.008;rx=Math.max(-1.3,Math.min(1.3,rx+dy*.008));vy=dx*.0015;drag.x=e.clientX;drag.y=e.clientY});
+cv.addEventListener('pointerup',e=>{const tap=Math.hypot(e.clientX-drag.sx,e.clientY-drag.sy)<8;drag=null;if(tap)pick(e)});
+let tipT=0;
+function pick(e){const b=cv.getBoundingClientRect(),mx=e.clientX-b.left,my=e.clientY-b.top;let best=null,bd=900;
+ for(const i of hubs){const p=P[i];if(!p)continue;const d=(p.sx-mx)**2+(p.sy-my)**2;if(d<bd){bd=d;best=i}}
+ if(best==null){tip.style.opacity=0;return}const n=N[best];tipN=best;
+ tip.innerHTML='<b>'+n.label.toUpperCase()+'</b>'+n.desc+'<br><span style="color:#86aebd;font-size:12px">'+N.filter(m=>m.cat===n.cat).length+' nodos</span>';tip.style.opacity=1;tipT=performance.now()}
+let tipN=-1;
+// pulses
+const pulses=[];
+// buttons
+document.querySelectorAll('.ctr [data-s]').forEach(b=>b.onclick=()=>setState(+b.dataset.s));
+function setState(s){state=s;document.getElementById('st').textContent=NAMES[s];document.querySelectorAll('.ctr [data-s]').forEach(b=>b.classList.toggle('on',+b.dataset.s===s))}
+document.getElementById('learn').onclick=()=>{const c=Math.floor(Math.random()*CATS.length);for(let i=0;i<6;i++)setTimeout(()=>addNode(c,true),i*140)};
+const qs=new URLSearchParams(location.search);if(qs.has('estado'))setState(+qs.get('estado'));
+let lvl=0;const P=[];const cnt=document.getElementById('cnt');
+function frame(now){
+ const t=(now-t0)/1000;const target=[.35,1,.8,.9][state];lvl+=(target-lvl)*.06;
+ if(!drag){const base=[.0025,.003,.006,.004][state];vy+=(base-vy)*.03;ry+=vy}
+ const cy=Math.cos(ry),sy=Math.sin(ry),cx=Math.cos(rx),sx=Math.sin(rx),ox=W/2,oy=(H-40)/2+4,f=2.6;
+ for(let i=0;i<N.length;i++){const n=N[i];if(n.g<1)n.g=Math.min(1,n.g+.025);
+  let x=n.x,y=n.y,z=n.z;const x1=x*cy-z*sy,z1=x*sy+z*cy,y1=y*cx-z1*sx,z2=y*cx*0+y*sx+z1*cx;const s=f/(f+z2);
+  P[i]={sx:ox+x1*R*s,sy:oy+y1*R*s,z:z2,s}}
+ ctx.clearRect(0,0,W,H);
+ // core glow
+ const breath=state===0?.5+.5*Math.sin(t*1.4):state===3?.5+.5*Math.sin(t*7):.7;
+ let g=ctx.createRadialGradient(ox,oy,0,ox,oy,R*1.25);g.addColorStop(0,`rgba(0,229,255,${.10+.10*lvl*breath})`);g.addColorStop(.6,'rgba(0,229,255,.03)');g.addColorStop(1,'rgba(0,229,255,0)');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+ // ring
+ ctx.strokeStyle=`rgba(0,229,255,${.12+.15*lvl})`;ctx.lineWidth=1;ctx.beginPath();ctx.arc(ox,oy,R*1.08,0,7);ctx.stroke();
+ // edges
+ ctx.lineWidth=.6;
+ for(const [a,b] of E){const p=P[a],q=P[b],ga=Math.min(N[a].g,N[b].g);if(ga<=0)continue;const d=(2-(p.z+q.z)/2)/3;const c=COL[N[b].cat];
+  ctx.strokeStyle=`rgba(${c[0]},${c[1]},${c[2]},${(.07+.20*lvl)*d*ga})`;ctx.beginPath();ctx.moveTo(p.sx,p.sy);
+  if(ga<1){ctx.lineTo(p.sx+(q.sx-p.sx)*ga,p.sy+(q.sy-p.sy)*ga)}else ctx.lineTo(q.sx,q.sy);ctx.stroke()}
+ // pulses (thinking / responding)
+ const rate=state===2?6:state===3?2:state===1?.5:0;
+ for(let k=0;k<rate;k++)if(Math.random()<.5&&pulses.length<160)pulses.push({e:E[Math.random()*E.length|0],p:0,v:rnd(.012,.03),r:Math.random()<.5});
+ ctx.globalCompositeOperation='lighter';
+ for(let i=pulses.length-1;i>=0;i--){const u=pulses[i];u.p+=u.v;if(u.p>=1){pulses.splice(i,1);continue}
+  let [a,b]=u.e;if(u.r)[a,b]=[b,a];const p=P[a],q=P[b];const x=p.sx+(q.sx-p.sx)*u.p,y=p.sy+(q.sy-p.sy)*u.p,al=Math.sin(u.p*Math.PI);
+  ctx.fillStyle=`rgba(180,250,255,${.9*al})`;ctx.beginPath();ctx.arc(x,y,1.8,0,7);ctx.fill();
+  ctx.fillStyle=`rgba(0,229,255,${.25*al})`;ctx.beginPath();ctx.arc(x,y,5,0,7);ctx.fill()}
+ // nodes (back-to-front)
+ const ord=P.map((p,i)=>i).sort((a,b)=>P[b].z-P[a].z);
+ for(const i of ord){const n=N[i],p=P[i],d=(2-p.z)/3,c=COL[n.cat];
+  if(n.hub){const pr=1+.15*Math.sin(t*2+i)*lvl,rr=(7+4*lvl)*p.s*pr;
+   g=ctx.createRadialGradient(p.sx,p.sy,0,p.sx,p.sy,rr*3.2);g.addColorStop(0,`rgba(${c[0]},${c[1]},${c[2]},${.45*d+.35*lvl})`);g.addColorStop(1,`rgba(${c[0]},${c[1]},${c[2]},0)`);
+   ctx.fillStyle=g;ctx.beginPath();ctx.arc(p.sx,p.sy,rr*3.2,0,7);ctx.fill();
+   ctx.fillStyle=`rgba(230,250,255,${.6+.4*d})`;ctx.beginPath();ctx.arc(p.sx,p.sy,rr*.45,0,7);ctx.fill();
+  }else{const tw=state===1?.6+.4*Math.sin(t*6+i*1.7):1,a=(.25+.6*lvl*tw)*d*n.g,rr=(1+1.3*d)*(.4+.6*n.g)*(n.g<1?1+2*(1-n.g):1);
+   ctx.fillStyle=`rgba(${c[0]},${c[1]},${c[2]},${a})`;ctx.beginPath();ctx.arc(p.sx,p.sy,rr,0,7);ctx.fill()}}
+ ctx.globalCompositeOperation='source-over';
+ // labels
+ ctx.font='600 10px Orbitron, Rajdhani, monospace';ctx.textAlign='center';
+ for(const i of hubs){const p=P[i],d=(2-p.z)/3;ctx.fillStyle=`rgba(230,248,255,${.25+.7*d*d})`;ctx.fillText(N[i].label.toUpperCase(),p.sx,p.sy-14*p.s)}
+ if(tipN>=0&&tip.style.opacity=='1'){tip.style.left=P[tipN].sx+'px';tip.style.top=(P[tipN].sy-10)+'px';if(now-tipT>4000)tip.style.opacity=0}
+ cnt.textContent=N.length+' NODOS';
+ requestAnimationFrame(frame)}
+requestAnimationFrame(frame);
+})();
+</script></body></html>
