@@ -18,6 +18,10 @@ export const DEFAULT_CONFIG = {
   userName: "",
   personality: "",
   speakReplies: false,   // leer en voz alta: apagado por defecto
+  replyMode: "",         // v1.15: "texto" | "voz" | "mic" ("" = según speakReplies)
+  voiceURI: "",          // v1.15: voz elegida ("" = voz masculina automática tipo Jarvis)
+  voiceRate: 0.95,
+  voicePitch: 0.8,
   speechLang: "es-CR",   // idioma del dictado (con respaldo es-MX -> es-US)
   webSearch: true,
   autoLearn: true,       // aprender datos del usuario automáticamente

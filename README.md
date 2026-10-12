@@ -107,6 +107,12 @@ Actualizar.
 - Funciona sin conexión para abrir la app (service worker "primero red" con espera de 3 s y
   respaldo en caché).
 
+## Novedades de la 1.15.0 (Voz)
+
+- Voz arreglada en iPhone: se habilita en cada toque, lee por trozos cortos, limpia emojis/enlaces/markdown y se reanuda si iOS la pausa.
+- «Modo de respuesta» (botón junto a Configuración y en Ajustes): Solo texto · Texto y voz · Voz cuando hablo por micrófono. Botón «Callar» mientras habla.
+- Voz masculina tipo Jarvis por defecto (Jorge/Juan/Diego/Carlos, versiones mejoradas primero), selector de voz, velocidad, tono, «Voz Jarvis» y «Probar voz».
+
 ## Novedades de la 1.14.0 (Tema verde y rojo)
 
 - Nuevo tema futurista: verde neón como color principal con acentos rojos (micrófono, pestaña activa, botones, cerebro 3D, anillo de audio). Íconos nuevos en verde y rojo.

@@ -1047,3 +1047,14 @@ body { background-color: var(--bg); }
 .lock-screen .lock-badge { border-color: rgba(255,45,74,.6); box-shadow: 0 0 10px rgba(255,45,74,.45); }
 .lock-screen .lock-badge svg { color: var(--accent-2); }
 .dr-board .pc.sel .rim { stroke: var(--accent); filter: drop-shadow(0 0 .08px var(--accent)); }
+
+/* v1.15: modo de respuesta y botón Callar */
+.reply-mode-btn svg { display: none; }
+.reply-mode-btn[data-mode="voz"] .rm-voz, .reply-mode-btn[data-mode="texto"] .rm-texto, .reply-mode-btn[data-mode="mic"] .rm-mic { display: block; }
+.reply-mode-btn[data-mode="voz"] { color: var(--accent-2); border-color: rgba(255,45,74,.55); }
+.reply-mode-btn[data-mode="texto"] { color: var(--muted); }
+.stop-voice { display: flex; align-items: center; gap: 8px; margin: 0 auto 8px; min-height: 40px; padding: 0 16px; border-radius: 20px; cursor: pointer;
+  font-family: var(--font-hud); font-size: 12px; letter-spacing: 1.5px; color: #fff; background: rgba(255,45,74,.18); border: 1px solid var(--accent); box-shadow: 0 0 14px rgba(255,45,74,.45); }
+.stop-voice[hidden] { display: none; }
+.stop-voice i { width: 10px; height: 10px; background: var(--accent); border-radius: 2px; }
+input.range { width: 100%; min-height: 40px; accent-color: var(--cyan); }

@@ -26,7 +26,7 @@ import * as Code from "./code.js";
 import * as Sheet from "./sheet.js";
 import * as Brain from "./brain.js";
 
-const APP_VERSION = "1.14.0";
+const APP_VERSION = "1.15.0";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -1041,7 +1041,27 @@ async function handleLocal(kind, text) {
   return false;
 }
 
-const wantsVoice = () => !!(config.speakReplies || config.drivingMode);
+// v1.15: modo de respuesta. "texto" = sin audio · "voz" = siempre lee · "mic" = lee solo si usted habló por micrófono
+const replyMode = () => (["texto", "voz", "mic"].includes(config.replyMode) ? config.replyMode : config.speakReplies ? "voz" : "mic");
+const wantsVoice = () => replyMode() === "voz" || !!config.drivingMode;
+const micSpeaks = () => replyMode() !== "texto" || !!config.drivingMode;
+const REPLY_LABEL = { texto: "Solo texto", voz: "Texto y voz", mic: "Voz cuando hablo por micrófono" };
+function paintReplyMode() {
+  const m = replyMode(), b = document.getElementById("reply-mode-btn");
+  if (b) { b.dataset.mode = m; b.setAttribute("aria-label", "Modo de respuesta: " + REPLY_LABEL[m]); b.title = REPLY_LABEL[m]; }
+}
+function applyVoicePrefs() { voice.setPrefs({ voiceURI: config.voiceURI, rate: config.voiceRate ?? 0.95, pitch: config.voicePitch ?? 0.8 }); }
+document.getElementById("reply-mode-btn")?.addEventListener("click", () => {
+  voice.unlock();
+  const order = ["mic", "voz", "texto"], m = order[(order.indexOf(replyMode()) + 1) % order.length];
+  config = { ...config, replyMode: m, speakReplies: m === "voz" };
+  memory.saveConfig(config); paintReplyMode();
+  if (els.replyModeSel) els.replyModeSel.value = m;
+  if (snapshot) { snapshot.replyMode = m; snapshot.speakReplies = m === "voz"; }
+  chatNotice("Modo de respuesta: " + REPLY_LABEL[m]);
+  if (m === "texto") voice.stop(); else if (m === "voz") voice.speak("Le responderé también en voz alta.");
+});
+document.getElementById("stop-voice")?.addEventListener("click", () => voice.stop());
 // Lee en voz alta la última respuesta local (recordatorios, rutas…) cuando corresponde
 function speakLastBot() {
   const b = [...els.messages.querySelectorAll(".msg.bot .bubble")].pop();
@@ -1353,7 +1373,7 @@ els.mic.addEventListener("click", () => {
       else { if (estado === "escuchando") setEstado(baseEstado()); setTimeout(maybeResumeWake, 300); }
     },
     onInterim: (t) => { els.interimText.textContent = t ? `“${t}` : ""; },
-    onFinal: (t) => { els.interimText.textContent = ""; sendMessage(t); },
+    onFinal: (t) => { els.interimText.textContent = ""; sendMessage(t, [], { speak: micSpeaks() }); },
     onError: (code, msg) => { if (msg) { setVista("chat"); showNote(msg, { warn: true }); } },
   });
 });
@@ -1864,12 +1884,14 @@ function handleWakeCommand(text) {
   if (panelOpen) hidePanelNow();
   if (!els.settingsView.hidden) return;
   if (wake) wake.pause("respondiendo");
-  if (!sendMessage(t, [], { speak: true })) { setVista("chat"); if (!client.isConfigured()) voice.speak("Primero configure su API key."); setTimeout(maybeResumeWake, 600); return; }
+  if (!sendMessage(t, [], { speak: micSpeaks() })) { setVista("chat"); if (!client.isConfigured()) voice.speak("Primero configure su API key."); setTimeout(maybeResumeWake, 600); return; }
   Promise.resolve(currentJob).finally(() => setTimeout(maybeResumeWake, 300));
 }
 voice.onWord = () => Brain.word();
+voice.onAudio = (on) => Brain.setSpeaking(on); // v1.15: el cerebro sigue el sonido real (onstart/onboundary/onend)
 voice.onSpeaking = (on) => {
-  Brain.setSpeaking(on);
+  const sv = document.getElementById("stop-voice"); if (sv) sv.hidden = !on;
+  if (!on) Brain.setSpeaking(false);
   updateMic();
   if (on) { if (wake && wake.enabled) wake.pause("hablando"); }
   else setTimeout(maybeResumeWake, 500); // pequeña espera para no oír el final de su propia voz
@@ -1905,7 +1927,11 @@ function formValues() {
     assistantName: els.assistantName.value.trim(),
     userName: els.userName.value.trim(),
     personality: els.personality.value.trim(),
-    speakReplies: els.speakReplies.checked,
+    speakReplies: els.replyModeSel ? els.replyModeSel.value === "voz" : els.speakReplies.checked,
+    replyMode: els.replyModeSel ? els.replyModeSel.value : replyMode(),
+    voiceURI: els.voiceSel ? els.voiceSel.value : (config.voiceURI || ""),
+    voiceRate: els.voiceRate ? Number(els.voiceRate.value) : 0.95,
+    voicePitch: els.voicePitch ? Number(els.voicePitch.value) : 0.8,
     speechLang: els.speechLang.value,
     webSearch: els.webSearch.checked,
     autoLearn: els.autoLearn.checked,
@@ -1945,6 +1971,9 @@ function fillSettings() {
   els.userName.value = config.userName || "";
   els.personality.value = config.personality || "";
   els.speakReplies.checked = !!config.speakReplies;
+  if (els.replyModeSel) els.replyModeSel.value = replyMode();
+  fillVoiceList();
+  if (els.voiceRate) { els.voiceRate.value = String(config.voiceRate ?? 0.95); els.voicePitch.value = String(config.voicePitch ?? 0.8); paintVoiceVals(); }
   els.speechLang.value = config.speechLang || "es-CR";
   els.webSearch.checked = !!config.webSearch;
   els.autoLearn.checked = !!config.autoLearn;
@@ -2032,7 +2061,41 @@ els.pasteKey.addEventListener("click", async () => {
   }
 });
 
+// ---------- v1.15: Ajustes de voz ----------
+Object.assign(els, { replyModeSel: $("reply-mode-sel"), voiceSel: $("voice-sel"), voiceRate: $("voice-rate"), voicePitch: $("voice-pitch") });
+const fmt2 = (n) => Number(n).toFixed(2).replace(".", ",");
+function paintVoiceVals() {
+  const r = $("voice-rate-val"), p = $("voice-pitch-val");
+  if (r) r.textContent = fmt2(els.voiceRate.value); if (p) p.textContent = fmt2(els.voicePitch.value);
+}
+function fillVoiceList() {
+  if (!els.voiceSel) return;
+  const cur = els.voiceSel.value || config.voiceURI || "";
+  const list = voice.listVoices();
+  els.voiceSel.innerHTML = `<option value="">Automática (masculina, tipo Jarvis)${voice.voice ? " · " + voice.voice.name : ""}</option>` +
+    list.map((v) => `<option value="${v.uri.replace(/"/g, "&quot;")}">${v.male ? "♂ " : ""}${v.name.replace(/</g, "&lt;")} (${v.lang})</option>`).join("");
+  els.voiceSel.value = list.some((v) => v.uri === cur) ? cur : "";
+}
+voice.onVoices = () => { if (!els.settingsView.hidden) fillVoiceList(); };
+els.voiceRate?.addEventListener("input", () => { paintVoiceVals(); updateDirty(); });
+els.voicePitch?.addEventListener("input", () => { paintVoiceVals(); updateDirty(); });
+els.voiceSel?.addEventListener("change", () => updateDirty());
+els.replyModeSel?.addEventListener("change", () => updateDirty());
+$("voice-jarvis")?.addEventListener("click", () => {
+  voice.unlock();
+  els.voiceSel.value = ""; els.voiceRate.value = "0.95"; els.voicePitch.value = "0.8"; paintVoiceVals(); updateDirty();
+  voice.setPrefs({ voiceURI: "", rate: 0.95, pitch: 0.8 });
+  voice.speak("Voz Jarvis lista. A sus órdenes, don " + (config.userName || "Freddy") + ".");
+});
+$("voice-test")?.addEventListener("click", () => {
+  voice.unlock(); // dentro del toque: necesario en iPhone
+  voice.setPrefs({ voiceURI: els.voiceSel.value, rate: els.voiceRate.value, pitch: els.voicePitch.value });
+  voice.speak(`Buenas, ${config.userName ? "don " + config.userName : "don Freddy"}. Soy ${assistantName()}, su asistente. Así sueno con esta voz.`)
+    .then((ok) => { if (!ok) setSettingsStatus("No pude reproducir la voz. Revise que el iPhone no esté en silencio y suba el volumen.", true); });
+});
+
 function applyConfig() {
+  applyVoicePrefs(); paintReplyMode();
   client = makeClient();
   els.title.textContent = assistantName().toUpperCase();
   document.title = assistantName();
