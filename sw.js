@@ -1,6 +1,6 @@
 // Antares Web - Service worker: abre rápido y sin conexión, y recibe las versiones nuevas.
 // Las llamadas a Gemini, Open-Meteo y otros dominios NO se interceptan ni se guardan.
-const VERSION = "antares-v1.12.0";
+const VERSION = "antares-v1.13.0";
 const SHELL = [
   "./",
   "./index.html",
@@ -28,6 +28,7 @@ const SHELL = [
   "./js/logbook.js",
   "./js/ocio.js",
   "./js/draughts.js",
+  "./js/brain.js",
   "./js/draughts-worker.js",
   "./js/trivia.js",
   "./js/robotics.js",
@@ -46,6 +47,8 @@ const SHELL = [
   "./icons/favicon-32.png",
 ];
 const NETWORK_TIMEOUT_MS = 3000;
+// v1.13: la página (index.html) espera más a la red antes de usar la copia guardada, para no quedarse en una versión vieja
+const PAGE_TIMEOUT_MS = 9000;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -133,7 +136,7 @@ async function networkFirst(req, isPage, event) {
   // un worker viejo no debe recrear su caché después de que la versión nueva la borró
   const cache = (await caches.has(VERSION)) ? await caches.open(VERSION) : { put: async () => {}, match: (r, o) => caches.match(r, o) };
   // la página siempre se revalida con el servidor (cache: no-cache) para no quedar en una versión vieja
-  const netReq = isPage ? new Request(req.url, { cache: "no-cache", credentials: "same-origin" }) : req;
+  const netReq = isPage ? new Request(req.url, { cache: "no-store", credentials: "same-origin" }) : req;
   const network = fetch(netReq).then((resp) => {
     if (resp && resp.ok && resp.type === "basic") {
       const copy = resp.clone();
@@ -144,7 +147,7 @@ async function networkFirst(req, isPage, event) {
   });
   const cachedLookup = () => (isPage ? cache.match("./index.html") : cache.match(req, { ignoreSearch: true }));
   let timer;
-  const timeout = new Promise((resolve) => { timer = setTimeout(resolve, NETWORK_TIMEOUT_MS, "timeout"); });
+  const timeout = new Promise((resolve) => { timer = setTimeout(resolve, isPage ? PAGE_TIMEOUT_MS : NETWORK_TIMEOUT_MS, "timeout"); });
   try {
     const first = await Promise.race([network, timeout]);
     clearTimeout(timer);

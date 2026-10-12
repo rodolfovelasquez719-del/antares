@@ -24,8 +24,9 @@ import * as Tools from "./tools.js";
 import * as Photo from "./photo.js";
 import * as Code from "./code.js";
 import * as Sheet from "./sheet.js";
+import * as Brain from "./brain.js";
 
-const APP_VERSION = "1.12.0";
+const APP_VERSION = "1.13.0";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -140,6 +141,8 @@ const STATE_TEXT = { reposo: "EN ESPERA", escuchando: "ESCUCHANDO…", hablando:
 function setEstado(e) {
   estado = e;
   body.dataset.estado = e;
+  // v1.13: el cerebro 3D sigue los estados reales (hablando = esperando a Gemini; cambia a respondiendo al llegar texto o voz)
+  try { Brain.setMode(e === "escuchando" ? "escuchando" : e === "hablando" ? "pensando" : "reposo"); Brain.setDim(e === "error" || e === "sinkey"); if (e === "reposo") refreshBrainCounts(); } catch { /* */ }
   els.stateLabel.textContent = STATE_TEXT[e] || "";
   els.stateLabel.classList.toggle("warn", e === "error" || e === "sinkey");
   if (e !== "error") { els.sideHint.hidden = true; els.sideHint.textContent = ""; }
@@ -147,6 +150,12 @@ function setEstado(e) {
   updateComposer();
   updateConn();
   updateLayout();
+}
+
+function refreshBrainCounts() {
+  if (!isUnlocked()) { Brain.setCounts(null); return; }
+  const n = (k) => { try { const v = memory.getData(k); return Array.isArray(v) ? v.length : 0; } catch { return 0; } };
+  Brain.setCounts({ Recuerdos: n("antares.facts.v1"), Recordatorios: n(Reminders.K_REMINDERS), Compras: n(Shopping.K_SHOPPING), Rutas: n(Logbook.K_LOG), Trabajo: n(Logbook.K_LOG) });
 }
 
 function setVista(v) {
@@ -790,6 +799,7 @@ async function runJob(job) {
     const r = await client.ask(job.prompt, history, job.facts, {
       search, media, signal: abortCtrl.signal, extraSystem: job.extraSystem || "",
       onChunk: (partial) => {
+        Brain.chunk();
         if (!stream) stream = createStreamingBubble();
         const near = isNearBottom();
         if (stream.bubble.classList.contains("pending")) { stream.bubble.classList.remove("pending"); els.connSub.textContent = "Respondiendo…"; }
@@ -1857,7 +1867,9 @@ function handleWakeCommand(text) {
   if (!sendMessage(t, [], { speak: true })) { setVista("chat"); if (!client.isConfigured()) voice.speak("Primero configure su API key."); setTimeout(maybeResumeWake, 600); return; }
   Promise.resolve(currentJob).finally(() => setTimeout(maybeResumeWake, 300));
 }
+voice.onWord = () => Brain.word();
 voice.onSpeaking = (on) => {
+  Brain.setSpeaking(on);
   updateMic();
   if (on) { if (wake && wake.enabled) wake.pause("hablando"); }
   else setTimeout(maybeResumeWake, 500); // pequeña espera para no oír el final de su propia voz
@@ -2180,20 +2192,27 @@ window.addEventListener("offline", updateConn);
 // ---------- Service worker y aviso de versión nueva ----------
 function setupServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
+  // v1.13: la versión nueva toma el control sola (skipWaiting + clients.claim) y la página se recarga UNA vez
   const hadController = !!navigator.serviceWorker.controller;
-  let shown = false;
+  const RK = "antares.swReloaded";
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (!hadController || shown) return; // primera instalación: no hace falta avisar
-    shown = true;
-    els.toast.hidden = false;
+    if (!hadController) return; // primera instalación: no hace falta recargar
+    let last = 0; try { last = Number(sessionStorage.getItem(RK) || 0); } catch { /* */ }
+    if (Date.now() - last < 60000) { els.toast.hidden = false; return; } // evita bucles de recarga
+    try { sessionStorage.setItem(RK, String(Date.now())); } catch { /* */ }
+    // si está escribiendo o Antares está respondiendo, solo avisa; si no, recarga en silencio
+    if (estado === "hablando" || estado === "escuchando" || (els.input && els.input.value)) { els.toast.hidden = false; return; }
+    location.reload();
   });
   navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((reg) => {
     if (!reg) return;
-    if (reg.waiting && hadController) els.toast.hidden = false;
+    if (reg.waiting && hadController) reg.waiting.postMessage("SKIP_WAITING");
+    reg.update().catch(() => {});
     let lastCheck = Date.now();
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible" && Date.now() - lastCheck > 30 * 60 * 1000) { lastCheck = Date.now(); reg.update().catch(() => {}); }
-    });
+    const check = () => { if (Date.now() - lastCheck > 60 * 1000) { lastCheck = Date.now(); reg.update().catch(() => {}); } };
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") check(); });
+    window.addEventListener("focus", check);
+    window.addEventListener("pageshow", check);
   }).catch((e) => console.warn("Antares: service worker no registrado", e));
   els.updateBtn.addEventListener("click", async () => {
     try {
@@ -2203,6 +2222,22 @@ function setupServiceWorker() {
     location.reload();
   });
   els.updateDismiss.addEventListener("click", () => { els.toast.hidden = true; });
+  const force = document.getElementById("force-update");
+  force && force.addEventListener("click", forceUpdate);
+}
+// Ajustes › Buscar actualización: pide la versión nueva al servidor, borra solo las copias guardadas de la app y recarga.
+// Los datos (key, memoria, código, bóveda) no se tocan.
+async function forceUpdate() {
+  const st = document.getElementById("update-status"), say = (t) => { if (st) st.textContent = t; };
+  say("Buscando actualización…");
+  let remote = "";
+  try { const r = await fetch("sw.js?check=" + Date.now(), { cache: "no-store" }); const m = /antares-v([\d.]+)/.exec(await r.text()); remote = m ? m[1] : ""; } catch { /* */ }
+  say(remote ? (remote === APP_VERSION ? `Ya tiene la última versión (${APP_VERSION}). Recargando copia limpia…` : `Hay una versión nueva: ${remote}. Actualizando…`) : "Sin conexión con el servidor. Recargando…");
+  try { flushWrites && (await flushWrites()); } catch { /* */ }
+  try { const reg = await navigator.serviceWorker?.getRegistration(); if (reg) { await reg.update().catch(() => {}); if (reg.waiting) reg.waiting.postMessage("SKIP_WAITING"); } } catch { /* */ }
+  try { const ks = await caches.keys(); await Promise.all(ks.filter((k) => k.startsWith("antares-")).map((k) => caches.delete(k))); } catch { /* */ }
+  try { sessionStorage.setItem("antares.swReloaded", String(Date.now())); } catch { /* */ }
+  setTimeout(() => location.replace(location.pathname + "?v=" + Date.now() + location.hash), 900);
 }
 
 // ---------- Inicio ----------
@@ -2573,6 +2608,7 @@ async function init() {
   buildWave();
   buildStickerMenu();
   els.version.textContent = `Antares Web ${APP_VERSION} · sus datos y su key se guardan solo en este navegador`;
+  { const vl = document.getElementById("version-label"); if (vl) vl.textContent = `Versión ${APP_VERSION}`; }
   tick();
   setTimeout(() => { tick(); setInterval(tick, 60000); }, (60 - new Date().getSeconds()) * 1000 + 50);
   refreshWeather();
@@ -2588,6 +2624,7 @@ async function init() {
     }
   });
   syncViewport();
+  try { Brain.mountBrain(document.querySelector("#stage .reactor-wrap")); Brain.mountBrain(document.querySelector("#lock-view .reactor-wrap"), { lite: true }); } catch (e) { console.warn("Antares: cerebro 3D", e); }
   setupServiceWorker();
   await loadMetaSafe();
   if (Lock.hasPin()) {

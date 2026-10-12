@@ -89,6 +89,7 @@ export class Voice {
         if (this.voice) { u.voice = this.voice; u.lang = this.voice.lang; } else { u.lang = "es-CR"; }
         u.rate = this.rate || 0.95;  // pausado
         u.pitch = 0.9;  // un poco más grave
+        u.onboundary = () => { try { this.onWord && this.onWord(); } catch { /* */ } };
         u.onend = () => finish(true);
         u.onerror = (e) => { console.warn("Antares voz:", e.error || e); finish(false); };
         this.speaking = true;

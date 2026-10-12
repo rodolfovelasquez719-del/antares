@@ -107,6 +107,11 @@ Actualizar.
 - Funciona sin conexión para abrir la app (service worker "primero red" con espera de 3 s y
   respaldo en caché).
 
+## Novedades de la 1.13.0 (Cerebro 3D y actualizaciones)
+
+- El reactor de Inicio y de la pantalla de bloqueo se reemplazó por un **cerebro 3D en red** que gira y reacciona: brilla al escuchar, lanza pulsos de luz mientras piensa y respira con la voz al responder.
+- Actualizaciones más confiables en el iPhone: la versión nueva toma el control y la app se recarga sola una vez. En Ajustes › «Versión y actualizaciones» se ve la versión y está el botón «Buscar actualización».
+
 ## Novedades de la 1.12.0 (Damas internacionales)
 
 - En Ocio, «Damas chinas» se reemplazó por **Damas** internacionales: tablero 10×10 de madera, 20 piezas por lado (doradas contra cafés), captura obligatoria de la mayoría, saltos en cadena, peones que capturan hacia atrás, dama voladora y coronación solo al terminar en la última fila.

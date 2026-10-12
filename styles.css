@@ -1024,3 +1024,9 @@ button.react-pill { cursor: pointer; }
 .hl-fn { color: #7fdcff; } .hl-attr { color: #ffd18a; }
 .pdf-chip.code-chip { color: var(--ok); }
 .msg.bot .bubble.has-media .bubble-media + * { margin-top: 8px; }
+
+/* v1.13: cerebro 3D en red (reemplaza el reactor) */
+.reactor-wrap canvas.brain { position: absolute; inset: -14%; width: 128%; height: 128%; display: block; pointer-events: none; }
+@media (min-height: 701px) { .lock-screen .reactor-wrap { width: 132px !important; height: 132px !important; } }
+.lock-screen .lock-badge { inset: auto; right: -6px; bottom: -6px; width: 38px; height: 38px; border-radius: 50%; background: #07131d; border: 1px solid rgba(0,229,255,.55); box-shadow: 0 0 10px rgba(0,229,255,.45); }
+.lock-screen .lock-badge svg { width: 20px; height: 20px; color: var(--cyan); filter: none; }
