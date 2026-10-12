@@ -40,9 +40,9 @@ nav a span{display:block;font-size:18px;margin-bottom:2px;font-family:system-ui}
 <header><h1>ANTARES</h1><span class="tag">MUESTRA</span><span><span class="dot"></span><span class="lbl">EN LÍNEA</span></span></header>
 <div class="card"><span class="lbl">ESTADO</span><span id="st">EN ESPERA</span><span class="lbl" id="cnt"></span></div>
 <div class="stage" id="stage"><canvas id="c"></canvas><div id="tip"></div>
-<div class="ctr"><button data-s="0" class="on">ESPERA</button><button data-s="1">ESCUCHA</button><button data-s="2">PIENSA</button><button data-s="3">RESPONDE</button><button class="learn" id="learn">+ APRENDER</button></div></div>
+<div class="ctr"><button data-s="0" class="on">ESPERA</button><button data-s="1">ESCUCHA</button><button data-s="2">PIENSA</button><button data-s="3">RESPONDE</button><button class="learn" id="learn">+ APRENDER</button><button class="learn" id="voz">▶ PROBAR VOZ</button></div></div>
 <div class="greet">Buenas tardes. ¿En qué le puedo ayudar?</div>
-<div class="mic"><button aria-label="Micrófono"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button></div>
+<div class="mic"><button id="mic" aria-label="Micrófono"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button></div>
 <div class="inp"><input placeholder="Escriba un mensaje…"><button>ENVIAR</button></div>
 <nav><a class="on"><span>◉</span>INICIO</a><a><span>☰</span>NOTAS</a><a><span>⏰</span>RECORD.</a><a><span>⚙</span>AJUSTES</a></nav>
 </div>
@@ -86,24 +86,48 @@ document.querySelectorAll('.ctr [data-s]').forEach(b=>b.onclick=()=>setState(+b.
 function setState(s){state=s;document.getElementById('st').textContent=NAMES[s];document.querySelectorAll('.ctr [data-s]').forEach(b=>b.classList.toggle('on',+b.dataset.s===s))}
 document.getElementById('learn').onclick=()=>{const c=Math.floor(Math.random()*CATS.length);for(let i=0;i<6;i++)setTimeout(()=>addNode(c,true),i*140)};
 const qs=new URLSearchParams(location.search);if(qs.has('estado'))setState(+qs.get('estado'));
+
+// ===== motor de voz / audio =====
+let amp=0,env=0,sylT=0,pauseT=0,speaking=false,micA=null,micBuf=null,boost=0;
+function simEnv(now,dt){ // envolvente silábica simulada
+ if(now>pauseT){ if(now>sylT){ sylT=now+rnd(110,230); env=Math.max(env,rnd(.45,1)); if(Math.random()<.07)pauseT=now+rnd(250,600)+0, sylT=pauseT; } }
+ env*=Math.pow(.006,dt); return env}
+function micLevel(){micA.getByteTimeDomainData(micBuf);let q=0;for(let i=0;i<micBuf.length;i++){const v=(micBuf[i]-128)/128;q+=v*v}return Math.min(1,Math.sqrt(q/micBuf.length)*5)}
+document.getElementById('mic').onclick=async()=>{setState(1);if(micA)return;
+ try{const st=await navigator.mediaDevices.getUserMedia({audio:true});const ac=new (window.AudioContext||window.webkitAudioContext)();
+  micA=ac.createAnalyser();micA.fftSize=512;micBuf=new Uint8Array(micA.fftSize);ac.createMediaStreamSource(st).connect(micA);
+  document.querySelector('.lbl#cnt');}catch(e){micA=null;console.log('mic denegado, simulación')}};
+document.getElementById('voz').onclick=()=>{const u=new SpeechSynthesisUtterance('Buenas tardes, don Freddy. Soy Antares, su asistente.');u.lang='es-ES';
+ const v=speechSynthesis.getVoices().find(v=>/^es/i.test(v.lang));if(v)u.voice=v;
+ u.onstart=()=>{speaking=true;setState(3)};u.onboundary=()=>{boost=1;env=1};u.onend=u.onerror=()=>{speaking=false;setState(0)};
+ speechSynthesis.cancel();speechSynthesis.speak(u);setState(3);speaking=true;setTimeout(()=>{if(!speechSynthesis.speaking){speaking=false}},6000)};
+let lastNow=performance.now();
 let lvl=0;const P=[];const cnt=document.getElementById('cnt');
 function frame(now){
- const t=(now-t0)/1000;const target=[.35,1,.8,.9][state];lvl+=(target-lvl)*.06;
+ const t=(now-t0)/1000;const dt=Math.min(.05,(now-lastNow)/1000);lastNow=now;
+ let a=0;if(state===3)a=simEnv(now,dt);else if(state===1)a=micA?micLevel():(.5+.5*Math.sin(t*3))*simEnv(now,dt)*.8;else env*=.9;
+ boost*=.9;a=Math.min(1,a+boost*.4);amp+=(a-amp)*(a>amp?.45:.12);
+ const wave=(state===1||state===3)?amp:0;const target=[.35,1,.8,.9][state];lvl+=(target-lvl)*.06;
  if(!drag){const base=[.0025,.003,.006,.004][state];vy+=(base-vy)*.03;ry+=vy}
- const cy=Math.cos(ry),sy=Math.sin(ry),cx=Math.cos(rx),sx=Math.sin(rx),ox=W/2,oy=(H-40)/2+4,f=2.6;
+ const cy=Math.cos(ry),sy=Math.sin(ry),cx=Math.cos(rx),sx=Math.sin(rx),ox=W/2,oy=(H-40)/2+4,f=2.6;const R0=R;R=R0*(1+.09*wave);
  for(let i=0;i<N.length;i++){const n=N[i];if(n.g<1)n.g=Math.min(1,n.g+.025);
-  let x=n.x,y=n.y,z=n.z;const x1=x*cy-z*sy,z1=x*sy+z*cy,y1=y*cx-z1*sx,z2=y*cx*0+y*sx+z1*cx;const s=f/(f+z2);
+  let x=n.x,y=n.y,z=n.z;if(wave>.01){const r=Math.hypot(x,y,z),k=1+wave*.11*Math.sin(r*9-t*11);x*=k;y*=k;z*=k}const x1=x*cy-z*sy,z1=x*sy+z*cy,y1=y*cx-z1*sx,z2=y*cx*0+y*sx+z1*cx;const s=f/(f+z2);
   P[i]={sx:ox+x1*R*s,sy:oy+y1*R*s,z:z2,s}}
  ctx.clearRect(0,0,W,H);
  // core glow
  const breath=state===0?.5+.5*Math.sin(t*1.4):state===3?.5+.5*Math.sin(t*7):.7;
- let g=ctx.createRadialGradient(ox,oy,0,ox,oy,R*1.25);g.addColorStop(0,`rgba(0,229,255,${.10+.10*lvl*breath})`);g.addColorStop(.6,'rgba(0,229,255,.03)');g.addColorStop(1,'rgba(0,229,255,0)');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+ let g=ctx.createRadialGradient(ox,oy,0,ox,oy,R*1.25);g.addColorStop(0,`rgba(0,229,255,${.10+.10*lvl*breath+.25*wave})`);g.addColorStop(.6,'rgba(0,229,255,.03)');g.addColorStop(1,'rgba(0,229,255,0)');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
  // ring
  ctx.strokeStyle=`rgba(0,229,255,${.12+.15*lvl})`;ctx.lineWidth=1;ctx.beginPath();ctx.arc(ox,oy,R*1.08,0,7);ctx.stroke();
+ if(wave>.02){ // anillo de onda de audio
+  for(let L=0;L<2;L++){ctx.beginPath();for(let k=0;k<=120;k++){const th=k/120*Math.PI*2;
+   const w=Math.sin(th*6+t*(7+L*3))*.6+Math.sin(th*11-t*9)*.4;const rr=R*(1.14+L*.05)+w*R*.10*wave*(1-L*.4);
+   const X=ox+Math.cos(th)*rr,Y=oy+Math.sin(th)*rr;k?ctx.lineTo(X,Y):ctx.moveTo(X,Y)}
+   ctx.strokeStyle=`rgba(0,229,255,${(.75-L*.35)*Math.min(1,wave*1.6)})`;ctx.lineWidth=L?1:1.8;ctx.shadowColor='#00e5ff';ctx.shadowBlur=10;ctx.stroke();ctx.shadowBlur=0}}
  // edges
  ctx.lineWidth=.6;
  for(const [a,b] of E){const p=P[a],q=P[b],ga=Math.min(N[a].g,N[b].g);if(ga<=0)continue;const d=(2-(p.z+q.z)/2)/3;const c=COL[N[b].cat];
-  ctx.strokeStyle=`rgba(${c[0]},${c[1]},${c[2]},${(.07+.20*lvl)*d*ga})`;ctx.beginPath();ctx.moveTo(p.sx,p.sy);
+  ctx.strokeStyle=`rgba(${c[0]},${c[1]},${c[2]},${(.07+.20*lvl+.35*wave)*d*ga})`;ctx.beginPath();ctx.moveTo(p.sx,p.sy);
   if(ga<1){ctx.lineTo(p.sx+(q.sx-p.sx)*ga,p.sy+(q.sy-p.sy)*ga)}else ctx.lineTo(q.sx,q.sy);ctx.stroke()}
  // pulses (thinking / responding)
  const rate=state===2?6:state===3?2:state===1?.5:0;
@@ -128,7 +152,7 @@ function frame(now){
  for(const i of hubs){const p=P[i],d=(2-p.z)/3;ctx.fillStyle=`rgba(230,248,255,${.25+.7*d*d})`;ctx.fillText(N[i].label.toUpperCase(),p.sx,p.sy-14*p.s)}
  if(tipN>=0&&tip.style.opacity=='1'){tip.style.left=P[tipN].sx+'px';tip.style.top=(P[tipN].sy-10)+'px';if(now-tipT>4000)tip.style.opacity=0}
  cnt.textContent=N.length+' NODOS';
- requestAnimationFrame(frame)}
+ R=R0;requestAnimationFrame(frame)}
 requestAnimationFrame(frame);
 })();
 </script></body></html>
