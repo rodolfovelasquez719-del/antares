@@ -107,6 +107,11 @@ Actualizar.
 - Funciona sin conexión para abrir la app (service worker "primero red" con espera de 3 s y
   respaldo en caché).
 
+## Novedades de la 1.17.0 (Antares actúa por voz)
+
+- Modo conversación más confiable: ya no se oye a sí mismo (descarta el eco), espera más antes de cortar (1,7–2 s), no duplica frases del dictado del iPhone, no repite el turno anterior y no cruza respuestas. Respuestas habladas cortas y naturales con el contexto de la conversación.
+- Antares puede actuar (por voz o chat): recordatorios, lista de compras, bitácora, memoria, abrir pantallas, clima, dólar, damas, modo de respuesta, voz y terminar la conversación. Lo destructivo pide «¿seguro?».
+
 ## Novedades de la 1.16.0 (Modo conversación)
 
 - Manos libres: mantenga presionado el micrófono, toque «Modo conversación» o diga «modo conversación». Antares escucha, detecta el silencio, responde en voz alta y vuelve a escuchar solo.

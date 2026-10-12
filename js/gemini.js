@@ -238,6 +238,17 @@ export class GeminiClient {
     return r;
   }
 
+  // v1.17: turno con herramientas (sin streaming). Devuelve {ok, text, calls:[{name,args}]}
+  async askTools(userMessage, history, knownFacts, { functions, extraSystem = "", signal = null } = {}) {
+    if (!this.isConfigured()) return this.errorResult("missing_key", 0, "");
+    let system = this.systemPrompt + (extraSystem ? "\n\n" + extraSystem : "");
+    if (knownFacts && knownFacts.length) system += "\n\nLo que sabe del usuario:\n" + knownFacts.map((f) => `- ${f}`).join("\n");
+    const messages = [...history.map(({ role, content }) => ({ role, content })), { role: "user", content: userMessage }];
+    const r = await this.callApi(system, messages, { functions, thinking: false, maxTokens: 1024, budgetMs: 25000, maxModels: 3, retries: false, signal, timeoutMs: 15000 });
+    if (r.ok && r.text) r.text = cleanReply(r.text, userMessage);
+    return r;
+  }
+
   // Consulta que debe responder solo JSON (trivia y su verificación). Sin historial ni datos personales.
   async askJson(system, content, { signal = null, maxTokens = 2048 } = {}) {
     if (!this.isConfigured()) return this.errorResult("missing_key", 0, "");
@@ -369,6 +380,8 @@ export class GeminiClient {
     const parts = (c.content || {}).parts || [];
     const text = parts.filter((p) => !p.thought).map((p) => p.text || "").join("").trim();
     const sources = GeminiClient.sourcesOf(c, []);
+    const calls = parts.filter((p) => p.functionCall && p.functionCall.name).map((p) => ({ name: p.functionCall.name, args: p.functionCall.args || {} }));
+    if (calls.length) return { text, ok: true, sources, calls };
     if (text) return { text, ok: true, sources };
     return { ok: false, kind: c.finishReason === "SAFETY" ? "blocked" : "empty" };
   }
@@ -422,7 +435,7 @@ export class GeminiClient {
   async callApi(system, messages, {
     search = false, maxTokens = MAX_OUTPUT_TOKENS, stream = false, onChunk = null, models = null, json = false,
     budgetMs = TOTAL_BUDGET_MS, retries = true, timeoutMs = TIMEOUT_MS, thinking: thinkingOpt = true,
-    maxModels = MAX_MODELS, signal = null, thinkingLevel: levelOpt = THINKING_LEVEL,
+    maxModels = MAX_MODELS, signal = null, thinkingLevel: levelOpt = THINKING_LEVEL, functions = null,
   } = {}) {
     this.attempts = [];
     const t0 = performance.now();
@@ -475,7 +488,9 @@ export class GeminiClient {
         if (remaining < 3000) break;
         if (!countedModel) { tried++; countedModel = true; }
         const url = `${GEMINI_BASE_URL}/${model}:${stream ? "streamGenerateContent?alt=sse" : "generateContent"}`;
-        const body = GeminiClient.bodyString(sysJson, contentsJson, { thinking, search: useSearch, maxTokens, json, thinkingLevel: level });
+        let body = GeminiClient.bodyString(sysJson, contentsJson, { thinking, search: useSearch, maxTokens, json, thinkingLevel: level });
+        // v1.17: herramientas (function calling) para que Antares actúe sobre la app
+        if (functions) body = body.slice(0, -1) + `,"tools":[{"functionDeclarations":${JSON.stringify(functions)}}],"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}`;
         const ctrl = new AbortController();
         const onAbort = () => ctrl.abort();
         if (signal) signal.addEventListener("abort", onAbort, { once: true });
@@ -565,6 +580,7 @@ export class GeminiClient {
           continue;
         }
         if (STOP_KINDS.has(kind)) return this.errorResult(kind, elapsed(), lastExtra);
+        if (functions && code === 400) { lastKind = "tools"; break; } // este modelo no acepta herramientas: probar el siguiente
         if (kind === "rate" || kind === "daily") {
           // No se reintenta el mismo modelo: se respeta el retryDelay y se prueba el siguiente
           const delay = Math.max(err.retryDelay || 0, kind === "daily" ? 3600 : 20);

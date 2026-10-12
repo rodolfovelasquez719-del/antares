@@ -25,8 +25,10 @@ import * as Photo from "./photo.js";
 import * as Code from "./code.js";
 import * as Sheet from "./sheet.js";
 import * as Brain from "./brain.js";
+import * as Agent from "./agent.js";
+import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.16.0";
+const APP_VERSION = "1.17.0";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -1074,6 +1076,22 @@ function sendMessage(text, items = [], opts = {}) {
   if (busy || (!text && !items.length)) return false;
   if (!client.isConfigured()) { setEstado("sinkey"); return false; }
   const speak = !!opts.speak;
+  // v1.17: confirmación hablada de una acción destructiva pendiente («¿seguro?» -> «sí»)
+  if (pendingDanger && !items.length) {
+    const p = pendingDanger; pendingDanger = null;
+    if (Date.now() < p.until) {
+      if (/^\s*(?:s[ií]|claro|confirmo|dale|h[aá]galo|de acuerdo|ok(?:ay)?|seguro|adelante)(?=$|[\s,.!¡])/i.test(text)) {
+        currentJob = (async () => { const x = await Agent.execute(p.call, agentDeps, { confirmed: true }); quickReply(text, x.say || "Listo.", opts); })();
+        return true;
+      }
+      if (/^\s*(?:no|cancel\w*|mejor no|olv[ií]delo|deje)(?=$|[\s,.!¡])/i.test(text)) { quickReply(text, "Entendido, no borro nada.", opts); currentJob = Promise.resolve(); return true; }
+    }
+  }
+  // v1.17: acciones por voz o chat con herramientas de Gemini (si falla, sigue el camino de siempre)
+  if (!items.length && !opts.noAgent && !tutorMode && (opts.spoken || (conv && conv.on) || Agent.looksActionable(text))) {
+    currentJob = agentJob(text, opts);
+    return true;
+  }
   // modo tutor de robótica: activar / salir por chat
   if (!items.length && (tutorMode ? Robotics.looksLikeTutorOff(text) : Robotics.looksLikeTutorOn(text))) {
     setVista("chat");
@@ -1127,9 +1145,78 @@ function sendMessage(text, items = [], opts = {}) {
   if (items.length) rememberMedia(saved.id, items);
   const social = socialMode();
   currentJob = runJob({ text, items, prompt, history, facts, speak, userMsgId: saved.id, social, kind: codeMode ? "code" : undefined,
-    extraSystem: [tutorMode ? Robotics.TUTOR_SYSTEM : "", codeMode ? Code.CODE_RULES : "", social ? Social.socialRules(social) : ""].filter(Boolean).join("\n\n") });
+    extraSystem: [tutorMode ? Robotics.TUTOR_SYSTEM : "", codeMode ? Code.CODE_RULES : "", social ? Social.socialRules(social) : "", opts.spoken ? SPOKEN_RULES : ""].filter(Boolean).join("\n\n") });
   return true;
 }
+// ---------- v1.17: agente con herramientas ----------
+let pendingDanger = null;
+function quickReply(userText, reply, opts = {}) {
+  setVista("chat");
+  renderUser(userText); handleSave(memory.addMessage("user", userText), "el mensaje");
+  if (reply) {
+    renderBot(reply); handleSave(memory.addMessage("assistant", reply), "la respuesta");
+    if (opts.speak || wantsVoice() || (conv && conv.on)) voice.speak(reply);
+  }
+  try { if (panelOpen) renderPanel(); } catch { /* */ }
+  refreshBrainCounts();
+}
+const agentDeps = {
+  openSection: (s) => {
+    if (s === "inicio") { if (panelOpen) hidePanelNow(); setVista("inicio"); return; }
+    if (s === "ajustes") { els.openSettings?.click(); return; }
+    if (["personal", "trabajo", "ocio", "herramientas"].includes(s)) showGroup(s); else showPanel(s);
+  },
+  endConversation: () => stopConv("Listo. Salgo del modo conversación."),
+  setReplyMode: (m) => { config = { ...config, replyMode: m, speakReplies: m === "voz" }; memory.saveConfig(config); paintReplyMode(); },
+  setVoice: ({ preset, velocidad } = {}) => {
+    const next = { ...config };
+    if (preset === "jarvis") Object.assign(next, { voiceURI: "", voiceRate: 0.95, voicePitch: 0.8 });
+    if (typeof velocidad === "number" && velocidad > 0) next.voiceRate = Math.min(1.4, Math.max(0.6, velocidad));
+    config = next; memory.saveConfig(config); applyVoicePrefs();
+  },
+  startDamas: (n) => { const l = newDamasGame(n); showPanel("damas"); return l; },
+  clearHistory: () => { memory.clearHistory(); forgetSessionMedia(); els.messages.replaceChildren(); },
+};
+async function agentJob(text, opts) {
+  if (busy) return;
+  busy = true; abortCtrl = new AbortController(); setEstado("hablando");
+  els.connSub.textContent = "Pensando…";
+  let r;
+  try {
+    r = await client.askTools(text, historyForModel(12).map(({ role, content }) => ({ role, content })), memory.getFacts(), {
+      functions: Agent.FUNCTIONS, extraSystem: Agent.agentSystem() + (opts.spoken || (conv && conv.on) ? "\n\n" + SPOKEN_RULES : ""), signal: abortCtrl.signal });
+  } catch (e) { console.warn("Antares agente:", e); r = { ok: false }; }
+  busy = false; abortCtrl = null;
+  if (r.stopped) { setEstado(baseEstado()); showNote("Respuesta detenida."); return; }
+  const calls = r.ok ? (r.calls || []) : [];
+  if (!r.ok || calls.some((c) => c.name === "responder_normal") || (!calls.length && !r.text)) {
+    // sin herramientas (modelo no las acepta, error o pregunta general): respuesta normal con streaming y búsqueda
+    setEstado(baseEstado());
+    if (sendMessage(text, [], { ...opts, noAgent: true })) await currentJob;
+    return;
+  }
+  const says = [];
+  if (!calls.length) says.push(r.text);
+  let ended = false;
+  for (const c of calls.slice(0, 5)) {
+    try {
+      const x = await Agent.execute(c, agentDeps);
+      if (x.ask) pendingDanger = { call: c, until: Date.now() + 60000 };
+      if (x.ended) ended = true;
+      if (x.say) says.push(x.say);
+    } catch (e) { console.warn("Antares herramienta:", c.name, e); says.push("No pude completar esa acción."); }
+  }
+  setEstado(baseEstado());
+  const reply = says.join(" ").trim();
+  if (ended) { setVista("chat"); renderUser(text); handleSave(memory.addMessage("user", text), "el mensaje"); return; }
+  quickReply(text, reply, opts);
+}
+
+// v1.17: reglas para turnos hablados (dictado del iPhone)
+const SPOKEN_RULES = "Esta es una CONVERSACIÓN HABLADA: el mensaje del usuario viene del dictado por voz y su respuesta se leerá en voz alta. " +
+  "Responda corto y natural, en 1 a 3 oraciones, sin listas, sin markdown, sin emojis ni enlaces. " +
+  "Use el contexto de los mensajes anteriores para entender preguntas de seguimiento (por ejemplo «¿y mañana?»). " +
+  "El dictado puede equivocarse: interprete con buena fe palabras mal reconocidas; si el texto no tiene sentido, pida amablemente que lo repita.";
 
 // ---------- v1.11: herramientas desde el chat ----------
 function openPhotoTool(item, instruction = "", mode = "ia") {
@@ -1404,11 +1491,14 @@ function convListen(delay = 600) {
   conv.timer = setTimeout(() => {
     if (!conv.on || conv.turn !== t) return;
     if (busy || voice.speaking) { convListen(300); return; } // espera a que termine de responder/hablar
+    // v1.17: respiro tras la voz (el altavoz del iPhone sigue sonando un instante y el micrófono lo oía)
+    const since = Date.now() - (voice.lastSpokeEnd || 0);
+    if (since < 900) { convListen(900 - since); return; }
     if (voice.listening) return;
     if (Date.now() - conv.lastHeard > 30000) { stopConv("No le escuché. Salgo del modo conversación."); return; }
     voice.listen({
       lang: config.speechLang || "es-CR",
-      silenceMs: 1200,
+      silenceMs: isIOS() ? 2000 : 1700, // v1.17: 1,2 s lo cortaba a media frase
       onState: (on) => { if (!conv.on) return; if (on) { els.interimText.textContent = "Le escucho…"; setEstado("escuchando"); } else if (estado === "escuchando") setEstado(baseEstado()); },
       onInterim: (txt) => { conv.lastHeard = Date.now(); els.interimText.textContent = txt ? `“${txt}` : "Le escucho…"; },
       onFinal: (txt) => { if (conv.on && conv.turn === t) convHandle(txt); },
@@ -1427,9 +1517,15 @@ function convHandle(text) {
   conv.lastHeard = Date.now(); conv.fails = 0;
   els.interimText.textContent = "";
   const t = text.trim();
+  const nt = t.toLowerCase();
+  // v1.17: descartar eco de su propia voz, repeticiones del turno anterior y turnos que se cruzan
+  if (voice.isEcho(t)) { console.info("Antares: eco descartado:", t); convListen(400); return; }
+  if (conv.lastSent && conv.lastSent.text === nt && Date.now() - conv.lastSent.at < 15000) { convListen(400); return; }
+  if (busy) { convListen(500); return; }
+  conv.lastSent = { text: nt, at: Date.now() };
   if (CONV_EXIT.test(t)) { stopConv("Listo. Salgo del modo conversación."); return; }
   if (/^(?:silencio|c[aá]llese|c[aá]llate|basta)\b/i.test(t)) { voice.stop(); convListen(400); return; }
-  if (!sendMessage(t, [], { speak: true })) { stopConv(); return; }
+  if (!sendMessage(t, [], { speak: true, spoken: true })) { stopConv(); return; }
   // al terminar la respuesta y la voz, vuelve a escuchar (con un respiro para no oírse a sí mismo)
   Promise.resolve(currentJob).finally(() => convListen(700));
 }
@@ -1470,7 +1566,7 @@ els.mic.addEventListener("click", () => {
       else { if (estado === "escuchando") setEstado(baseEstado()); setTimeout(maybeResumeWake, 300); }
     },
     onInterim: (t) => { els.interimText.textContent = t ? `“${t}` : ""; },
-    onFinal: (t) => { els.interimText.textContent = ""; if (CONV_START.test(t) && t.length < 40) { startConv(); return; } sendMessage(t, [], { speak: micSpeaks() }); },
+    onFinal: (t) => { els.interimText.textContent = ""; if (CONV_START.test(t) && t.length < 40) { startConv(); return; } sendMessage(t, [], { speak: micSpeaks(), spoken: true }); },
     onError: (code, msg) => { if (msg) { setVista("chat"); showNote(msg, { warn: true }); } },
   });
 });
@@ -1982,7 +2078,7 @@ function handleWakeCommand(text) {
   if (panelOpen) hidePanelNow();
   if (!els.settingsView.hidden) return;
   if (wake) wake.pause("respondiendo");
-  if (!sendMessage(t, [], { speak: micSpeaks() })) { setVista("chat"); if (!client.isConfigured()) voice.speak("Primero configure su API key."); setTimeout(maybeResumeWake, 600); return; }
+  if (!sendMessage(t, [], { speak: micSpeaks(), spoken: true })) { setVista("chat"); if (!client.isConfigured()) voice.speak("Primero configure su API key."); setTimeout(maybeResumeWake, 600); return; }
   Promise.resolve(currentJob).finally(() => setTimeout(maybeResumeWake, 300));
 }
 voice.onWord = () => Brain.word();

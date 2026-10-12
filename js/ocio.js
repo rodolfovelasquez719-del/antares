@@ -330,3 +330,13 @@ export function bind(tab, body) {
   else if (tab === "robotica") rbBind(body);
   else ccBind(body);
 }
+
+// v1.17: Antares puede iniciar una partida de damas por voz
+export function newDamasGame(level = "medio") {
+  loadCC();
+  clearTimeout(aiTimer); aiTimer = null; aiReq++;
+  const difficulty = DIFF_LABEL[level] ? level : "medio", score = stats();
+  cc = CC.newGame({ difficulty }); cc.score = score; sel = -1; ccMsg = `Nueva partida en nivel ${DIFF_LABEL[difficulty]}. Usted empieza con las doradas.`;
+  saveCC();
+  return DIFF_LABEL[difficulty];
+}
