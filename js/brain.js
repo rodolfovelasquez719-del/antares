@@ -2,7 +2,7 @@
 // Estados: reposo (lento, suave), escuchando (nodos brillan; nivel real del micrófono si ya hay permiso),
 // pensando (pulsos de luz por las conexiones), respondiendo (respira con la voz, ondas y anillo de audio).
 const CATS = ["Recuerdos", "Rutas", "Trabajo", "Evangeline", "Recordatorios", "Compras", "Robótica"];
-const COL = [[0, 229, 255], [77, 255, 184], [120, 170, 255], [255, 140, 220], [255, 196, 87], [160, 255, 120], [190, 140, 255]];
+const COL = [[0, 255, 156], [255, 45, 74], [25, 230, 140], [255, 59, 59], [0, 220, 120], [255, 80, 110], [120, 255, 190]]; // v1.14: verde y rojo equilibrados
 const rnd = (a, b) => a + Math.random() * (b - a);
 const instances = [];
 let raf = 0, mode = "reposo", dim = false, amp = 0, env = 0, sylT = 0, pauseT = 0, boost = 0, lastNow = 0;
@@ -120,9 +120,9 @@ function draw(it, t, m, wave) {
   }
   const breath = m === "reposo" ? .5 + .5 * Math.sin(t * 1.4) : .7;
   let gr = ctx.createRadialGradient(ox, oy, 0, ox, oy, R * 1.3);
-  gr.addColorStop(0, `rgba(0,229,255,${.10 + .10 * lvl * breath + .25 * wave})`); gr.addColorStop(.6, "rgba(0,229,255,.03)"); gr.addColorStop(1, "rgba(0,229,255,0)");
+  gr.addColorStop(0, `rgba(0, 255, 156,${.10 + .10 * lvl * breath + .25 * wave})`); gr.addColorStop(.6, "rgba(0, 255, 156,.03)"); gr.addColorStop(1, "rgba(0, 255, 156,0)");
   ctx.fillStyle = gr; ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = `rgba(0,229,255,${.14 + .15 * lvl})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(ox, oy, R * 1.08, 0, 7); ctx.stroke();
+  ctx.strokeStyle = `rgba(0, 255, 156,${.14 + .15 * lvl})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(ox, oy, R * 1.08, 0, 7); ctx.stroke();
   if (wave > .02) {
     for (let L = 0; L < 2; L++) {
       ctx.beginPath();
@@ -131,7 +131,7 @@ function draw(it, t, m, wave) {
         const rr = R * (1.14 + L * .05) + w * R * .10 * wave * (1 - L * .4), X = ox + Math.cos(th) * rr, Y = oy + Math.sin(th) * rr;
         k ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y);
       }
-      ctx.strokeStyle = `rgba(0,229,255,${(.75 - L * .35) * Math.min(1, wave * 1.6)})`; ctx.lineWidth = L ? 1 : 1.8; ctx.stroke();
+      const rc = L === 0 ? '255,45,74' : '0,255,156'; ctx.strokeStyle = `rgba(${rc},${(.8 - L * .3) * Math.min(1, wave * 1.6)})`; ctx.lineWidth = L ? 1.2 : 1.8; ctx.stroke();
     }
   }
   ctx.lineWidth = small ? .5 : .6;
@@ -147,8 +147,8 @@ function draw(it, t, m, wave) {
     const u = it.pulses[i]; u.p += u.v; if (u.p >= 1) { it.pulses.splice(i, 1); continue; }
     let [a, b] = u.e; if (u.r) [a, b] = [b, a];
     const p = P[a], q = P[b], x = p.sx + (q.sx - p.sx) * u.p, y = p.sy + (q.sy - p.sy) * u.p, al = Math.sin(u.p * Math.PI);
-    ctx.fillStyle = `rgba(180,250,255,${.9 * al})`; ctx.beginPath(); ctx.arc(x, y, 1.6, 0, 7); ctx.fill();
-    ctx.fillStyle = `rgba(0,229,255,${.25 * al})`; ctx.beginPath(); ctx.arc(x, y, 4.5, 0, 7); ctx.fill();
+    const red = i % 2 === 0; ctx.fillStyle = red ? `rgba(255,200,205,${.95 * al})` : `rgba(200,255,225,${.9 * al})`; ctx.beginPath(); ctx.arc(x, y, 1.6, 0, 7); ctx.fill();
+    ctx.fillStyle = red ? `rgba(255,45,74,${.35 * al})` : `rgba(0,255,156,${.25 * al})`; ctx.beginPath(); ctx.arc(x, y, 4.5, 0, 7); ctx.fill();
   }
   const hubScale = small ? .55 : 1;
   for (let i = 0; i < g.N.length; i++) {
@@ -158,7 +158,7 @@ function draw(it, t, m, wave) {
       const rr = (6 + 3 * lvl + 4 * cnt) * p.s * hubScale * (1 + .15 * Math.sin(t * 2 + i) * lvl);
       gr = ctx.createRadialGradient(p.sx, p.sy, 0, p.sx, p.sy, rr * 3); gr.addColorStop(0, `rgba(${c[0]},${c[1]},${c[2]},${.45 * d + .35 * lvl})`); gr.addColorStop(1, `rgba(${c[0]},${c[1]},${c[2]},0)`);
       ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(p.sx, p.sy, rr * 3, 0, 7); ctx.fill();
-      ctx.fillStyle = `rgba(230,250,255,${.6 + .4 * d})`; ctx.beginPath(); ctx.arc(p.sx, p.sy, rr * .45, 0, 7); ctx.fill();
+      ctx.fillStyle = c[0] > 200 ? `rgba(255,225,228,${.6 + .4 * d})` : `rgba(225,255,240,${.6 + .4 * d})`; ctx.beginPath(); ctx.arc(p.sx, p.sy, rr * .45, 0, 7); ctx.fill();
     } else {
       const tw = m === "escuchando" ? .6 + .4 * Math.sin(t * 6 + i * 1.7) : 1, a = (.25 + .6 * lvl * tw) * d, rr = (small ? .7 : 1) * (1 + 1.2 * d);
       ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${a})`; ctx.fillRect(p.sx - rr / 2, p.sy - rr / 2, rr, rr);
@@ -167,6 +167,6 @@ function draw(it, t, m, wave) {
   ctx.globalCompositeOperation = "source-over";
   if (!it.lite && W >= 180) {
     ctx.font = "600 8.5px Orbitron, Rajdhani, monospace"; ctx.textAlign = "center";
-    for (const i of g.hubs) { const p = P[i], d = (2 - p.z) / 3; if (d < .45) continue; ctx.fillStyle = `rgba(230,248,255,${.15 + .65 * d * d})`; ctx.fillText(g.N[i].label.toUpperCase(), p.sx, p.sy - 11 * p.s); }
+    for (const i of g.hubs) { const p = P[i], d = (2 - p.z) / 3; if (d < .45) continue; ctx.fillStyle = `rgba(232,255,243,${.15 + .65 * d * d})`; ctx.fillText(g.N[i].label.toUpperCase(), p.sx, p.sy - 11 * p.s); }
   }
 }

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#03060b">
+  <meta name="theme-color" content="#030a07">
   <meta name="color-scheme" content="dark">
   <meta name="description" content="Antares, su asistente personal con Gemini: manos libres «Hey Antares», recordatorios, compras, noticias de Costa Rica, herramientas de rutas, damas, trivia y robótica.">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -16,7 +16,7 @@
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="preload" href="fonts/orbitron-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/rajdhani-600-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=1.13.0">
+  <link rel="stylesheet" href="styles.css?v=1.14.0">
   <script>
   /* v1.9.0 Arranque vigilado: si la app no queda lista en ~4 s (error de carga, actualización a medias, base local que no
      responde, reanudación de iOS), se muestra una pantalla visible con Reintentar / Reparar en vez de una pantalla negra.
@@ -58,13 +58,13 @@
       B.shown = true;
       var d = document.createElement("div");
       d.id = "boot-rescue"; d.setAttribute("role", "alertdialog"); d.setAttribute("aria-labelledby", "boot-rescue-t"); d.setAttribute("aria-describedby", "boot-rescue-p");
-      d.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:flex;flex-direction:column;justify-content:center;gap:14px;padding:calc(env(safe-area-inset-top) + 24px) 24px calc(env(safe-area-inset-bottom) + 24px);background:#03060b;color:#e6f8ff;font:17px/1.45 system-ui,-apple-system,sans-serif;overflow:auto";
+      d.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:flex;flex-direction:column;justify-content:center;gap:14px;padding:calc(env(safe-area-inset-top) + 24px) 24px calc(env(safe-area-inset-bottom) + 24px);background:#030a07;color:#e8fff3;font:17px/1.45 system-ui,-apple-system,sans-serif;overflow:auto";
       var btn = "min-height:52px;border-radius:14px;font:600 18px system-ui,-apple-system,sans-serif;cursor:pointer;padding:0 18px;";
-      d.innerHTML = '<h1 id="boot-rescue-t" tabindex="-1" style="margin:0;font-size:22px;letter-spacing:1px;color:#5ff1ff">Antares no terminó de abrir</h1>' +
-        '<p id="boot-rescue-p" style="margin:0;color:#a3c8d6">Puede pasar tras una actualización a medias o si el teléfono pausó la app. Toque <b style="color:#e6f8ff">Reintentar</b>. Si vuelve a pasar, toque <b style="color:#e6f8ff">Reparar</b>: borra solo las copias guardadas de la app; su key, su código y sus datos cifrados se conservan.</p>' +
-        '<button type="button" id="boot-retry" style="' + btn + 'border:0;background:#00e5ff;color:#03141a">Reintentar</button>' +
-        '<button type="button" id="boot-repair" style="' + btn + 'border:1px solid #00e5ff;background:transparent;color:#5ff1ff">Reparar</button>' +
-        '<details style="color:#a3c8d6"><summary style="min-height:44px;display:flex;align-items:center;cursor:pointer">Ver detalles</summary><pre id="boot-rescue-log" style="white-space:pre-wrap;word-break:break-word;font-size:13px;color:#e6f8ff;background:#0a1620;border-radius:10px;padding:10px;margin:0"></pre></details>';
+      d.innerHTML = '<h1 id="boot-rescue-t" tabindex="-1" style="margin:0;font-size:22px;letter-spacing:1px;color:#5dffb8">Antares no terminó de abrir</h1>' +
+        '<p id="boot-rescue-p" style="margin:0;color:#9fd6bb">Puede pasar tras una actualización a medias o si el teléfono pausó la app. Toque <b style="color:#e8fff3">Reintentar</b>. Si vuelve a pasar, toque <b style="color:#e8fff3">Reparar</b>: borra solo las copias guardadas de la app; su key, su código y sus datos cifrados se conservan.</p>' +
+        '<button type="button" id="boot-retry" style="' + btn + 'border:0;background:#00ff9c;color:#031a0f">Reintentar</button>' +
+        '<button type="button" id="boot-repair" style="' + btn + 'border:1px solid #00ff9c;background:transparent;color:#5dffb8">Reparar</button>' +
+        '<details style="color:#9fd6bb"><summary style="min-height:44px;display:flex;align-items:center;cursor:pointer">Ver detalles</summary><pre id="boot-rescue-log" style="white-space:pre-wrap;word-break:break-word;font-size:13px;color:#e8fff3;background:#0a2010;border-radius:10px;padding:10px;margin:0"></pre></details>';
       document.body.appendChild(d);
       paint();
       document.getElementById("boot-retry").onclick = function () { location.reload(); };
@@ -136,24 +136,24 @@
           <svg class="reactor" viewBox="0 0 200 200">
             <defs>
               <radialGradient id="g-core" cx="50%" cy="50%" r="50%">
-                <stop offset="0" stop-color="#ffffff"/><stop offset=".45" stop-color="#c9fbff"/>
-                <stop offset=".75" stop-color="#00e5ff"/><stop offset="1" stop-color="#00e5ff" stop-opacity="0"/>
+                <stop offset="0" stop-color="#ffffff"/><stop offset=".45" stop-color="#c8ffe4"/>
+                <stop offset=".75" stop-color="#00ff9c"/><stop offset="1" stop-color="#00ff9c" stop-opacity="0"/>
               </radialGradient>
               <radialGradient id="g-halo" cx="50%" cy="50%" r="50%">
-                <stop offset=".55" stop-color="#00e5ff" stop-opacity=".0"/><stop offset=".8" stop-color="#00e5ff" stop-opacity=".22"/>
-                <stop offset="1" stop-color="#00e5ff" stop-opacity="0"/>
+                <stop offset=".55" stop-color="#00ff9c" stop-opacity=".0"/><stop offset=".8" stop-color="#00ff9c" stop-opacity=".22"/>
+                <stop offset="1" stop-color="#00ff9c" stop-opacity="0"/>
               </radialGradient>
             </defs>
             <circle class="halo" cx="100" cy="100" r="99" fill="url(#g-halo)"/>
-            <circle cx="100" cy="100" r="97" fill="none" stroke="#00e5ff" stroke-opacity=".35" stroke-width="1"/>
-            <g class="spin"><circle cx="100" cy="100" r="90" fill="none" stroke="#00e5ff" stroke-opacity=".7" stroke-width="6" stroke-dasharray="1.4 6.45"/></g>
-            <g class="spin-rev"><circle cx="100" cy="100" r="78" fill="none" stroke="#00e5ff" stroke-width="3" stroke-dasharray="46 10 12 10" stroke-linecap="round"/></g>
-            <circle cx="100" cy="100" r="68" fill="#031018" stroke="#5ff1ff" stroke-opacity=".55" stroke-width="1.2"/>
+            <circle cx="100" cy="100" r="97" fill="none" stroke="#00ff9c" stroke-opacity=".35" stroke-width="1"/>
+            <g class="spin"><circle cx="100" cy="100" r="90" fill="none" stroke="#00ff9c" stroke-opacity=".7" stroke-width="6" stroke-dasharray="1.4 6.45"/></g>
+            <g class="spin-rev"><circle cx="100" cy="100" r="78" fill="none" stroke="#00ff9c" stroke-width="3" stroke-dasharray="46 10 12 10" stroke-linecap="round"/></g>
+            <circle cx="100" cy="100" r="68" fill="#03120b" stroke="#5dffb8" stroke-opacity=".55" stroke-width="1.2"/>
             <g class="coil">
-              <circle cx="100" cy="100" r="52" fill="none" stroke="#00e5ff" stroke-opacity=".9" stroke-width="16" stroke-dasharray="25.5 7.17"/>
-              <circle cx="100" cy="100" r="52" fill="none" stroke="#e6fdff" stroke-opacity=".55" stroke-width="3" stroke-dasharray="25.5 7.17"/>
+              <circle cx="100" cy="100" r="52" fill="none" stroke="#00ff9c" stroke-opacity=".9" stroke-width="16" stroke-dasharray="25.5 7.17"/>
+              <circle cx="100" cy="100" r="52" fill="none" stroke="#e8fff3" stroke-opacity=".55" stroke-width="3" stroke-dasharray="25.5 7.17"/>
             </g>
-            <circle cx="100" cy="100" r="40" fill="none" stroke="#5ff1ff" stroke-width="1.5"/>
+            <circle cx="100" cy="100" r="40" fill="none" stroke="#5dffb8" stroke-width="1.5"/>
             <g class="core"><circle cx="100" cy="100" r="34" fill="url(#g-core)"/></g>
             <circle cx="100" cy="100" r="16" fill="#ffffff" fill-opacity=".9"/>
           </svg>
@@ -495,16 +495,16 @@
     <div class="reactor-wrap" aria-hidden="true">
       <svg class="reactor" viewBox="0 0 200 200">
         <defs>
-          <radialGradient id="lg-core" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#fff"/><stop offset=".45" stop-color="#c9fbff"/><stop offset=".75" stop-color="#00e5ff"/><stop offset="1" stop-color="#00e5ff" stop-opacity="0"/></radialGradient>
-          <radialGradient id="lg-halo" cx="50%" cy="50%" r="50%"><stop offset=".55" stop-color="#00e5ff" stop-opacity="0"/><stop offset=".8" stop-color="#00e5ff" stop-opacity=".22"/><stop offset="1" stop-color="#00e5ff" stop-opacity="0"/></radialGradient>
+          <radialGradient id="lg-core" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#fff"/><stop offset=".45" stop-color="#c8ffe4"/><stop offset=".75" stop-color="#00ff9c"/><stop offset="1" stop-color="#00ff9c" stop-opacity="0"/></radialGradient>
+          <radialGradient id="lg-halo" cx="50%" cy="50%" r="50%"><stop offset=".55" stop-color="#00ff9c" stop-opacity="0"/><stop offset=".8" stop-color="#00ff9c" stop-opacity=".22"/><stop offset="1" stop-color="#00ff9c" stop-opacity="0"/></radialGradient>
         </defs>
         <circle class="halo" cx="100" cy="100" r="99" fill="url(#lg-halo)"/>
-        <circle cx="100" cy="100" r="97" fill="none" stroke="#00e5ff" stroke-opacity=".35" stroke-width="1"/>
-        <g class="spin"><circle cx="100" cy="100" r="90" fill="none" stroke="#00e5ff" stroke-opacity=".7" stroke-width="6" stroke-dasharray="1.4 6.45"/></g>
-        <g class="spin-rev"><circle cx="100" cy="100" r="78" fill="none" stroke="#00e5ff" stroke-width="3" stroke-dasharray="46 10 12 10" stroke-linecap="round"/></g>
-        <circle cx="100" cy="100" r="68" fill="#031018" stroke="#5ff1ff" stroke-opacity=".55" stroke-width="1.2"/>
-        <g class="coil"><circle cx="100" cy="100" r="52" fill="none" stroke="#00e5ff" stroke-opacity=".9" stroke-width="16" stroke-dasharray="25.5 7.17"/><circle cx="100" cy="100" r="52" fill="none" stroke="#e6fdff" stroke-opacity=".55" stroke-width="3" stroke-dasharray="25.5 7.17"/></g>
-        <circle cx="100" cy="100" r="40" fill="none" stroke="#5ff1ff" stroke-width="1.5"/>
+        <circle cx="100" cy="100" r="97" fill="none" stroke="#00ff9c" stroke-opacity=".35" stroke-width="1"/>
+        <g class="spin"><circle cx="100" cy="100" r="90" fill="none" stroke="#00ff9c" stroke-opacity=".7" stroke-width="6" stroke-dasharray="1.4 6.45"/></g>
+        <g class="spin-rev"><circle cx="100" cy="100" r="78" fill="none" stroke="#00ff9c" stroke-width="3" stroke-dasharray="46 10 12 10" stroke-linecap="round"/></g>
+        <circle cx="100" cy="100" r="68" fill="#03120b" stroke="#5dffb8" stroke-opacity=".55" stroke-width="1.2"/>
+        <g class="coil"><circle cx="100" cy="100" r="52" fill="none" stroke="#00ff9c" stroke-opacity=".9" stroke-width="16" stroke-dasharray="25.5 7.17"/><circle cx="100" cy="100" r="52" fill="none" stroke="#e8fff3" stroke-opacity=".55" stroke-width="3" stroke-dasharray="25.5 7.17"/></g>
+        <circle cx="100" cy="100" r="40" fill="none" stroke="#5dffb8" stroke-width="1.5"/>
         <g class="core"><circle cx="100" cy="100" r="34" fill="url(#lg-core)"/></g>
         <circle cx="100" cy="100" r="18" fill="#fff" fill-opacity=".92"/>
       </svg>
@@ -579,45 +579,45 @@
   <button type="button" class="icon-btn" id="update-dismiss" aria-label="Cerrar aviso">×</button>
 </div>
 
-<noscript><p style="padding:20px;color:#e6f8ff">Antares necesita JavaScript activado.</p></noscript>
+<noscript><p style="padding:20px;color:#e8fff3">Antares necesita JavaScript activado.</p></noscript>
 <!-- Módulos con versión: tras una actualización nunca se mezclan archivos viejos (caché HTTP) con nuevos -->
 <script type="importmap">
 {
  "imports": {
-  "./js/app.js": "./js/app.js?v=1.13.0",
-  "./js/draughts.js": "./js/draughts.js?v=1.13.0",
-  "./js/cubic.js": "./js/cubic.js?v=1.13.0",
-  "./js/digest.js": "./js/digest.js?v=1.13.0",
-  "./js/facts.js": "./js/facts.js?v=1.13.0",
-  "./js/gemini.js": "./js/gemini.js?v=1.13.0",
-  "./js/lock.js": "./js/lock.js?v=1.13.0",
-  "./js/lockui.js": "./js/lockui.js?v=1.13.0",
-  "./js/logbook.js": "./js/logbook.js?v=1.13.0",
-  "./js/mail.js": "./js/mail.js?v=1.13.0",
-  "./js/media.js": "./js/media.js?v=1.13.0",
-  "./js/memory.js": "./js/memory.js?v=1.13.0",
-  "./js/notify.js": "./js/notify.js?v=1.13.0",
-  "./js/ocio.js": "./js/ocio.js?v=1.13.0",
-  "./js/panels.js": "./js/panels.js?v=1.13.0",
-  "./js/reminders.js": "./js/reminders.js?v=1.13.0",
-  "./js/robotics.js": "./js/robotics.js?v=1.13.0",
-  "./js/routes.js": "./js/routes.js?v=1.13.0",
-  "./js/shopping.js": "./js/shopping.js?v=1.13.0",
-  "./js/social.js": "./js/social.js?v=1.13.0",
-  "./js/trivia.js": "./js/trivia.js?v=1.13.0",
-  "./js/vault.js": "./js/vault.js?v=1.13.0",
-  "./js/voice.js": "./js/voice.js?v=1.13.0",
-  "./js/wake.js": "./js/wake.js?v=1.13.0",
-  "./js/weather.js": "./js/weather.js?v=1.13.0",
-  "./js/workpanels.js": "./js/workpanels.js?v=1.13.0",
-  "./js/photo.js": "./js/photo.js?v=1.13.0",
-  "./js/code.js": "./js/code.js?v=1.13.0",
-  "./js/sheet.js": "./js/sheet.js?v=1.13.0",
-  "./js/brain.js": "./js/brain.js?v=1.13.0",
-  "./js/tools.js": "./js/tools.js?v=1.13.0"
+  "./js/app.js": "./js/app.js?v=1.14.0",
+  "./js/draughts.js": "./js/draughts.js?v=1.14.0",
+  "./js/cubic.js": "./js/cubic.js?v=1.14.0",
+  "./js/digest.js": "./js/digest.js?v=1.14.0",
+  "./js/facts.js": "./js/facts.js?v=1.14.0",
+  "./js/gemini.js": "./js/gemini.js?v=1.14.0",
+  "./js/lock.js": "./js/lock.js?v=1.14.0",
+  "./js/lockui.js": "./js/lockui.js?v=1.14.0",
+  "./js/logbook.js": "./js/logbook.js?v=1.14.0",
+  "./js/mail.js": "./js/mail.js?v=1.14.0",
+  "./js/media.js": "./js/media.js?v=1.14.0",
+  "./js/memory.js": "./js/memory.js?v=1.14.0",
+  "./js/notify.js": "./js/notify.js?v=1.14.0",
+  "./js/ocio.js": "./js/ocio.js?v=1.14.0",
+  "./js/panels.js": "./js/panels.js?v=1.14.0",
+  "./js/reminders.js": "./js/reminders.js?v=1.14.0",
+  "./js/robotics.js": "./js/robotics.js?v=1.14.0",
+  "./js/routes.js": "./js/routes.js?v=1.14.0",
+  "./js/shopping.js": "./js/shopping.js?v=1.14.0",
+  "./js/social.js": "./js/social.js?v=1.14.0",
+  "./js/trivia.js": "./js/trivia.js?v=1.14.0",
+  "./js/vault.js": "./js/vault.js?v=1.14.0",
+  "./js/voice.js": "./js/voice.js?v=1.14.0",
+  "./js/wake.js": "./js/wake.js?v=1.14.0",
+  "./js/weather.js": "./js/weather.js?v=1.14.0",
+  "./js/workpanels.js": "./js/workpanels.js?v=1.14.0",
+  "./js/photo.js": "./js/photo.js?v=1.14.0",
+  "./js/code.js": "./js/code.js?v=1.14.0",
+  "./js/sheet.js": "./js/sheet.js?v=1.14.0",
+  "./js/brain.js": "./js/brain.js?v=1.14.0",
+  "./js/tools.js": "./js/tools.js?v=1.14.0"
  }
 }
 </script>
-<script type="module" src="js/app.js?v=1.13.0"></script>
+<script type="module" src="js/app.js?v=1.14.0"></script>
 </body>
 </html>

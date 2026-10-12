@@ -107,6 +107,10 @@ Actualizar.
 - Funciona sin conexión para abrir la app (service worker "primero red" con espera de 3 s y
   respaldo en caché).
 
+## Novedades de la 1.14.0 (Tema verde y rojo)
+
+- Nuevo tema futurista: verde neón como color principal con acentos rojos (micrófono, pestaña activa, botones, cerebro 3D, anillo de audio). Íconos nuevos en verde y rojo.
+
 ## Novedades de la 1.13.0 (Cerebro 3D y actualizaciones)
 
 - El reactor de Inicio y de la pantalla de bloqueo se reemplazó por un **cerebro 3D en red** que gira y reacciona: brilla al escuchar, lanza pulsos de luz mientras piensa y respira con la voz al responder.

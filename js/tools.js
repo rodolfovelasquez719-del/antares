@@ -122,7 +122,7 @@ function paint() {
     const r = ph.cropRect, W = displayCanvas.width, H = displayCanvas.height;
     x.save(); x.fillStyle = "rgba(0,0,0,.55)";
     x.beginPath(); x.rect(0, 0, W, H); x.rect(r.x * W, r.y * H, r.w * W, r.h * H); x.fill("evenodd");
-    x.strokeStyle = "#00e5ff"; x.lineWidth = Math.max(2, W / 300); x.strokeRect(r.x * W, r.y * H, r.w * W, r.h * H);
+    x.strokeStyle = "#00ff9c"; x.lineWidth = Math.max(2, W / 300); x.strokeRect(r.x * W, r.y * H, r.w * W, r.h * H);
     x.restore();
   }
   displayCanvas.setAttribute("aria-label", `Foto en edición, ${ph.ed.base.width} por ${ph.ed.base.height} píxeles`);

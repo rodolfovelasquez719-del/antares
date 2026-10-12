@@ -15,8 +15,8 @@ const norm = (e) => String(e || "").replace(/\uFE0F/g, "").trim();
 export function reaction(e) { const n = norm(e); return REACTIONS.find((r) => norm(r.e) === n) || null; }
 
 // ---------- Stickers (viewBox 0 0 120 120, estilo Jarvis: placa oscura, borde cian brillante) ----------
-const C = "#00e5ff", C2 = "#5ff1ff", INK = "#06141c", W = "#eafcff", AMB = "#ffc457", PINK = "#ff5c8a", OK = "#4dffb8";
-const plate = (extra = "") => `<circle cx="60" cy="60" r="54" fill="#071a24" stroke="${C}" stroke-width="4"/><circle cx="60" cy="60" r="47" fill="none" stroke="${C}" stroke-opacity=".28" stroke-width="2" stroke-dasharray="4 6"/>${extra}`;
+const C = "#00ff9c", C2 = "#5dffb8", INK = "#04140c", W = "#ecfff5", AMB = "#ffc457", PINK = "#ff5c8a", OK = "#9dff5c";
+const plate = (extra = "") => `<circle cx="60" cy="60" r="54" fill="#072413" stroke="${C}" stroke-width="4"/><circle cx="60" cy="60" r="47" fill="none" stroke="${C}" stroke-opacity=".28" stroke-width="2" stroke-dasharray="4 6"/>${extra}`;
 const label = (t, y = 101, size = 13) => `<rect x="14" y="${y - 13}" width="92" height="19" rx="9.5" fill="${INK}" stroke="${C2}" stroke-width="2"/><text x="60" y="${y + 1}" text-anchor="middle" font-size="${size}" font-weight="700" letter-spacing="1" fill="${W}" class="stk-txt">${t}</text>`;
 const face = (cx = 60, cy = 56, r = 30) => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${INK}" stroke="${C2}" stroke-width="3.5"/>`;
 const STICKER_ART = {
