@@ -1099,3 +1099,16 @@ body.conv-on #stage .reactor-wrap { cursor: pointer; }
 .lb-limits ul { margin: 0; padding-left: 18px; line-height: 1.45; }
 .msg .meta.local::before { content: "◆ "; color: var(--cyan); }
 #status-line.local { color: var(--cyan-2); }
+
+/* ---------- v1.19: centro de mando, avatar y Visión ---------- */
+.stage { isolation: isolate; }
+.hud-layer { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
+body.compact .hud-layer, body.kb-open .hud-layer { opacity: .45; }
+.avatar-home { display: none; flex: none; width: 210px; transition: width .4s; }
+[data-presencia="avatar"] #stage .reactor-wrap { display: none; }
+[data-presencia="avatar"] .avatar-home { display: block; }
+[data-presencia="ambos"] .avatar-home { display: block; width: 150px; }
+body.compact[data-presencia="ambos"] .avatar-home, [data-presencia="ambos"][data-estado="hablando"] .avatar-home { width: 72px; }
+[data-presencia="avatar"][data-estado="hablando"] .avatar-home, body.compact[data-presencia="avatar"] .avatar-home { width: 120px; }
+body.kb-open .avatar-home { width: 72px !important; }
+.vision-btn { position: absolute; top: 6px; right: 12px; z-index: 3; min-height: 34px; padding: 0 12px; font-family: var(--font-hud, monospace); font-size: 10px; letter-spacing: 1.2px; color: #ff2d4a; background: rgba(3,12,8,.75); border: 1px solid rgba(255,45,74,.5); border-radius: 10px; }

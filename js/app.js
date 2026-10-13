@@ -25,11 +25,15 @@ import * as Photo from "./photo.js";
 import * as Code from "./code.js";
 import * as Sheet from "./sheet.js";
 import * as Brain from "./brain.js";
+import * as Hud from "./hud.js";
+import { mountAvatar, setAvatarState } from "./avatar.js";
+import { openVision } from "./vision.js";
+import { MODELS as GEM_MODELS } from "./gemini.js";
 import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.18.0";
+const APP_VERSION = "1.19.0";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -153,6 +157,7 @@ function setEstado(e) {
   estado = e;
   body.dataset.estado = e;
   // v1.13: el cerebro 3D sigue los estados reales (hablando = esperando a Gemini; cambia a respondiendo al llegar texto o voz)
+  try { paintPresence(); Hud.setHudMode(e === "escuchando" ? "escuchando" : e === "hablando" ? "pensando" : "reposo"); } catch { /* */ }
   try { Brain.setMode(e === "escuchando" ? "escuchando" : e === "hablando" ? "pensando" : "reposo"); Brain.setDim(e === "error" || e === "sinkey"); if (e === "reposo") refreshBrainCounts(); } catch { /* */ }
   els.stateLabel.textContent = STATE_TEXT[e] || "";
   els.stateLabel.classList.toggle("warn", e === "error" || e === "sinkey");
@@ -163,10 +168,19 @@ function setEstado(e) {
   updateLayout();
 }
 
+// v1.19: avatar sigue los estados reales: escuchando → listen, esperando respuesta → think, voz sonando → speak
+let voiceAudible = false;
+const presence = () => (["cerebro", "avatar", "ambos"].includes(config.presence) ? config.presence : "cerebro");
+function paintPresence() {
+  body.dataset.presencia = presence();
+  const s = voiceAudible ? "speak" : estado === "escuchando" ? "listen" : estado === "hablando" ? "think" : "idle";
+  setAvatarState(document.getElementById("avatar-home"), s);
+}
 function refreshBrainCounts() {
-  if (!isUnlocked()) { Brain.setCounts(null); return; }
+  if (!isUnlocked()) { Brain.setCounts(null); Hud.setHudCounts(null); return; }
   const n = (k) => { try { const v = memory.getData(k); return Array.isArray(v) ? v.length : 0; } catch { return 0; } };
-  Brain.setCounts({ Recuerdos: n("antares.facts.v1"), Recordatorios: n(Reminders.K_REMINDERS), Compras: n(Shopping.K_SHOPPING), Rutas: n(Logbook.K_LOG), Trabajo: n(Logbook.K_LOG) });
+  const c = { Recuerdos: n("antares.facts.v1"), Recordatorios: n(Reminders.K_REMINDERS), Compras: n(Shopping.K_SHOPPING), Rutas: n(Logbook.K_LOG), Trabajo: n(Logbook.K_LOG) };
+  Brain.setCounts(c); Hud.setHudCounts(c);
 }
 
 function setVista(v) {
@@ -2174,10 +2188,10 @@ function handleWakeCommand(text) {
   Promise.resolve(currentJob).finally(() => setTimeout(maybeResumeWake, 300));
 }
 voice.onWord = () => Brain.word();
-voice.onAudio = (on) => Brain.setSpeaking(on); // v1.15: el cerebro sigue el sonido real (onstart/onboundary/onend)
+voice.onAudio = (on) => { Brain.setSpeaking(on); voiceAudible = !!on; try { Hud.setHudSpeaking(on); paintPresence(); } catch { /* */ } }; // v1.15: el cerebro sigue el sonido real (onstart/onboundary/onend)
 voice.onSpeaking = (on) => {
   const sv = document.getElementById("stop-voice"); if (sv) sv.hidden = !on;
-  if (!on) Brain.setSpeaking(false);
+  if (!on) { Brain.setSpeaking(false); voiceAudible = false; try { Hud.setHudSpeaking(false); paintPresence(); } catch { /* */ } }
   updateMic();
   if (on) { if (wake && wake.enabled) wake.pause("hablando"); }
   else setTimeout(maybeResumeWake, 500); // pequeña espera para no oír el final de su propia voz
@@ -2975,6 +2989,12 @@ async function init() {
     }
   });
   syncViewport();
+  try { mountAvatar(document.getElementById("avatar-home"), "./assets/avatar-antares.jpg"); Hud.mountHud(document.getElementById("stage")); paintPresence(); } catch (e) { console.warn("Antares: avatar/HUD", e); }
+  try {
+    const ps = document.getElementById("presence-sel"); ps.value = presence();
+    ps.addEventListener("change", () => { config = { ...config, presence: ps.value }; memory.saveConfig(config); paintPresence(); });
+    document.getElementById("vision-btn").addEventListener("click", () => openVision({ getKey: () => config.geminiApiKey || "", model: GEM_MODELS[0], speak: (t) => { try { voice.speak(t); } catch { /* */ } } }));
+  } catch (e) { console.warn("Antares: presencia/visión", e); }
   try { Brain.mountBrain(document.querySelector("#stage .reactor-wrap")); Brain.mountBrain(document.querySelector("#lock-view .reactor-wrap"), { lite: true }); } catch (e) { console.warn("Antares: cerebro 3D", e); }
   setupServiceWorker();
   await loadMetaSafe();
