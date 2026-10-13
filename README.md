@@ -411,3 +411,7 @@ icons/                 Íconos 192/512, maskable, apple-touch-icon, favicon
 ### v1.17.1
 - Micrófono: fin de frase por silencio propio (1,8 s en iOS, máx. 15 s); tocar «terminar» envía lo oído; filtro de eco solo tras hablar Antares.
 - Diseño: micrófono 84 px (70 px en pantallas bajas), transcripción visible encima (3 líneas).
+
+### v1.18.0
+- Cerebro local (Qwen2.5-1.5B con WebLLM/WebGPU, Chrome Android): Ajustes › Cerebro: Automático / Solo Gemini / Solo cerebro local. Descarga única ~1,1 GB con progreso; el motor queda guardado para uso sin internet.
+- Sin internet: conversación, recordatorios, compras, bitácora y memoria; clima, dólar, búsquedas y fotos necesitan Gemini.

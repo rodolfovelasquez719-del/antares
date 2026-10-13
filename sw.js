@@ -1,6 +1,6 @@
 // Antares Web - Service worker: abre rápido y sin conexión, y recibe las versiones nuevas.
 // Las llamadas a Gemini, Open-Meteo y otros dominios NO se interceptan ni se guardan.
-const VERSION = "antares-v1.17.1";
+const VERSION = "antares-v1.18.0";
 const SHELL = [
   "./",
   "./index.html",
@@ -30,6 +30,7 @@ const SHELL = [
   "./js/draughts.js",
   "./js/brain.js",
   "./js/agent.js",
+  "./js/localbrain.js",
   "./js/draughts-worker.js",
   "./js/trivia.js",
   "./js/robotics.js",
@@ -126,6 +127,10 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  // v1.18: el motor WebLLM (6 MB) se guarda aparte y no se borra al cambiar de versión, para que el cerebro local
+  // funcione sin internet. Los archivos del modelo (Hugging Face / GitHub) son de otro dominio: el SW no los toca y
+  // WebLLM los guarda en sus propias cachés "webllm/…", que este SW nunca borra.
+  if (url.pathname.includes("/prueba-cerebro/vendor/web-llm/")) { event.respondWith(runtimeCacheFirst(req)); return; }
   // la página de prueba de "cerebro propio" es independiente: el SW de la app no la toca ni la guarda
   if (url.pathname.includes("/prueba-cerebro/")) return;
   if (url.pathname.includes("/muestra-cerebro/")) return;
@@ -168,4 +173,14 @@ async function networkFirst(req, isPage, event) {
     }
     return new Response("Sin conexión", { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } });
   }
+}
+
+const RUNTIME_CACHE = "webllm-runtime-0.2.85";
+async function runtimeCacheFirst(req) {
+  const c = await caches.open(RUNTIME_CACHE);
+  const hit = await c.match(req, { ignoreSearch: true });
+  if (hit) return hit;
+  const resp = await fetch(req);
+  if (resp && resp.ok && resp.type === "basic") c.put(req, resp.clone()).catch(() => {});
+  return resp;
 }

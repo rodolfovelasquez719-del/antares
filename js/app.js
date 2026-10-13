@@ -26,9 +26,10 @@ import * as Code from "./code.js";
 import * as Sheet from "./sheet.js";
 import * as Brain from "./brain.js";
 import * as Agent from "./agent.js";
+import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.17.1";
+const APP_VERSION = "1.18.0";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -135,7 +136,15 @@ function makeClient(apiKey = config.geminiApiKey) {
 }
 const assistantName = () => (config.assistantName || "").trim() || DEFAULT_ASSISTANT_NAME;
 const shortModel = (m) => (m || "").replace(/^gemini-/, "");
-const baseEstado = () => (client && client.isConfigured() ? "reposo" : "sinkey");
+// v1.18: cerebro local (WebLLM). auto = Gemini si hay red y key; local si no (cuando el modelo ya está descargado)
+const brainMode = () => (["auto", "gemini", "local"].includes(config.brainMode) ? config.brainMode : "auto");
+const useLocal = () => {
+  const m = brainMode();
+  if (m === "local") return true;
+  if (m === "gemini") return false;
+  return LB.isDownloaded() && (!navigator.onLine || !(client && client.isConfigured()));
+};
+const baseEstado = () => (useLocal() || (client && client.isConfigured()) ? "reposo" : "sinkey");
 
 // ---------- Estados de la interfaz ----------
 const STATE_TEXT = { reposo: "EN ESPERA", escuchando: "ESCUCHANDO…", hablando: "RESPONDIENDO…", error: "EN PAUSA", sinkey: "SIN CONFIGURAR" };
@@ -196,13 +205,17 @@ function updateComposer() {
   els.send.setAttribute("aria-label", busy ? "Enviar (espere a que termine la respuesta)" : "Enviar");
 }
 
+const statusDefault = () => (useLocal() ? LB.LABEL : "Asistente personal");
 function updateConn() {
+  if ([LB.LABEL, "Asistente personal"].includes(els.status.textContent)) els.status.textContent = statusDefault();
+  els.status.classList.toggle("local", useLocal());
   let main = "En línea", sub = lastModelShort || shortModel(config.geminiModel) || "Gemini", cls = "";
   const wait = Math.ceil((rateUntil - Date.now()) / 1000);
-  if (!navigator.onLine) { main = "Sin conexión"; sub = "Revise su internet"; cls = "off"; }
+  if (useLocal()) { main = LB.LABEL; sub = LB.state.phase === "loading" ? `Cargando ${Math.round(LB.state.progress * 100)} %` : navigator.onLine ? "En el teléfono" : "Sin conexión · funciona igual"; }
+  else if (!navigator.onLine) { main = "Sin conexión"; sub = LB.isDownloaded() ? "Active el cerebro local" : "Revise su internet"; cls = "off"; }
   else if (!client || !client.isConfigured()) { main = "Sin key"; sub = "Por configurar"; cls = "warn"; }
   else if (wait > 0) { main = "Límite"; sub = `Vuelve en ${wait} s`; cls = "warn"; }
-  else if (estado === "escuchando") sub = "Escuchando";
+  if (estado === "escuchando") sub = "Escuchando";
   else if (estado === "hablando") sub = "Respondiendo…";
   els.conn.textContent = main;
   els.connSub.textContent = sub;
@@ -584,7 +597,7 @@ let noticeTimer = null;
 function chatNotice(text) {
   els.status.textContent = text;
   clearTimeout(noticeTimer);
-  noticeTimer = setTimeout(() => { els.status.textContent = "Asistente personal"; }, 4000);
+  noticeTimer = setTimeout(() => { els.status.textContent = statusDefault(); }, 4000);
 }
 
 // Tarjeta de error amigable: mensaje corto, Reintentar y "Ver detalles" con el texto técnico
@@ -1074,6 +1087,8 @@ function speakLastBot() {
 function sendMessage(text, items = [], opts = {}) {
   text = (text || "").trim();
   if (busy || (!text && !items.length)) return false;
+  if (useLocal() && !items.length) { currentJob = localJob(text, opts); return true; }
+  if (useLocal() && items.length) { chatNotice("El cerebro local no puede ver fotos, PDF ni videos. Para eso necesita internet y Gemini."); return false; }
   if (!client.isConfigured()) { setEstado("sinkey"); return false; }
   const speak = !!opts.speak;
   // v1.17: confirmación hablada de una acción destructiva pendiente («¿seguro?» -> «sí»)
@@ -1210,6 +1225,83 @@ async function agentJob(text, opts) {
   const reply = says.join(" ").trim();
   if (ended) { setVista("chat"); renderUser(text); handleSave(memory.addMessage("user", text), "el mensaje"); return; }
   quickReply(text, reply, opts);
+}
+
+// ---------- v1.18: respuesta con el cerebro local ----------
+async function localJob(text, opts = {}) {
+  if (busy) return;
+  const speak = !!opts.speak || !!(conv && conv.on);
+  // confirmación hablada pendiente y acciones de la app (recordatorios, compras, bitácora): sin modelo, al instante
+  if (pendingDanger) {
+    const p = pendingDanger; pendingDanger = null;
+    if (Date.now() < p.until && /^\s*(?:s[ií]|claro|confirmo|dale|h[aá]galo|de acuerdo|ok(?:ay)?|seguro|adelante)(?=$|[\s,.!¡])/i.test(text)) {
+      const x = await Agent.execute(p.call, agentDeps, { confirmed: true }); quickReply(text, x.say || "Listo.", { speak }); return;
+    }
+  }
+  const act = LB.parseAction(text);
+  if (act && act.name === "_net") { quickReply(text, `Para ${act.args.what} necesito internet; el cerebro local no tiene esos datos. Cuando vuelva la conexión se lo consulto con Gemini.`, { speak }); return; }
+  if (act) { try { const x = await Agent.execute(act, agentDeps); if (x.ask) pendingDanger = { call: act, until: Date.now() + 60000 }; quickReply(text, x.say || "Listo.", { speak }); } catch { quickReply(text, "No pude completar esa acción.", { speak }); } return; }
+  const intent = localIntent(text);
+  if (intent && intent !== "mail" && intent !== "digest") {
+    try { await handleLocal(intent, text); if (speak || wantsVoice()) speakLastBot(); } catch (e) { console.warn("Antares local:", e); showNote("No pude completar eso.", { warn: true }); }
+    return;
+  }
+  busy = true;
+  const epoch = lockEpoch;
+  abortCtrl = new AbortController();
+  setVista("chat");
+  renderUser(text);
+  const history = historyForModel(8).map(({ role, content }) => ({ role, content: String(content || "").slice(0, 1200) }));
+  handleSave(memory.addMessage("user", text), "el mensaje");
+  setEstado("hablando"); updateComposer();
+  const stream = createStreamingBubble();
+  stream.bubble.classList.add("pending");
+  stream.bubble.textContent = LB.isReady() ? "Pensando…" : LB.isDownloaded() ? "Despertando el cerebro local…" : "Descargando el cerebro local…";
+  els.connSub.textContent = "Pensando (local)…";
+  scrollToBottom(false);
+  const off = LB.onState((st) => { if (st.phase === "loading" && stream.bubble.classList.contains("pending")) stream.bubble.textContent = `${st.text} ${Math.round(st.progress * 100)} %`; });
+  try {
+    if (!LB.isDownloaded() && !LB.isReady()) {
+      off(); stream.wrap.remove();
+      const reply = "El cerebro local aún no está descargado. Vaya a Ajustes › Cerebro y toque «Descargar cerebro local» (≈1,1 GB, con Wi-Fi).";
+      renderBot(reply); handleSave(memory.addMessage("assistant", reply), "la respuesta");
+      if (speak || wantsVoice()) voice.speak(reply);
+      setEstado("reposo"); return;
+    }
+    const r = await LB.chat(text, {
+      history, signal: abortCtrl.signal,
+      system: LB.systemPrompt({ assistantName: assistantName(), userName: config.userName || "", facts: memory.getFacts().map((f) => (typeof f === "string" ? f : f.text || f.content || "")).filter(Boolean), spoken: !!opts.spoken || speak }),
+      maxTokens: opts.spoken || speak ? 160 : 360,
+      onChunk: (partial) => {
+        Brain.chunk();
+        const near = isNearBottom();
+        if (stream.bubble.classList.contains("pending")) { stream.bubble.classList.remove("pending"); els.connSub.textContent = "Respondiendo (local)…"; }
+        stream.bubble.textContent = partial;
+        if (near) scrollToBottom(false);
+      },
+    });
+    off(); stream.wrap.remove();
+    if (epoch !== lockEpoch) return;
+    if (r.stopped && !r.text) { showNote("Respuesta detenida."); return; }
+    const reply = r.text || "No obtuve respuesta del cerebro local. Intente de nuevo.";
+    const meta = `${(r.ms / 1000).toFixed(1).replace(".", ",")} s · ${LB.LABEL}${r.tps ? ` · ${r.tps.toFixed(1).replace(".", ",")} tok/s` : ""}${r.stopped ? " · detenida" : ""}`;
+    const w = renderBot(reply, { meta, reply: true });
+    w?.querySelector?.(".meta")?.classList.add("local");
+    handleSave(memory.addMessage("assistant", reply), "la respuesta");
+    announce(`${assistantName()}: ${reply}`);
+    if (r.text && (wantsVoice() || speak) && !r.stopped) voice.speak(Code.hasFence(reply) ? Code.splitFences(reply).map((x) => (x.type === "text" ? x.text : " Le dejé el código en la pantalla. ")).join(" ") : reply);
+  } catch (e) {
+    off(); stream.wrap.remove();
+    console.warn("Antares cerebro local:", e);
+    if (epoch !== lockEpoch) return;
+    const msg = LB.friendly(e);
+    renderBot(msg); handleSave(memory.addMessage("assistant", msg), "la respuesta");
+    if (speak || wantsVoice()) voice.speak(msg);
+  } finally {
+    busy = false; abortCtrl = null;
+    setEstado(baseEstado()); updateComposer(); updateConn();
+    setTimeout(maybeResumeWake, 50);
+  }
 }
 
 // v1.17: reglas para turnos hablados (dictado del iPhone)
@@ -2684,7 +2776,7 @@ function wipePersonalDom() {
   els.modalBody.replaceChildren();
   els.connStatusText.textContent = "";
   clearTimeout(noticeTimer);
-  els.status.textContent = "Asistente personal";
+  els.status.textContent = statusDefault();
   els.settingsStatus.textContent = "";
 }
 
@@ -2910,3 +3002,65 @@ init().catch((e) => {
   console.error("Antares: arranque", e);
   if (window.__antaresBoot) window.__antaresBoot.fail(`Arranque: ${e && e.message ? e.message : e}`);
 });
+
+// ---------- v1.18: Ajustes › Cerebro (Gemini / local) ----------
+(function initLocalBrainUI() {
+  const sel = $("brain-mode"), st = $("lb-state"), bar = $("lb-bar"), fill = $("lb-fill"), prog = $("lb-prog"), dl = $("lb-download"), fg = $("lb-forget");
+  if (!sel) return;
+  let armed = false;
+  const paint = () => {
+    sel.value = brainMode();
+    const s = LB.state, ok = LB.isDownloaded();
+    const loading = s.phase === "loading";
+    bar.hidden = prog.hidden = !loading;
+    if (loading) {
+      fill.style.width = `${Math.round(s.progress * 100)}%`;
+      const mb = s.mb || Math.round(s.progress * LB.APPROX_MB);
+      prog.textContent = `${s.text} ${Math.round(s.progress * 100)} % · ${mb} de ~${LB.APPROX_MB} MB`;
+    }
+    st.className = "lb-state" + (s.phase === "error" ? " err" : ok ? " ok" : "");
+    st.textContent = s.phase === "error" ? s.error
+      : loading ? "Preparando el cerebro local… no cierre la app."
+      : !LB.hasWebGPU() && !window.__antaresWebLLM ? "Este navegador no tiene WebGPU: el cerebro local funciona en Chrome para Android (por ejemplo el Xiaomi 12T)."
+      : LB.isReady() ? `${LB.LABEL}: listo y en memoria.`
+      : ok ? `${LB.LABEL}: descargado y guardado en el teléfono.` : "Cerebro local: no descargado.";
+    dl.hidden = loading || LB.isReady();
+    dl.textContent = armed ? "Sí, descargar ahora (≈1,1 GB)" : ok ? "Cargar cerebro local" : "Descargar cerebro local (≈1,1 GB)";
+    fg.hidden = !ok || loading;
+    updateConn();
+  };
+  LB.onState(paint);
+  sel.addEventListener("change", () => {
+    config = { ...config, brainMode: sel.value }; memory.saveConfig(config);
+    if (sel.value === "local" && !LB.isDownloaded()) { st.className = "lb-state err"; st.textContent = "Primero descargue el cerebro local (abajo). Mientras tanto no podré responder."; }
+    setEstado(baseEstado()); updateComposer(); paint();
+  });
+  dl.addEventListener("click", () => {
+    if (!LB.isDownloaded() && !armed) {
+      armed = true; paint();
+      st.className = "lb-state err";
+      st.textContent = "Atención: son unos 1,1 GB. Use Wi-Fi, deje la pantalla encendida y no cambie de app hasta que termine. Toque de nuevo para confirmar.";
+      return;
+    }
+    armed = false;
+    LB.load().then(() => { setEstado(baseEstado()); updateComposer(); }).catch(() => {}).finally(paint);
+  });
+  fg.addEventListener("click", async () => {
+    if (fg.dataset.armed !== "1") { fg.dataset.armed = "1"; fg.textContent = "Toque otra vez para borrarlo"; setTimeout(() => { fg.dataset.armed = ""; fg.textContent = "Borrar modelo"; }, 5000); return; }
+    fg.dataset.armed = ""; fg.textContent = "Borrar modelo";
+    await LB.forget(); setEstado(baseEstado()); updateComposer(); paint();
+  });
+  els.openSettings?.addEventListener("click", () => setTimeout(paint, 0));
+  window.addEventListener("online", paint); window.addEventListener("offline", () => { paint(); setEstado(baseEstado()); updateComposer(); });
+  // pestaña oculta: se corta la generación (libera la tarjeta gráfica); si pasa mucho tiempo oculta, se descarga de memoria
+  let hideTimer = 0;
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      LB.stop();
+      hideTimer = setTimeout(() => { if (LB.isReady()) LB.unload(); }, 10 * 60 * 1000);
+    } else { clearTimeout(hideTimer); paint(); }
+  });
+  // si ya va a responder el cerebro local, se va cargando (el modelo ya está en el teléfono)
+  setTimeout(() => { if (useLocal() && LB.isDownloaded() && document.visibilityState === "visible") LB.load().catch(() => {}); }, 2500);
+  paint();
+})();

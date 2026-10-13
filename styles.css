@@ -1084,3 +1084,18 @@ body.conv-on #stage .reactor-wrap { cursor: pointer; }
   [data-estado="escuchando"] .hint-line.only.escuchando { display: none !important; }
   .interim { font-size: 16.5px; }
 }
+
+/* v1.18: cerebro local */
+.lb-card { margin-top: 10px; padding: 12px; border: 1px solid var(--line-soft); border-radius: 14px; background: rgba(6,20,14,.55); }
+.lb-state { margin: 0 0 8px; font-family: var(--font-read); font-size: 16px; color: var(--text, #e8fff3); }
+.lb-state.ok { color: var(--cyan-2); } .lb-state.err { color: #ff8a8a; }
+.lb-bar { height: 12px; border-radius: 8px; background: rgba(255,255,255,.08); overflow: hidden; border: 1px solid var(--line-soft); }
+.lb-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--cyan), var(--cyan-2)); box-shadow: 0 0 10px var(--cyan); transition: width .3s; }
+.lb-prog { margin: 6px 0 0; font-family: var(--font-read); font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.lb-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.lb-actions .btn { min-height: 44px; }
+.lb-limits { margin-top: 8px; font-family: var(--font-read); font-size: 14px; color: var(--muted); }
+.lb-limits summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--cyan-2); }
+.lb-limits ul { margin: 0; padding-left: 18px; line-height: 1.45; }
+.msg .meta.local::before { content: "◆ "; color: var(--cyan); }
+#status-line.local { color: var(--cyan-2); }
