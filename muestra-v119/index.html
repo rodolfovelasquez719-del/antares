@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="es"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#020805"><title>Antares · Muestra v1.19</title>
+<style>
+@font-face{font-family:"Orbitron";src:url("../fonts/orbitron-latin.woff2") format("woff2");font-weight:400 900;font-display:swap}
+@font-face{font-family:"Rajdhani";src:url("../fonts/rajdhani-600-latin.woff2") format("woff2");font-weight:600;font-display:swap}
+:root{--bg:#020805;--g:#2bff88;--gd:rgba(43,255,136,.18);--r:#ff3b4e;--t:#e4fff0;--m:#9fd4b6;--hud:"Orbitron",monospace;--ui:"Rajdhani",system-ui,sans-serif}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:radial-gradient(ellipse at 50% 40%,#06251a,#030f09 50%,var(--bg));color:var(--t);font-family:var(--ui);font-size:17px;overflow:hidden}
+.app{display:flex;flex-direction:column;height:100dvh;max-width:480px;margin:0 auto;padding-top:env(safe-area-inset-top)}
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--gd)}
+h1{margin:0;font-family:var(--hud);font-size:17px;letter-spacing:4px;text-shadow:0 0 10px var(--g)}
+.tag{font-family:var(--hud);font-size:9px;letter-spacing:1.5px;color:var(--r);border:1px solid rgba(255,59,78,.5);padding:3px 6px;border-radius:6px}
+.lbl{font-family:var(--hud);font-size:10px;letter-spacing:1.5px;color:var(--m)}
+.seg{display:flex;gap:6px;padding:8px 14px 0}
+.seg button,.btn{flex:1;font-family:var(--hud);font-size:10px;letter-spacing:1px;color:var(--m);background:rgba(4,20,12,.85);border:1px solid var(--gd);border-radius:9px;padding:8px 4px}
+.seg button.on,.btn.on{color:#02130a;background:var(--g);border-color:var(--g)}
+.stage{position:relative;flex:1;min-height:0}
+canvas.full{position:absolute;inset:0;width:100%;height:100%}
+#avatar{position:absolute;right:8px;top:8px;width:42%;aspect-ratio:1;border:1px solid var(--gd);border-radius:14px;background:rgba(2,12,7,.6)}
+.app.m-avatar #avatar{left:50%;top:50%;transform:translate(-50%,-50%);width:78%;right:auto;border:0;background:none}
+.app.m-avatar #brain{display:none}.app.m-cerebro #avatar{display:none}
+#st{font-family:var(--hud);font-size:12px;letter-spacing:2px;color:var(--g)}
+.row{display:flex;gap:6px;padding:6px 14px 10px;padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+.say{padding:4px 16px;min-height:44px;font-size:17px;text-align:center}
+#vision{position:fixed;inset:0;background:#000;display:none;flex-direction:column;z-index:9;padding-top:env(safe-area-inset-top)}
+#vision.on{display:flex}
+.vwrap{position:relative;flex:1;overflow:hidden}
+video{width:100%;height:100%;object-fit:cover;display:block}
+#vov{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#vout{position:absolute;left:10px;right:10px;bottom:10px;background:rgba(2,14,8,.82);border:1px solid var(--gd);border-radius:12px;padding:9px 11px;font-size:16px;max-height:40%;overflow:auto}
+.priv{font-size:13px;color:var(--m);padding:8px 14px;line-height:1.35}
+.priv b{color:var(--r)}
+#keyrow{display:none;gap:6px;padding:0 14px 8px}#keyrow input{flex:1;background:#04140c;border:1px solid var(--gd);color:var(--t);border-radius:9px;padding:8px;font-size:16px}
+</style></head><body>
+<div class="app m-ambos" id="app">
+<header><h1>ANTARES</h1><span class="tag">MUESTRA v1.19</span><span id="st">REPOSO</span></header>
+<div class="seg" id="modes"><span class="lbl" style="align-self:center">AJUSTES ›</span><button data-m="cerebro">CEREBRO</button><button data-m="avatar">AVATAR</button><button data-m="ambos" class="on">AMBOS</button></div>
+<div class="stage"><canvas id="brain" class="full"></canvas><canvas id="avatar"></canvas></div>
+<div class="say" id="say">Buenas tardes, Freddy. ¿En qué le puedo ayudar?</div>
+<div class="seg" id="states"><button data-s="idle" class="on">REPOSO</button><button data-s="listen">ESCUCHA</button><button data-s="think">PIENSA</button><button data-s="speak">HABLA</button></div>
+<div class="row"><button class="btn" id="openV" style="border-color:var(--r);color:var(--r)">👁 VISIÓN</button></div>
+</div>
+<div id="vision">
+ <header><h1>OJO DE ANTARES</h1><button class="tag" id="closeV" style="background:none">CERRAR ✕</button></header>
+ <div class="vwrap"><video id="vid" playsinline muted autoplay></video><canvas id="vov"></canvas><div id="vout">Toque «Permitir cámara» para empezar.</div></div>
+ <div class="priv">🔒 Solo usa <b>la cámara de este teléfono</b>, con su permiso. Nada se graba ni se guarda; las fotos solo se envían a Gemini cuando usted toca «Describir» o activa «Continuo». Nunca accede a cámaras ajenas ni identifica personas.</div>
+ <div id="keyrow"><input id="key" type="password" placeholder="Clave de Gemini (solo esta sesión)"><button class="btn" id="saveKey" style="flex:0 0 70px">OK</button></div>
+ <div class="row"><button class="btn" id="perm">PERMITIR CÁMARA</button><button class="btn" id="flip">⟲ CÁMARA</button><button class="btn" id="desc">DESCRIBIR</button><button class="btn" id="cont">CONTINUO</button></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);let S="idle",T0=performance.now();
+const say={idle:"Buenas tardes, Freddy. ¿En qué le puedo ayudar?",listen:"Le escucho…",think:"Analizando su solicitud…",speak:"Con gusto. Tiene 3 recordatorios para hoy y el clima está despejado."};
+function setS(s){S=s;$("st").textContent={idle:"REPOSO",listen:"ESCUCHA",think:"PIENSA",speak:"HABLA"}[s];$("say").textContent=say[s];document.querySelectorAll("#states button").forEach(b=>b.classList.toggle("on",b.dataset.s==s))}
+document.querySelectorAll("#states button").forEach(b=>b.onclick=()=>setS(b.dataset.s));
+function setM(m){$("app").className="app m-"+m;localStorage.setItem("antares.muestra119.modo",m);document.querySelectorAll("#modes button").forEach(b=>b.classList.toggle("on",b.dataset.m==m))}
+document.querySelectorAll("#modes button").forEach(b=>b.onclick=()=>setM(b.dataset.m));setM(localStorage.getItem("antares.muestra119.modo")||"ambos");
+const DPR=Math.min(2,devicePixelRatio||1);
+function fit(c){const r=c.getBoundingClientRect(),w=Math.round(r.width*DPR),h=Math.round(r.height*DPR);if(c.width!=w||c.height!=h){c.width=w;c.height=h}return[w,h]}
+// ---- 1. HUD cerebro / centro de mando ----
+const N=110,P=[];for(let i=0;i<N;i++){const u=Math.random()*2-1,a=Math.random()*6.283;P.push([Math.sqrt(1-u*u)*Math.cos(a),u,Math.sqrt(1-u*u)*Math.sin(a)])}
+const E=[];for(let i=0;i<N;i++)for(let j=i+1;j<N;j++){const d=Math.hypot(P[i][0]-P[j][0],P[i][1]-P[j][1],P[i][2]-P[j][2]);if(d<.38)E.push([i,j])}
+// conteos reales del hub si la app los guardó (si no, decorativos)
+let hub={notas:0,recordatorios:0,contactos:0};try{for(const k of Object.keys(localStorage)){if(/note|nota/i.test(k))hub.notas++;if(/remind|record/i.test(k))hub.recordatorios++;if(/contact/i.test(k))hub.contactos++}}catch{}
+const hubReal=hub.notas+hub.recordatorios+hub.contactos>0;
+const nodes=[["NOTAS",-.8,-.55],["RECORDAT.",.8,-.6],["CONTACTOS",-.85,.55],["DAMAS",.85,.5],["CLIMA",0,-.92],["BÓVEDA",0,.9]];
+const logs=["SYNC hub.notas OK","VAULT sellada AES-GCM","GEO 14.63N 90.51W","RED latencia 42ms","LLM token stream…","CTX 3 recuerdos","MEM índice 128","NODO 7 → 22","SEÑAL ▮▮▮▯"];
+let LG=[];
+function brain(t){const c=$("brain");if(getComputedStyle(c).display=="none")return;const[w,h]=fit(c),x=c.getContext("2d");x.clearRect(0,0,w,h);
+ const act=S=="think"?1:S=="speak"?.8:S=="listen"?.5:.2,cx=w/2,cy=h*.5,R=Math.min(w,h)*.3,g="43,255,136";
+ // capa mapa: rejilla y meridianos tenues
+ x.strokeStyle=`rgba(${g},.06)`;x.lineWidth=1;const step=28*DPR;for(let X=(t/80%step);X<w;X+=step){x.beginPath();x.moveTo(X,0);x.lineTo(X,h);x.stroke()}for(let Y=0;Y<h;Y+=step){x.beginPath();x.moveTo(0,Y);x.lineTo(w,Y);x.stroke()}
+ // anillos y radar
+ for(let k=1;k<=3;k++){x.strokeStyle=`rgba(${g},${.08+.05*act})`;x.beginPath();x.arc(cx,cy,R*(1+k*.22),0,6.283);x.stroke()}
+ const sw=t/1000*(0.6+act*1.6);x.fillStyle=`rgba(${g},${.05+.08*act})`;x.beginPath();x.moveTo(cx,cy);x.arc(cx,cy,R*1.66,sw,sw+.5);x.fill();
+ // globo de red
+ const ry=t/1000*(.25+act*.6),cs=Math.cos(ry),sn=Math.sin(ry),pr=P.map(p=>{const X=p[0]*cs-p[2]*sn,Z=p[0]*sn+p[2]*cs,s=1/(1.9-Z*.6);return[cx+X*R*s*1.25,cy+p[1]*R*s*1.25,Z]});
+ x.lineWidth=DPR*.7;for(const[i,j]of E){const z=(pr[i][2]+pr[j][2])/2;x.strokeStyle=`rgba(${g},${(.1+.25*act)*(z+1.3)/2.3})`;x.beginPath();x.moveTo(pr[i][0],pr[i][1]);x.lineTo(pr[j][0],pr[j][1]);x.stroke()}
+ pr.forEach((p,i)=>{const hot=act>.4&&(i*7+Math.floor(t/120))%23==0;x.fillStyle=hot?"#ff3b4e":`rgba(${g},${.4+.5*(p[2]+1)/2})`;x.beginPath();x.arc(p[0],p[1],(hot?2.6:1.4)*DPR,0,6.283);x.fill()});
+ // pulsos viajando por aristas
+ const np=Math.round(4+act*22);for(let k=0;k<np;k++){const e=E[(k*37+Math.floor(t/900)*13)%E.length],f=(t/700+k*.17)%1,a=pr[e[0]],b=pr[e[1]];x.fillStyle=k%5==0?"#ff3b4e":"#bfffd9";x.fillRect(a[0]+(b[0]-a[0])*f-DPR,a[1]+(b[1]-a[1])*f-DPR,2*DPR,2*DPR)}
+ // nodos del hub con enlaces al núcleo
+ x.font=`${9*DPR}px Orbitron,monospace`;nodes.forEach(([n,nx,ny],i)=>{const X=cx+nx*w*.42,Y=cy+ny*h*.42,on=act>.3;x.strokeStyle=`rgba(${g},${on?.35:.12})`;x.setLineDash([3*DPR,4*DPR]);x.lineDashOffset=-t/40;x.beginPath();x.moveTo(cx,cy);x.lineTo(X,Y);x.stroke();x.setLineDash([]);
+  x.fillStyle=`rgba(${g},${on?.9:.45})`;x.textAlign="center";const v=hubReal?(hub[n.toLowerCase().replace(".","").replace("recordat","recordatorios")]??""):"";x.fillText(n+(v!==""?" "+v:""),X,Y);x.fillRect(X-2*DPR,Y+4*DPR,4*DPR,4*DPR)});
+ // telemetría densa al pensar/hablar
+ if(act>.4){if(Math.random()<act*.12)LG.unshift(logs[Math.floor(Math.random()*logs.length)]+" "+(t/1000).toFixed(1));LG=LG.slice(0,Math.round(4+act*6))}else LG=LG.slice(0,2);
+ x.textAlign="left";x.font=`${8.5*DPR}px Orbitron,monospace`;LG.forEach((l,i)=>{x.fillStyle=`rgba(${g},${.75-i*.07})`;x.fillText("› "+l,8*DPR,h-10*DPR-i*12*DPR)});
+ // barras espectro
+ for(let k=0;k<24;k++){const v=(Math.sin(t/140+k*1.3)*.5+.5)*act;x.fillStyle=k%6==0?"rgba(255,59,78,.7)":`rgba(${g},.6)`;x.fillRect(w-12*DPR-k*5*DPR,h-8*DPR-v*40*DPR,3*DPR,v*40*DPR)}
+ x.fillStyle=`rgba(${g},.5)`;x.textAlign="right";x.fillText(hubReal?"HUB · DATOS REALES":"HUB · DEMO",w-8*DPR,14*DPR)}
+// ---- 3. Avatar cyberpunk ----
+let blink=0;function avatar(t){const c=$("avatar");if(getComputedStyle(c).display=="none")return;const[w,h]=fit(c),x=c.getContext("2d"),s=w/200;x.clearRect(0,0,w,h);x.save();x.scale(s,s);
+ const g="#2bff88",sec=t/1000,tilt=S=="think"?Math.sin(sec*.8)*4:S=="listen"?3:0;x.translate(100,100);x.rotate(tilt*Math.PI/180);x.translate(-100,-100);
+ x.shadowColor=g;x.shadowBlur=8;x.strokeStyle=g;x.lineWidth=1.6;
+ // contorno de cabeza (malla)
+ x.beginPath();x.moveTo(100,22);x.bezierCurveTo(150,22,160,70,155,105);x.bezierCurveTo(150,150,125,178,100,180);x.bezierCurveTo(75,178,50,150,45,105);x.bezierCurveTo(40,70,50,22,100,22);x.stroke();
+ x.globalAlpha=.25;for(let y=40;y<175;y+=12){x.beginPath();x.moveTo(52,y);x.quadraticCurveTo(100,y+6,148,y);x.stroke()}x.globalAlpha=1;
+ x.beginPath();x.moveTo(100,22);x.lineTo(100,60);x.moveTo(60,60);x.lineTo(78,72);x.moveTo(140,60);x.lineTo(122,72);x.stroke();
+ // visor / ojos
+ if(Math.random()<.006)blink=8;const op=blink>0?(blink--,.1):1,look=S=="think"?Math.sin(sec*2)*4:0;
+ x.fillStyle=S=="listen"?"#ff3b4e":g;[[75],[125]].forEach(([ex])=>{x.beginPath();x.ellipse(ex+look,92,13,6*op,0,0,6.283);x.stroke();x.beginPath();x.arc(ex+look,92,3.2*op,0,6.283);x.fill()});
+ x.strokeStyle="#ff3b4e";x.beginPath();x.moveTo(55,92);x.lineTo(60,92);x.moveTo(140,92);x.lineTo(145,92);x.stroke();x.strokeStyle=g;
+ // boca: onda al hablar
+ x.beginPath();for(let i=0;i<=40;i++){const X=78+i*1.1,a=S=="speak"?Math.sin(i*.6+sec*18)*(5+3*Math.sin(sec*5))*Math.sin(i/40*Math.PI):S=="think"?Math.sin(i*.3+sec*4)*1.2:0;i?x.lineTo(X,140+a):x.moveTo(X,140+a)}x.stroke();
+ // halo / anillo de estado
+ const lv=S=="idle"?.3:S=="listen"?.7+Math.sin(sec*6)*.2:S=="think"?.6:.9;x.globalAlpha=lv;x.strokeStyle=S=="listen"?"#ff3b4e":g;x.setLineDash([6,5]);x.lineDashOffset=-sec*(S=="think"?60:15);x.beginPath();x.arc(100,100,94,0,6.283);x.stroke();x.setLineDash([]);x.globalAlpha=1;
+ // línea de escaneo
+ const sy=40+((sec*40)%140);x.globalAlpha=.35;x.beginPath();x.moveTo(45,sy);x.lineTo(155,sy);x.stroke();x.restore()}
+let lastF=0;function loop(t){if(t-lastF>=1000/40){lastF=t;brain(t);avatar(t)}requestAnimationFrame(loop)}requestAnimationFrame(loop);
+// ---- 2. Ojo de Antares (cámara propia + Gemini) ----
+let stream=null,facing="environment",timer=null,boxes=[];
+function getKey(){try{const c=JSON.parse(localStorage.getItem("antares.config.v1")||"{}");if(c.geminiApiKey)return c.geminiApiKey}catch{}return sessionStorage.getItem("antares.muestra119.key")||""}
+$("openV").onclick=()=>{$("vision").classList.add("on");$("keyrow").style.display=getKey()?"none":"flex"};
+$("closeV").onclick=()=>{stop();$("vision").classList.remove("on")};
+$("saveKey").onclick=()=>{sessionStorage.setItem("antares.muestra119.key",$("key").value.trim());$("keyrow").style.display="none"};
+function stop(){clearInterval(timer);timer=null;$("cont").classList.remove("on");if(stream)stream.getTracks().forEach(t=>t.stop());stream=null}
+async function start(){if(!navigator.mediaDevices?.getUserMedia){$("vout").textContent="Este navegador no permite la cámara (requiere HTTPS).";return}
+ try{if(stream)stream.getTracks().forEach(t=>t.stop());stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing,width:{ideal:1280}},audio:false});$("vid").srcObject=stream;await $("vid").play();$("vout").textContent="Cámara activa. Toque «Describir».";$("perm").classList.add("on")}
+ catch(e){$("vout").textContent="No se obtuvo permiso de cámara. Revise los permisos del navegador. ("+e.name+")"}}
+$("perm").onclick=start;$("flip").onclick=()=>{facing=facing=="environment"?"user":"environment";start()};
+function drawBoxes(){const c=$("vov"),[w,h]=fit(c),x=c.getContext("2d");x.clearRect(0,0,w,h);x.lineWidth=2*DPR;x.font=`${12*DPR}px Orbitron,monospace`;
+ boxes.forEach((b,i)=>{const[y0,x0,y1,x1]=b.box_2d.map(v=>v/1000);const X=x0*w,Y=y0*h,W=(x1-x0)*w,H=(y1-y0)*h,col=i%4==3?"#ff3b4e":"#2bff88";x.strokeStyle=col;x.strokeRect(X,Y,W,H);x.fillStyle="rgba(0,0,0,.6)";const tw=x.measureText(b.label).width+8*DPR;x.fillRect(X,Y-16*DPR,tw,16*DPR);x.fillStyle=col;x.fillText(b.label,X+4*DPR,Y-4*DPR)})}
+let busy=false;async function describe(){if(busy||!stream)return;const key=getKey();if(!key){$("keyrow").style.display="flex";$("vout").textContent="Necesita la clave de Gemini y conexión.";return}if(!navigator.onLine){$("vout").textContent="Sin internet: la visión requiere conexión.";return}
+ busy=true;$("vout").textContent="Analizando…";const v=$("vid"),cw=640,ch=Math.round(640*v.videoHeight/v.videoWidth)||480,tc=document.createElement("canvas");tc.width=cw;tc.height=ch;
+ // recorte igual al object-fit:cover del visor para que los recuadros coincidan
+ const vr=$("vov").getBoundingClientRect(),ar=vr.width/vr.height,va=v.videoWidth/v.videoHeight;let sx=0,sy=0,sw=v.videoWidth,sh=v.videoHeight;if(va>ar){sw=sh*ar;sx=(v.videoWidth-sw)/2}else{sh=sw/ar;sy=(v.videoHeight-sh)/2}
+ tc.height=Math.round(cw/ar);tc.getContext("2d").drawImage(v,sx,sy,sw,sh,0,0,cw,tc.height);const b64=tc.toDataURL("image/jpeg",.7).split(",")[1];
+ const prompt='Describa en español (usted, 1-2 frases) lo que se ve. No identifique personas por nombre ni rasgos sensibles; diga solo "persona". Devuelva SOLO JSON: {"descripcion":"...","objetos":[{"label":"nombre corto","box_2d":[ymin,xmin,ymax,xmax]}]} con coordenadas 0-1000, máximo 8 objetos.';
+ try{const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",{method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":key},body:JSON.stringify({contents:[{parts:[{text:prompt},{inline_data:{mime_type:"image/jpeg",data:b64}}]}],generationConfig:{responseMimeType:"application/json",temperature:.2}})});
+  const j=await r.json();if(!r.ok)throw new Error(j.error?.message||r.status);const o=JSON.parse(j.candidates[0].content.parts[0].text);boxes=(o.objetos||[]).filter(b=>Array.isArray(b.box_2d)&&b.box_2d.length==4);drawBoxes();
+  $("vout").textContent="👁 "+o.descripcion+(boxes.length?"  ·  "+boxes.map(b=>b.label).join(", "):"");
+  if(!timer&&"speechSynthesis"in window){const u=new SpeechSynthesisUtterance(o.descripcion);u.lang="es-ES";speechSynthesis.cancel();speechSynthesis.speak(u)}}
+ catch(e){$("vout").textContent="Error de visión: "+e.message}busy=false}
+$("desc").onclick=describe;
+$("cont").onclick=()=>{if(timer){clearInterval(timer);timer=null;$("cont").classList.remove("on");return}if(!stream)return;$("cont").classList.add("on");describe();timer=setInterval(describe,4000)};
+{const q=new URLSearchParams(location.hash.slice(1));if(q.get("s"))setS(q.get("s"));if(q.get("m"))setM(q.get("m"));if(q.get("v")){$("openV").click();start()}}
+document.addEventListener("visibilitychange",()=>{if(document.hidden&&stream)stop()});
+</script></body></html>
