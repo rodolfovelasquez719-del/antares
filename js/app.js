@@ -33,7 +33,7 @@ import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.19.1";
+const APP_VERSION = "1.19.2";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -2576,6 +2576,21 @@ function setupServiceWorker() {
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") check(); });
     window.addEventListener("focus", check);
     window.addEventListener("pageshow", check);
+    // v1.19.2: respaldo — si el servidor ya tiene otra versión y el SW no la tomó, se actualiza y recarga UNA vez
+    const verCheck = async () => {
+      try {
+        const r = await fetch("sw.js?vc=" + Date.now(), { cache: "no-store" }); const m = /antares-v([\d.]+)/.exec(await r.text());
+        if (!m || m[1] === APP_VERSION) return;
+        let last = 0; try { last = Number(sessionStorage.getItem("antares.verReload") || 0); } catch { /* */ }
+        if (Date.now() - last < 5 * 60000) { els.toast.hidden = false; return; }
+        try { sessionStorage.setItem("antares.verReload", String(Date.now())); } catch { /* */ }
+        await reg.update().catch(() => {}); if (reg.waiting) reg.waiting.postMessage("SKIP_WAITING");
+        if (estado === "hablando" || estado === "escuchando" || (els.input && els.input.value)) { els.toast.hidden = false; return; }
+        setTimeout(() => location.replace(location.pathname + "?v=" + m[1] + location.hash), 1200);
+      } catch { /* sin red */ }
+    };
+    setTimeout(verCheck, 2500);
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") setTimeout(verCheck, 800); });
   }).catch((e) => console.warn("Antares: service worker no registrado", e));
   els.updateBtn.addEventListener("click", async () => {
     try {
@@ -2989,7 +3004,7 @@ async function init() {
     }
   });
   syncViewport();
-  try { mountAvatar(document.getElementById("avatar-home"), "./assets/avatar-antares.jpg"); mountAvatar(document.getElementById("avatar-lock"), "./assets/avatar-antares.jpg"); Hud.mountHud(document.getElementById("stage")); paintPresence(); } catch (e) { console.warn("Antares: avatar/HUD", e); }
+  try { mountAvatar(document.getElementById("avatar-home"), "./assets/avatar-antares.jpg"); { const al = document.getElementById("avatar-lock"); mountAvatar(al, "./assets/avatar-lock.jpg"); al.classList.add("av-lock"); const lv = document.getElementById("lock-ver"); if (lv) lv.textContent = "v" + APP_VERSION; } Hud.mountHud(document.getElementById("stage")); paintPresence(); } catch (e) { console.warn("Antares: avatar/HUD", e); }
   try {
     const ps = document.getElementById("presence-sel"); ps.value = presence();
     ps.addEventListener("change", () => { config = { ...config, presence: ps.value }; memory.saveConfig(config); paintPresence(); });
