@@ -33,7 +33,7 @@ import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.19.0";
+const APP_VERSION = "1.19.1";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -2989,13 +2989,13 @@ async function init() {
     }
   });
   syncViewport();
-  try { mountAvatar(document.getElementById("avatar-home"), "./assets/avatar-antares.jpg"); Hud.mountHud(document.getElementById("stage")); paintPresence(); } catch (e) { console.warn("Antares: avatar/HUD", e); }
+  try { mountAvatar(document.getElementById("avatar-home"), "./assets/avatar-antares.jpg"); mountAvatar(document.getElementById("avatar-lock"), "./assets/avatar-antares.jpg"); Hud.mountHud(document.getElementById("stage")); paintPresence(); } catch (e) { console.warn("Antares: avatar/HUD", e); }
   try {
     const ps = document.getElementById("presence-sel"); ps.value = presence();
     ps.addEventListener("change", () => { config = { ...config, presence: ps.value }; memory.saveConfig(config); paintPresence(); });
     document.getElementById("vision-btn").addEventListener("click", () => openVision({ getKey: () => config.geminiApiKey || "", model: GEM_MODELS[0], speak: (t) => { try { voice.speak(t); } catch { /* */ } } }));
   } catch (e) { console.warn("Antares: presencia/visión", e); }
-  try { Brain.mountBrain(document.querySelector("#stage .reactor-wrap")); Brain.mountBrain(document.querySelector("#lock-view .reactor-wrap"), { lite: true }); } catch (e) { console.warn("Antares: cerebro 3D", e); }
+  try { Brain.mountBrain(document.querySelector("#stage .reactor-wrap")); } catch (e) { console.warn("Antares: cerebro 3D", e); }
   setupServiceWorker();
   await loadMetaSafe();
   if (Lock.hasPin()) {

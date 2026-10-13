@@ -1112,3 +1112,9 @@ body.compact[data-presencia="ambos"] .avatar-home, [data-presencia="ambos"][data
 [data-presencia="avatar"][data-estado="hablando"] .avatar-home, body.compact[data-presencia="avatar"] .avatar-home { width: 120px; }
 body.kb-open .avatar-home { width: 72px !important; }
 .vision-btn { position: absolute; top: 6px; right: 12px; z-index: 3; min-height: 34px; padding: 0 12px; font-family: var(--font-hud, monospace); font-size: 10px; letter-spacing: 1.2px; color: #ff2d4a; background: rgba(3,12,8,.75); border: 1px solid rgba(255,45,74,.5); border-radius: 10px; }
+/* v1.19: el avatar reemplaza al cerebro en la pantalla de bloqueo (brillo suave) */
+.lock-screen .reactor-wrap { width: 132px !important; height: 132px !important; }
+.lock-screen .reactor-wrap .reactor, .lock-screen .reactor-wrap canvas.brain { visibility: hidden; }
+.avatar-lock { position: absolute; inset: 0; z-index: 1; box-shadow: 0 0 22px rgba(0,255,156,.45), 0 0 46px rgba(255,45,74,.18) !important; animation: lock-glow 4s ease-in-out infinite; }
+.lock-screen .lock-badge { z-index: 2; }
+@keyframes lock-glow { 50% { box-shadow: 0 0 30px rgba(0,255,156,.6), 0 0 60px rgba(255,45,74,.28); } }
