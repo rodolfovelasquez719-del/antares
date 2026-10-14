@@ -1,6 +1,6 @@
 // Antares Web - Service worker: abre rápido y sin conexión, y recibe las versiones nuevas.
 // Las llamadas a Gemini, Open-Meteo y otros dominios NO se interceptan ni se guardan.
-const VERSION = "antares-v1.19.4";
+const VERSION = "antares-v1.20.0";
 const SHELL = [
   "./",
   "./index.html",
@@ -34,6 +34,9 @@ const SHELL = [
   "./js/vision.js",
   "./assets/avatar-antares.jpg",
   "./assets/avatar-lock.jpg",
+  "./assets/avatar-idle.mp4",
+  "./assets/avatar-talk.mp4",
+  "./assets/avatar-listen.mp4",
   "./js/agent.js",
   "./js/localbrain.js",
   "./js/draughts-worker.js",
@@ -142,6 +145,8 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.includes("/muestra-verde/")) return;
   if (url.pathname.includes("/muestra-v119/")) return;
   if (url.pathname.includes("/muestra-avatar-vivo/")) return;
+  // v1.20: videos del avatar desde la caché con soporte de Range (Safari pide rangos para <video>)
+  if (/\/assets\/avatar-[a-z]+\.mp4$/.test(url.pathname)) { event.respondWith(videoFromCache(req)); return; }
   const isPage = req.mode === "navigate" || url.pathname.endsWith("/") || url.pathname.endsWith("/index.html");
   event.respondWith(networkFirst(req, isPage, event));
 });
@@ -190,4 +195,17 @@ async function runtimeCacheFirst(req) {
   const resp = await fetch(req);
   if (resp && resp.ok && resp.type === "basic") c.put(req, resp.clone()).catch(() => {});
   return resp;
+}
+
+async function videoFromCache(req) {
+  const key = new URL(req.url); key.search = "";
+  let resp = await caches.match(key.href);
+  if (!resp) { try { resp = await fetch(key.href); if (resp.ok && (await caches.has(VERSION))) (await caches.open(VERSION)).put(key.href, resp.clone()); } catch { return fetch(req); } }
+  const range = req.headers.get("range");
+  if (!range || !resp.ok) return resp;
+  const buf = await resp.arrayBuffer(), size = buf.byteLength, m = /bytes=(\d*)-(\d*)/.exec(range);
+  let start = m && m[1] ? Number(m[1]) : 0, end = m && m[2] ? Number(m[2]) : size - 1;
+  if (!m || start >= size) return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${size}` } });
+  end = Math.min(end, size - 1);
+  return new Response(buf.slice(start, end + 1), { status: 206, headers: { "Content-Type": "video/mp4", "Content-Range": `bytes ${start}-${end}/${size}`, "Content-Length": String(end - start + 1), "Accept-Ranges": "bytes" } });
 }

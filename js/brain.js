@@ -6,6 +6,8 @@ const COL = [[0, 255, 156], [255, 45, 74], [25, 230, 140], [255, 59, 59], [0, 22
 const rnd = (a, b) => a + Math.random() * (b - a);
 const instances = [];
 let raf = 0, mode = "reposo", dim = false, amp = 0, env = 0, sylT = 0, pauseT = 0, boost = 0, lastNow = 0;
+let showLabels = true;
+export function setLabels(on) { showLabels = !!on; }
 let speaking = false, gotChunk = false, mic = null, micWanted = false, counts = null;
 
 function fib(i, n) { const y = 1 - 2 * (i + .5) / n, r = Math.sqrt(1 - y * y), th = i * 2.39996; return [Math.cos(th) * r, y, Math.sin(th) * r]; }
@@ -168,6 +170,6 @@ function draw(it, t, m, wave) {
   ctx.globalCompositeOperation = "source-over";
   if (!it.lite && W >= 180) {
     ctx.font = "600 8.5px Orbitron, Rajdhani, monospace"; ctx.textAlign = "center";
-    for (const i of g.hubs) { const p = P[i], d = (2 - p.z) / 3; if (d < .45) continue; ctx.fillStyle = `rgba(232,255,243,${.15 + .65 * d * d})`; ctx.fillText(g.N[i].label.toUpperCase(), p.sx, p.sy - 11 * p.s); }
+    if (showLabels) for (const i of g.hubs) { const p = P[i], d = (2 - p.z) / 3; if (d < .45) continue; ctx.fillStyle = `rgba(232,255,243,${.15 + .65 * d * d})`; ctx.fillText(g.N[i].label.toUpperCase(), p.sx, p.sy - 11 * p.s); }
   }
 }

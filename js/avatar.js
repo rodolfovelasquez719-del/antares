@@ -27,10 +27,33 @@ const CSS = `
 @keyframes av-eye{0%,100%{opacity:.3}50%{opacity:.95}}
 @keyframes av-lip{from{opacity:.15;transform:translate(-50%,-50%) scaleY(.5)}to{opacity:.85;transform:translate(-50%,-50%) scaleY(1.3)}}
 @media (prefers-reduced-motion:reduce){.av *{animation:none!important}}`;
+// v1.20: avatar con video (reposo / habla / escucha). Cada <video> se recorta a sí mismo (border-radius + clip-path),
+// sin transformaciones: así iOS no muestra esquinas cuadradas. Si el autoplay está bloqueado (ahorro de energía) queda la foto
+// y un toque lo arranca.
+const VCSS = `.av video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 38%;border-radius:50%;clip-path:circle(50%);-webkit-clip-path:circle(50%);opacity:0;transition:opacity .45s ease;pointer-events:none}
+.av video.on{opacity:1}.av.av-v .eye,.av.av-v .mouth,.av.av-v .scan{display:none}.av.av-blocked{pointer-events:auto;cursor:pointer}`;
+export function mountAvatarVideo(el, poster, base) {
+  mountAvatar(el, poster); if (!el || el.querySelector("video")) return;
+  if (!document.getElementById("av-vcss")) { const s = document.createElement("style"); s.id = "av-vcss"; s.textContent = VCSS; document.head.appendChild(s); }
+  el.classList.add("av-v");
+  const V = {};
+  for (const k of ["idle", "talk", "listen"]) {
+    const v = document.createElement("video"); v.muted = true; v.defaultMuted = true; v.loop = true; v.playsInline = true; v.autoplay = true; v.preload = "auto";
+    v.setAttribute("muted", ""); v.setAttribute("playsinline", ""); v.setAttribute("webkit-playsinline", ""); v.setAttribute("aria-hidden", "true");
+    v.innerHTML = `<source src="${base}avatar-${k}.mp4" type="video/mp4"><source src="${base}avatar-${k}.webm" type="video/webm">`;
+    el.insertBefore(v, el.querySelector(".ring")); V[k] = v;
+  }
+  el._v = V; el._vk = "idle";
+  const kick = () => { Promise.all(Object.values(V).map((v) => v.play())).then(() => { el.classList.remove("av-blocked"); show(el); }).catch(() => { el.classList.add("av-blocked"); Object.values(V).forEach((v) => v.classList.remove("on")); }); };
+  el._kick = kick; el.addEventListener("click", kick);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && el.offsetParent) kick(); });
+  setTimeout(kick, 300);
+}
+function show(el) { if (!el._v || el.classList.contains("av-blocked")) return; const k = el._vk; for (const n in el._v) el._v[n].classList.toggle("on", n === k); }
 export function mountAvatar(el, src) {
   if (!el || el.querySelector("img")) return;
   if (!document.getElementById("av-css")) { const s = document.createElement("style"); s.id = "av-css"; s.textContent = CSS; document.head.appendChild(s); }
   el.classList.add("av"); el.dataset.s = el.dataset.s || "idle";
   el.innerHTML = `<img src="${src}" alt="" decoding="async"><i class="eye e1"></i><i class="eye e2"></i><i class="mouth"></i><i class="scan"></i><i class="bar"></i><i class="ring"></i>`;
 }
-export function setAvatarState(el, s) { if (el) el.dataset.s = s; }
+export function setAvatarState(el, s) { if (!el) return; el.dataset.s = s; if (el._v) { el._vk = s === "speak" ? "talk" : s === "listen" ? "listen" : "idle"; show(el); } }

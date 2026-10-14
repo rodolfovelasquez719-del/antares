@@ -1105,7 +1105,7 @@ body.conv-on #stage .reactor-wrap { cursor: pointer; }
 .hud-layer { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
 body.compact .hud-layer, body.kb-open .hud-layer { opacity: .45; }
 /* v1.19.4: el avatar vive DENTRO del cerebro (centrado), tamaño fijo en px: sin desbordes en iPhone */
-#stage .avatar-home { display: none; position: absolute; left: 50%; top: 50%; width: 54%; height: 54%; transform: translate(-50%, -50%); z-index: 2; pointer-events: none; }
+#stage .avatar-home { display: none; position: absolute; left: 50%; top: 50%; width: 66%; height: 66%; transform: translate(-50%, -50%); z-index: 2; pointer-events: none; }
 [data-presencia="ambos"] #stage .avatar-home { display: block; }
 [data-presencia="avatar"] #stage .avatar-home { display: block; width: 100%; height: 100%; }
 [data-presencia="avatar"] #stage .reactor-wrap > :not(.avatar-home) { visibility: hidden; }
@@ -1117,5 +1117,11 @@ body.compact .hud-layer, body.kb-open .hud-layer { opacity: .45; }
 .lock-screen .lock-badge { z-index: 2; right: 2px !important; bottom: 2px !important; }
 .avatar-lock-ring { position: absolute; inset: -3px; border-radius: 50%; border: 2px solid rgba(0,255,156,.6); box-shadow: 0 0 16px rgba(0,255,156,.3); pointer-events: none; z-index: 1; }
 .lock-ver { position: absolute; left: 0; right: 0; bottom: calc(6px + env(safe-area-inset-bottom)); margin: 0; text-align: center; font-size: 11px; letter-spacing: 1px; color: rgba(159,212,182,.8); pointer-events: none; }
-.home-ver { position: absolute; left: 50%; transform: translateX(-50%); top: 0; min-height: 22px !important; font-size: 10px !important; white-space: nowrap; z-index: 3; min-height: 28px; padding: 0 6px; background: none; border: 0; font-size: 11px; letter-spacing: .5px; color: rgba(185,220,200,.75); text-decoration: underline dotted; }
+.home-ver { align-self: center; margin: 0; padding: 2px 8px; min-height: 24px; background: none; border: 0; font-size: 10.5px; letter-spacing: .5px; color: rgba(185,220,200,.7); text-decoration: underline dotted; }
+body.compact .home-ver, body.kb-open .home-ver { display: none; }
 @media (max-height: 720px) { #stage .reactor-wrap { width: 150px; height: 150px; } .stage-center { gap: 4px; padding-top: 18px; } }
+/* v1.20: ella es el centro: el cerebro (sin rótulos) queda como halo alrededor */
+[data-presencia="ambos"] #stage .reactor-wrap { width: 250px; height: 250px; }
+[data-presencia="ambos"] #stage .reactor-wrap .reactor { opacity: .35; }
+@media (max-height: 720px) { [data-presencia="ambos"] #stage .reactor-wrap { width: 150px; height: 150px; } .home-ver { min-height: 18px; padding: 0 6px; font-size: 9.5px; } }
+#stage .avatar-home.av-blocked { pointer-events: auto; }
