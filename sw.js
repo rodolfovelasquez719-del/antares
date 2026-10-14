@@ -142,6 +142,7 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.includes("/muestra-verde/")) return;
   if (url.pathname.includes("/muestra-v119/")) return;
   if (url.pathname.includes("/muestra-avatar-vivo/")) return;
+  if (url.pathname.includes("/muestra-avatar-3d/")) return;
   // v1.20: videos del avatar desde la caché con soporte de Range (Safari pide rangos para <video>)
   if (/\/assets\/avatar-[a-z]+\.mp4$/.test(url.pathname)) { event.respondWith(videoFromCache(req)); return; }
   const isPage = req.mode === "navigate" || url.pathname.endsWith("/") || url.pathname.endsWith("/index.html");

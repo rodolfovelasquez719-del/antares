@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="es"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#020805"><title>Antares · Muestra avatar 3D</title>
+<style>
+@font-face{font-family:"Orbitron";src:url("../fonts/orbitron-latin.woff2") format("woff2");font-weight:400 900;font-display:swap}
+@font-face{font-family:"Rajdhani";src:url("../fonts/rajdhani-600-latin.woff2") format("woff2");font-weight:600;font-display:swap}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:#020805;color:#e4fff0;font-family:"Rajdhani",system-ui,sans-serif;overflow:hidden}
+.app{display:flex;flex-direction:column;height:100dvh;max-width:560px;margin:0 auto;padding-top:env(safe-area-inset-top)}
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px}
+h1{margin:0;font-family:"Orbitron",monospace;font-size:17px;letter-spacing:4px;text-shadow:0 0 10px #00ff9c}
+.tag{font-family:"Orbitron",monospace;font-size:9px;letter-spacing:1.5px;color:#ff5a6e;border:1px solid rgba(255,59,78,.5);padding:3px 6px;border-radius:6px}
+#st{font-family:"Orbitron",monospace;font-size:12px;letter-spacing:2px;color:#00ff9c;min-width:80px;text-align:right}
+.stage{position:relative;flex:1;min-height:0;background:
+ radial-gradient(ellipse at 50% 45%,rgba(0,255,156,.16),rgba(0,0,0,0) 60%),
+ linear-gradient(rgba(0,255,156,.06) 1px,transparent 1px) 0 0/28px 28px,
+ linear-gradient(90deg,rgba(0,255,156,.06) 1px,transparent 1px) 0 0/28px 28px,#020805}
+#net,#avatar{position:absolute;inset:0;width:100%;height:100%}
+#avatar canvas{display:block}
+#load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:"Orbitron",monospace;font-size:12px;letter-spacing:2px;color:#9fd4b6;pointer-events:none}
+.say{padding:4px 16px;min-height:40px;font-size:16px;text-align:center;color:#cfeedd}
+.row{display:flex;gap:6px;padding:4px 12px}
+.row.last{padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+textarea{flex:1;height:52px;resize:none;background:#05170e;border:1px solid rgba(0,255,156,.35);border-radius:10px;color:#e4fff0;font:inherit;font-size:16px;padding:8px 10px}
+button{flex:1;min-height:44px;font-family:"Orbitron",monospace;font-size:10px;letter-spacing:1px;color:#cfeedd;background:#05170e;border:1px solid rgba(0,255,156,.35);border-radius:10px}
+button.on{background:#00ff9c;color:#02130a}
+.lic{font-size:10.5px;color:#6f9a84;text-align:center;padding:0 12px 4px}
+.lic a{color:#8fc7a8}
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js/+esm",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+} }
+</script>
+</head><body>
+<div class="app">
+<header><h1>ANTARES</h1><span class="tag">MUESTRA 3D</span><span id="st">CARGANDO</span></header>
+<div class="stage"><canvas id="net"></canvas><div id="avatar"></div><div id="load">CARGANDO AVATAR…</div></div>
+<div class="say" id="say">Toque «Que hable» para escucharla.</div>
+<div class="row"><textarea id="txt">Buenas tardes, Freddy. Tiene tres recordatorios para hoy y el clima está despejado. ¿En qué le puedo ayudar?</textarea></div>
+<div class="row last"><button id="tts">🔊 QUE HABLE</button><button id="mic">🎙 QUE ESCUCHE</button></div>
+<p class="lic">Motor: <a href="https://github.com/met4citizen/TalkingHead" target="_blank" rel="noopener">TalkingHead</a> (MIT). Avatar de ejemplo de Ready Player Me, <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a> (uso no comercial).</p>
+</div>
+<script type="module">
+import { TalkingHead } from "./modules/talkinghead.mjs";
+const $=id=>document.getElementById(id),setSt=t=>$("st").textContent=t;
+let head,S="idle";
+const DPR=Math.min(2,devicePixelRatio||1);
+try{
+  head=new TalkingHead($("avatar"),{ttsEndpoint:"",lipsyncModules:["pt_br"],lipsyncLang:"pt_br",cameraView:"upper",cameraRotateEnable:false,cameraPanEnable:false,cameraZoomEnable:false,
+    modelFPS:30,modelPixelRatio:DPR,avatarMood:"neutral",avatarIdleEyeContact:.6,avatarSpeakingEyeContact:.7,avatarIdleHeadMove:.6,avatarSpeakingHeadMove:.5,
+    lightAmbientColor:0x9fe8ff,lightAmbientIntensity:1.6,lightDirectColor:0x9fd8ff,lightDirectIntensity:22,lightSpotColor:0x00ff9c,lightSpotIntensity:10,lightSpotPhi:-0.6,lightSpotTheta:2.4,lightSpotDispersion:1});
+  await head.showAvatar({url:"./avatars/brunette.glb",body:"F",avatarMood:"neutral",lipsyncLang:"pt_br"},ev=>{if(ev.lengthComputable)$("load").textContent="CARGANDO AVATAR… "+Math.round(ev.loaded/ev.total*100)+"%"});
+  // estilo Antares: cabello blanco-azulado y acentos verdes/rojos en la ropa
+  head.armature.traverse(o=>{if(!o.isMesh||!o.material)return;const n=(o.name+" "+(o.material.name||"")).toLowerCase();const mats=Array.isArray(o.material)?o.material:[o.material];
+    for(const m of mats){
+      if(/glasses/.test(n)){o.visible=false}
+      else if(/hair/.test(n)){m.color&&m.color.set(0xd6eaff);if(m.map){m.map=null;m.needsUpdate=true}if(m.emissive){m.emissive.set(0x3d8bff);m.emissiveIntensity=.14}m.roughness=.55}
+      else if(/outfit|top|shirt|body_top|wolf3d_outfit/.test(n)){m.color&&m.color.set(0x050807);if(m.map){m.map=null;m.needsUpdate=true}if(m.emissive){m.emissive.set(0x000000)}m.roughness=.35;m.metalness=.6}
+      else if(/eye/.test(n)&&!/brow|lash/.test(n)){if(m.emissive){m.emissive.set(0x3aa8ff);m.emissiveIntensity=.25}}
+    }});
+  $("load").remove();setSt("REPOSO");
+}catch(e){$("load").textContent="No se pudo cargar el avatar 3D: "+e.message;setSt("ERROR")}
+// ---------- habla: voz gratis del navegador + labios sincronizados por palabra ----------
+function silent(ms){const ctx=head.audioCtx,n=Math.max(1,Math.round(ctx.sampleRate*ms/1000));return ctx.createBuffer(1,n,ctx.sampleRate)}
+function wordMs(w){return Math.max(140,w.replace(/[^\p{L}\p{N}]/gu,"").length*72)}
+function lipWord(w){const d=wordMs(w);head.speakAudio({audio:silent(d+40),words:[w],wtimes:[0],wdurations:[d]},{lipsyncLang:"pt_br",isRaw:true})}
+function lipAll(text){const words=text.split(/\s+/).filter(Boolean);let t=0;const wt=[],wd=[];for(const w of words){const d=wordMs(w);wt.push(t);wd.push(d);t+=d+(/[.,;:¿?¡!]$/.test(w)?260:60)}
+  head.speakAudio({audio:silent(t+200),words,wtimes:wt,wdurations:wd},{lipsyncLang:"pt_br",isRaw:true})}
+function pickVoice(){const vs=speechSynthesis.getVoices();return vs.find(v=>/^es(-|_)(MX|US|419)/i.test(v.lang))||vs.find(v=>/^es/i.test(v.lang))||null}
+$("tts").onclick=async()=>{if(!head)return;try{await head.audioCtx.resume()}catch{}
+  const text=$("txt").value.trim();if(!text)return;stopMic();
+  if(!("speechSynthesis"in window)){lipAll(text);return}
+  speechSynthesis.cancel();head.stopSpeaking();
+  const u=new SpeechSynthesisUtterance(text);u.lang="es-MX";const v=pickVoice();if(v)u.voice=v;
+  let gotBoundary=false,fallback=null;
+  u.onstart=()=>{S="speak";setSt("HABLA");$("tts").classList.add("on");$("say").textContent=text;fallback=setTimeout(()=>{if(!gotBoundary)lipAll(text)},450)};
+  u.onboundary=e=>{if(e.name&&e.name!=="word")return;if(!gotBoundary&&fallback){clearTimeout(fallback)}gotBoundary=true;const w=text.slice(e.charIndex).match(/^\S+/);if(w)lipWord(w[0])};
+  u.onend=u.onerror=()=>{clearTimeout(fallback);S="idle";setSt("REPOSO");$("tts").classList.remove("on");setTimeout(()=>{if(S==="idle")head.stopSpeaking()},500)};
+  speechSynthesis.speak(u)};
+// ---------- escucha: micrófono real; postura atenta y onda ----------
+let mic=null,an=null,buf=null,lvl=0,lookT=null;
+function stopMic(){if(mic){mic.getTracks().forEach(t=>t.stop());mic=null;an=null}clearInterval(lookT);$("mic").classList.remove("on");if(S==="listen"){S="idle";setSt("REPOSO");head&&head.setMood("neutral")}}
+$("mic").onclick=async()=>{if(mic){stopMic();return}try{await head.audioCtx.resume()}catch{}
+  try{mic=await navigator.mediaDevices.getUserMedia({audio:true});const ac=new (window.AudioContext||window.webkitAudioContext)();await ac.resume();an=ac.createAnalyser();an.fftSize=512;buf=new Uint8Array(512);ac.createMediaStreamSource(mic).connect(an)}catch{$("say").textContent="Sin permiso de micrófono: muestro la postura de escucha igualmente."}
+  S="listen";setSt("ESCUCHA");$("mic").classList.add("on");$("say").textContent="Le escucho…";head.setMood("happy");head.lookAtCamera(3000);lookT=setInterval(()=>head.lookAtCamera(2500),2400);
+  setTimeout(()=>{if(S==="listen")head.setMood("neutral")},1500)};
+// ---------- red tenue alrededor ----------
+const cv=$("net"),x=cv.getContext("2d"),N=22,nodes=[...Array(N)].map((_,i)=>({a:i/N*6.283,r:.36+.05*Math.sin(i*2.1)}));
+function f(t){requestAnimationFrame(f);const r=cv.getBoundingClientRect(),W=r.width*DPR|0,H=r.height*DPR|0;if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H}x.clearRect(0,0,W,H);
+  if(an){an.getByteTimeDomainData(buf);let m=0;for(const v of buf)m=Math.max(m,Math.abs(v-128));lvl+=(m/50-lvl)*.3}else lvl*=.9;
+  const cx=W/2,cy=H*.42,R=Math.min(W,H),act=S==="speak"?.55:S==="listen"?.5:.28,rot=t/1000*.05,P=nodes.map(n=>[cx+Math.cos(n.a+rot)*R*n.r*1.15,cy+Math.sin(n.a+rot)*R*n.r]);
+  x.lineWidth=DPR;for(let i=0;i<N;i++){const a=P[i],b=P[(i+3)%N];x.strokeStyle=`rgba(0,255,156,${act*.22})`;x.beginPath();x.moveTo(a[0],a[1]);x.lineTo(b[0],b[1]);x.stroke()}
+  P.forEach((p,i)=>{x.fillStyle=i%5==0?`rgba(255,59,78,${act+.25})`:`rgba(0,255,156,${act+.25})`;x.beginPath();x.arc(p[0],p[1],2*DPR,0,6.283);x.fill()});
+  if(S==="listen"){const k=(t%1500)/1500;x.strokeStyle=`rgba(255,59,78,${(1-k)*(.3+lvl*.6)})`;x.lineWidth=2*DPR;x.beginPath();x.arc(cx,cy,R*(.22+k*.22),0,6.283);x.stroke()}}
+requestAnimationFrame(f);
+document.addEventListener("visibilitychange",()=>{if(!head)return;document.hidden?head.stop():head.start()});
+window.__head=head;
+</script></body></html>
