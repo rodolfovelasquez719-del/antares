@@ -16,7 +16,7 @@
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="preload" href="fonts/orbitron-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/rajdhani-600-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=1.19.3">
+  <link rel="stylesheet" href="styles.css?v=1.19.4">
   <script>
   /* v1.9.0 Arranque vigilado: si la app no queda lista en ~4 s (error de carga, actualización a medias, base local que no
      responde, reanudación de iOS), se muestra una pantalla visible con Reintentar / Reparar en vez de una pantalla negra.
@@ -135,10 +135,11 @@
 
     <!-- Escenario -->
     <main class="stage" id="stage">
-      <button class="home-ver home-only" type="button" id="home-ver">v1.19.3</button>
+      <button class="home-ver home-only" type="button" id="home-ver">v1.19.4</button>
       <button class="vision-btn home-only" type="button" id="vision-btn" aria-label="Abrir Visión (cámara de este teléfono)">👁 VISIÓN</button>
       <div class="stage-center">
         <div class="reactor-wrap" aria-hidden="true">
+          <div class="avatar-home" id="avatar-home"></div>
           <span class="ripple"></span><span class="ripple r2"></span><span class="ripple r3"></span>
           <svg class="reactor" viewBox="0 0 200 200">
             <defs>
@@ -166,7 +167,6 @@
           </svg>
         </div>
 
-        <div class="avatar-home" id="avatar-home" aria-hidden="true"></div>
         <div class="side-info">
           <p class="state-label" id="state-label">EN ESPERA</p>
           <div class="wave only escuchando hablando flex" id="wave" aria-hidden="true"></div>
@@ -558,7 +558,7 @@
 
 <!-- Bloqueo con código -->
 <div class="lock-screen" id="lock-view" data-lock="normal" hidden>
-  <p class="lock-ver" id="lock-ver">v1.19.3</p>
+  <p class="lock-ver" id="lock-ver">v1.19.4</p>
   <main class="lock" aria-labelledby="lock-title">
     <div class="reactor-wrap" aria-hidden="true">
       <div class="avatar-lock" id="avatar-lock"></div>
@@ -654,45 +654,45 @@
 <script type="importmap">
 {
  "imports": {
-  "./js/app.js": "./js/app.js?v=1.19.3",
-  "./js/draughts.js": "./js/draughts.js?v=1.19.3",
-  "./js/cubic.js": "./js/cubic.js?v=1.19.3",
-  "./js/digest.js": "./js/digest.js?v=1.19.3",
-  "./js/facts.js": "./js/facts.js?v=1.19.3",
-  "./js/gemini.js": "./js/gemini.js?v=1.19.3",
-  "./js/lock.js": "./js/lock.js?v=1.19.3",
-  "./js/lockui.js": "./js/lockui.js?v=1.19.3",
-  "./js/logbook.js": "./js/logbook.js?v=1.19.3",
-  "./js/mail.js": "./js/mail.js?v=1.19.3",
-  "./js/media.js": "./js/media.js?v=1.19.3",
-  "./js/memory.js": "./js/memory.js?v=1.19.3",
-  "./js/notify.js": "./js/notify.js?v=1.19.3",
-  "./js/ocio.js": "./js/ocio.js?v=1.19.3",
-  "./js/panels.js": "./js/panels.js?v=1.19.3",
-  "./js/reminders.js": "./js/reminders.js?v=1.19.3",
-  "./js/robotics.js": "./js/robotics.js?v=1.19.3",
-  "./js/routes.js": "./js/routes.js?v=1.19.3",
-  "./js/shopping.js": "./js/shopping.js?v=1.19.3",
-  "./js/social.js": "./js/social.js?v=1.19.3",
-  "./js/trivia.js": "./js/trivia.js?v=1.19.3",
-  "./js/vault.js": "./js/vault.js?v=1.19.3",
-  "./js/voice.js": "./js/voice.js?v=1.19.3",
-  "./js/wake.js": "./js/wake.js?v=1.19.3",
-  "./js/weather.js": "./js/weather.js?v=1.19.3",
-  "./js/workpanels.js": "./js/workpanels.js?v=1.19.3",
-  "./js/photo.js": "./js/photo.js?v=1.19.3",
-  "./js/code.js": "./js/code.js?v=1.19.3",
-  "./js/sheet.js": "./js/sheet.js?v=1.19.3",
-  "./js/agent.js": "./js/agent.js?v=1.19.3",
-  "./js/localbrain.js": "./js/localbrain.js?v=1.19.3",
-  "./js/brain.js": "./js/brain.js?v=1.19.3",
-  "./js/avatar.js": "./js/avatar.js?v=1.19.3",
-  "./js/hud.js": "./js/hud.js?v=1.19.3",
-  "./js/vision.js": "./js/vision.js?v=1.19.3",
-  "./js/tools.js": "./js/tools.js?v=1.19.3"
+  "./js/app.js": "./js/app.js?v=1.19.4",
+  "./js/draughts.js": "./js/draughts.js?v=1.19.4",
+  "./js/cubic.js": "./js/cubic.js?v=1.19.4",
+  "./js/digest.js": "./js/digest.js?v=1.19.4",
+  "./js/facts.js": "./js/facts.js?v=1.19.4",
+  "./js/gemini.js": "./js/gemini.js?v=1.19.4",
+  "./js/lock.js": "./js/lock.js?v=1.19.4",
+  "./js/lockui.js": "./js/lockui.js?v=1.19.4",
+  "./js/logbook.js": "./js/logbook.js?v=1.19.4",
+  "./js/mail.js": "./js/mail.js?v=1.19.4",
+  "./js/media.js": "./js/media.js?v=1.19.4",
+  "./js/memory.js": "./js/memory.js?v=1.19.4",
+  "./js/notify.js": "./js/notify.js?v=1.19.4",
+  "./js/ocio.js": "./js/ocio.js?v=1.19.4",
+  "./js/panels.js": "./js/panels.js?v=1.19.4",
+  "./js/reminders.js": "./js/reminders.js?v=1.19.4",
+  "./js/robotics.js": "./js/robotics.js?v=1.19.4",
+  "./js/routes.js": "./js/routes.js?v=1.19.4",
+  "./js/shopping.js": "./js/shopping.js?v=1.19.4",
+  "./js/social.js": "./js/social.js?v=1.19.4",
+  "./js/trivia.js": "./js/trivia.js?v=1.19.4",
+  "./js/vault.js": "./js/vault.js?v=1.19.4",
+  "./js/voice.js": "./js/voice.js?v=1.19.4",
+  "./js/wake.js": "./js/wake.js?v=1.19.4",
+  "./js/weather.js": "./js/weather.js?v=1.19.4",
+  "./js/workpanels.js": "./js/workpanels.js?v=1.19.4",
+  "./js/photo.js": "./js/photo.js?v=1.19.4",
+  "./js/code.js": "./js/code.js?v=1.19.4",
+  "./js/sheet.js": "./js/sheet.js?v=1.19.4",
+  "./js/agent.js": "./js/agent.js?v=1.19.4",
+  "./js/localbrain.js": "./js/localbrain.js?v=1.19.4",
+  "./js/brain.js": "./js/brain.js?v=1.19.4",
+  "./js/avatar.js": "./js/avatar.js?v=1.19.4",
+  "./js/hud.js": "./js/hud.js?v=1.19.4",
+  "./js/vision.js": "./js/vision.js?v=1.19.4",
+  "./js/tools.js": "./js/tools.js?v=1.19.4"
  }
 }
 </script>
-<script type="module" src="js/app.js?v=1.19.3"></script>
+<script type="module" src="js/app.js?v=1.19.4"></script>
 </body>
 </html>

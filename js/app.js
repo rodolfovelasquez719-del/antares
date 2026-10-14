@@ -33,7 +33,7 @@ import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.19.3";
+const APP_VERSION = "1.19.4";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -170,7 +170,7 @@ function setEstado(e) {
 
 // v1.19: avatar sigue los estados reales: escuchando → listen, esperando respuesta → think, voz sonando → speak
 let voiceAudible = false;
-const presence = () => (["cerebro", "avatar", "ambos"].includes(config.presence) ? config.presence : "ambos"); // v1.19.3: por defecto Ambos
+const presence = () => (["cerebro", "avatar", "ambos"].includes(config.presence) ? config.presence : "ambos"); // v1.19.4: por defecto Ambos
 function paintPresence() {
   body.dataset.presencia = presence();
   const s = voiceAudible ? "speak" : estado === "escuchando" ? "listen" : estado === "hablando" ? "think" : "idle";
