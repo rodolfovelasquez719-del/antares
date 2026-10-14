@@ -141,6 +141,7 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.includes("/muestra-cerebro/")) return;
   if (url.pathname.includes("/muestra-verde/")) return;
   if (url.pathname.includes("/muestra-v119/")) return;
+  if (url.pathname.includes("/muestra-avatar-vivo/")) return;
   const isPage = req.mode === "navigate" || url.pathname.endsWith("/") || url.pathname.endsWith("/index.html");
   event.respondWith(networkFirst(req, isPage, event));
 });
