@@ -1119,3 +1119,4 @@ body.kb-open .avatar-home { width: 72px !important; }
 .lock-screen .lock-badge { z-index: 2; right: 2px !important; bottom: 2px !important; }
 .avatar-lock-ring { position: absolute; inset: -3px; border-radius: 50%; border: 2px solid rgba(0,255,156,.6); box-shadow: 0 0 16px rgba(0,255,156,.3); pointer-events: none; z-index: 1; }
 .lock-ver { position: absolute; left: 0; right: 0; bottom: calc(6px + env(safe-area-inset-bottom)); margin: 0; text-align: center; font-size: 11px; letter-spacing: 1px; color: rgba(159,212,182,.8); pointer-events: none; }
+.home-ver { position: absolute; left: 10px; top: 8px; z-index: 3; min-height: 28px; padding: 0 6px; background: none; border: 0; font-size: 11px; letter-spacing: .5px; color: rgba(185,220,200,.75); text-decoration: underline dotted; }

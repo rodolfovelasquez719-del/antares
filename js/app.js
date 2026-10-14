@@ -33,7 +33,7 @@ import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.19.2";
+const APP_VERSION = "1.19.3";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -170,7 +170,7 @@ function setEstado(e) {
 
 // v1.19: avatar sigue los estados reales: escuchando → listen, esperando respuesta → think, voz sonando → speak
 let voiceAudible = false;
-const presence = () => (["cerebro", "avatar", "ambos"].includes(config.presence) ? config.presence : "cerebro");
+const presence = () => (["cerebro", "avatar", "ambos"].includes(config.presence) ? config.presence : "ambos"); // v1.19.3: por defecto Ambos
 function paintPresence() {
   body.dataset.presencia = presence();
   const s = voiceAudible ? "speak" : estado === "escuchando" ? "listen" : estado === "hablando" ? "think" : "idle";
@@ -3004,7 +3004,8 @@ async function init() {
     }
   });
   syncViewport();
-  try { mountAvatar(document.getElementById("avatar-home"), "./assets/avatar-antares.jpg"); { const al = document.getElementById("avatar-lock"); mountAvatar(al, "./assets/avatar-lock.jpg"); al.classList.add("av-lock"); const lv = document.getElementById("lock-ver"); if (lv) lv.textContent = "v" + APP_VERSION; } Hud.mountHud(document.getElementById("stage")); paintPresence(); } catch (e) { console.warn("Antares: avatar/HUD", e); }
+  try { mountAvatar(document.getElementById("avatar-home"), "./assets/avatar-antares.jpg"); { const al = document.getElementById("avatar-lock"); mountAvatar(al, "./assets/avatar-lock.jpg"); al.classList.add("av-lock"); const lv = document.getElementById("lock-ver"); if (lv) lv.textContent = "v" + APP_VERSION; }
+    { const hv = document.getElementById("home-ver"); if (hv) { hv.textContent = "v" + APP_VERSION + " · buscar actualización"; hv.addEventListener("click", () => { hv.textContent = "Buscando…"; forceUpdate(); }); } } Hud.mountHud(document.getElementById("stage")); paintPresence(); } catch (e) { console.warn("Antares: avatar/HUD", e); }
   try {
     const ps = document.getElementById("presence-sel"); ps.value = presence();
     ps.addEventListener("change", () => { config = { ...config, presence: ps.value }; memory.saveConfig(config); paintPresence(); });
