@@ -33,7 +33,7 @@ import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.20.0";
+const APP_VERSION = "1.20.1";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -170,7 +170,9 @@ function setEstado(e) {
 
 // v1.19: avatar sigue los estados reales: escuchando → listen, esperando respuesta → think, voz sonando → speak
 let voiceAudible = false;
-const presence = () => (["cerebro", "avatar", "ambos"].includes(config.presence) ? config.presence : "ambos"); // v1.19.4: por defecto Ambos
+// v1.20.1: avatar desactivado por ahora (código y videos se conservan). Siempre Cerebro.
+const AVATAR_ENABLED = false;
+const presence = () => (AVATAR_ENABLED && ["cerebro", "avatar", "ambos"].includes(config.presence) ? config.presence : "cerebro");
 function paintPresence() {
   body.dataset.presencia = presence();
   try { Brain.setLabels(presence() === "cerebro"); } catch { /* */ }
@@ -3005,10 +3007,11 @@ async function init() {
     }
   });
   syncViewport();
-  try { mountAvatarVideo(document.getElementById("avatar-home"), "./assets/avatar-antares.jpg", "./assets/"); { const al = document.getElementById("avatar-lock"); mountAvatar(al, "./assets/avatar-lock.jpg"); al.classList.add("av-lock"); const lv = document.getElementById("lock-ver"); if (lv) lv.textContent = "v" + APP_VERSION; }
+  try { if (AVATAR_ENABLED) mountAvatarVideo(document.getElementById("avatar-home"), "./assets/avatar-antares.jpg", "./assets/"); { const al = document.getElementById("avatar-lock"); mountAvatar(al, "./assets/avatar-lock.jpg"); al.classList.add("av-lock"); const lv = document.getElementById("lock-ver"); if (lv) lv.textContent = "v" + APP_VERSION; }
     { const hv = document.getElementById("home-ver"); if (hv) { hv.textContent = "v" + APP_VERSION + " · buscar actualización"; hv.addEventListener("click", () => { hv.textContent = "Buscando…"; forceUpdate(); }); } } Hud.mountHud(document.getElementById("stage")); paintPresence(); } catch (e) { console.warn("Antares: avatar/HUD", e); }
   try {
-    const ps = document.getElementById("presence-sel"); ps.value = presence();
+    const ps = document.getElementById("presence-sel"); ps.value = presence(); { const pp = document.getElementById("presencia"); if (pp && !AVATAR_ENABLED) pp.hidden = true; }
+    if (!AVATAR_ENABLED && config.presence && config.presence !== "cerebro") { config = { ...config, presence: "cerebro" }; try { memory.saveConfig(config); } catch { /* */ } }
     ps.addEventListener("change", () => { config = { ...config, presence: ps.value }; memory.saveConfig(config); paintPresence(); });
     document.getElementById("vision-btn").addEventListener("click", () => openVision({ getKey: () => config.geminiApiKey || "", model: GEM_MODELS[0], speak: (t) => { try { voice.speak(t); } catch { /* */ } } }));
   } catch (e) { console.warn("Antares: presencia/visión", e); }

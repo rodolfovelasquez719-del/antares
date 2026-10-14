@@ -1119,9 +1119,10 @@ body.compact .hud-layer, body.kb-open .hud-layer { opacity: .45; }
 .lock-ver { position: absolute; left: 0; right: 0; bottom: calc(6px + env(safe-area-inset-bottom)); margin: 0; text-align: center; font-size: 11px; letter-spacing: 1px; color: rgba(159,212,182,.8); pointer-events: none; }
 .home-ver { align-self: center; margin: 0; padding: 2px 8px; min-height: 24px; background: none; border: 0; font-size: 10.5px; letter-spacing: .5px; color: rgba(185,220,200,.7); text-decoration: underline dotted; }
 body.compact .home-ver, body.kb-open .home-ver { display: none; }
-@media (max-height: 720px) { #stage .reactor-wrap { width: 150px; height: 150px; } .stage-center { gap: 4px; padding-top: 18px; } }
+@media (max-height: 720px) { body:not(.compact):not(.kb-open) #stage .reactor-wrap { width: 150px; height: 150px; } .stage-center { gap: 4px; padding-top: 18px; } }
 /* v1.20: ella es el centro: el cerebro (sin rótulos) queda como halo alrededor */
 [data-presencia="ambos"] #stage .reactor-wrap { width: 250px; height: 250px; }
 [data-presencia="ambos"] #stage .reactor-wrap .reactor { opacity: .35; }
 @media (max-height: 720px) { [data-presencia="ambos"] #stage .reactor-wrap { width: 150px; height: 150px; } .home-ver { min-height: 18px; padding: 0 6px; font-size: 9.5px; } }
 #stage .avatar-home.av-blocked { pointer-events: auto; }
+body.kb-open .vision-btn, body.typing .vision-btn { display: none; }
