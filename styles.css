@@ -1126,3 +1126,7 @@ body.compact .home-ver, body.kb-open .home-ver { display: none; }
 @media (max-height: 720px) { [data-presencia="ambos"] #stage .reactor-wrap { width: 150px; height: 150px; } .home-ver { min-height: 18px; padding: 0 6px; font-size: 9.5px; } }
 #stage .avatar-home.av-blocked { pointer-events: auto; }
 body.kb-open .vision-btn, body.typing .vision-btn { display: none; }
+/* v1.21: avatar 3D en el lugar del cerebro */
+#stage .reactor-wrap .av3d { position: absolute; inset: -14%; z-index: 2; pointer-events: none; }
+#stage .reactor-wrap .av3d canvas { display: block; }
+[data-presencia="avatar3d"] #stage .reactor-wrap > :not(.av3d) { visibility: hidden; }

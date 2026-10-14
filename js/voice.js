@@ -142,8 +142,8 @@ export class Voice {
         if (this.voice) { u.voice = this.voice; u.lang = this.voice.lang; } else { u.lang = "es-MX"; }
         u.rate = this.rate || 0.95; u.pitch = this.pitch || 0.8; u.volume = 1;
         let started = false;
-        u.onstart = () => { started = true; audio(true); };
-        u.onboundary = () => { audio(true); try { this.onWord && this.onWord(); } catch { /* */ } };
+        u.onstart = () => { started = true; audio(true); try { this.onChunk && this.onChunk(chunk, u.rate); } catch { /* */ } };
+        u.onboundary = (e) => { audio(true); if (e && e.name && e.name !== "word") return; let w = ""; try { w = (chunk.slice(e.charIndex || 0).match(/^\S+/) || [""])[0]; } catch { /* */ } try { this.onWord && this.onWord(w); } catch { /* */ } };
         u.onend = () => { if (this.utterId === token) next(); };
         u.onerror = (e) => {
           const code = e && e.error;

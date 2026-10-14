@@ -28,12 +28,13 @@ import * as Brain from "./brain.js";
 import * as Hud from "./hud.js";
 import { mountAvatar, mountAvatarVideo, setAvatarState } from "./avatar.js";
 import { openVision } from "./vision.js";
+import * as Av3 from "./avatar3d.js";
 import { MODELS as GEM_MODELS } from "./gemini.js";
 import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.20.1";
+const APP_VERSION = "1.21.0";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -172,12 +173,28 @@ function setEstado(e) {
 let voiceAudible = false;
 // v1.20.1: avatar desactivado por ahora (código y videos se conservan). Siempre Cerebro.
 const AVATAR_ENABLED = false;
-const presence = () => (AVATAR_ENABLED && ["cerebro", "avatar", "ambos"].includes(config.presence) ? config.presence : "cerebro");
+const presence = () => (config.presence === "avatar3d" && !av3Off ? "avatar3d" : AVATAR_ENABLED && ["avatar", "ambos"].includes(config.presence) ? config.presence : "cerebro");
 function paintPresence() {
   body.dataset.presencia = presence();
   try { Brain.setLabels(presence() === "cerebro"); } catch { /* */ }
+  if (presence() === "avatar3d") ensure3D(); else if (av3Mounted) { Av3.unmount3D(); av3Mounted = false; }
   const s = voiceAudible ? "speak" : (estado === "escuchando" || body.classList.contains("conv-on")) ? "listen" : estado === "hablando" ? "think" : "idle";
   setAvatarState(document.getElementById("avatar-home"), s);
+  try { Av3.set3DState(s); } catch { /* */ }
+}
+// v1.21: avatar 3D (carga diferida solo si se eligió en Ajustes; si falla, vuelve al cerebro)
+let av3Mounted = false, av3Vis = null, av3Off = false;
+function ensure3D() {
+  if (av3Mounted) return; av3Mounted = true;
+  const wrap = document.querySelector("#stage .reactor-wrap");
+  Av3.mount3D(wrap, { onFail: (why) => {
+    av3Mounted = false; av3Off = true;
+    // sin WebGL o muy lento: se guarda Cerebro. Si fue la red, solo por esta vez (se reintenta al abrir de nuevo).
+    if (why === "webgl" || why === "lento") { config = { ...config, presence: "cerebro" }; try { memory.saveConfig(config); } catch { /* */ } const ps = document.getElementById("presence-sel"); if (ps) ps.value = "cerebro"; }
+    paintPresence(); try { chatNotice(why === "webgl" ? "Este teléfono no permite 3D; volví al cerebro." : "El avatar 3D no cargó bien; volví al cerebro."); } catch { /* */ }
+  } });
+  clearInterval(av3Vis);
+  av3Vis = setInterval(() => { if (!av3Mounted) { clearInterval(av3Vis); return; } Av3.setVisible(!!(wrap && wrap.offsetParent && wrap.offsetWidth > 40 && els.settingsView.hidden)); }, 800);
 }
 function refreshBrainCounts() {
   if (!isUnlocked()) { Brain.setCounts(null); Hud.setHudCounts(null); return; }
@@ -2190,7 +2207,8 @@ function handleWakeCommand(text) {
   if (!sendMessage(t, [], { speak: micSpeaks(), spoken: true })) { setVista("chat"); if (!client.isConfigured()) voice.speak("Primero configure su API key."); setTimeout(maybeResumeWake, 600); return; }
   Promise.resolve(currentJob).finally(() => setTimeout(maybeResumeWake, 300));
 }
-voice.onWord = () => Brain.word();
+voice.onWord = (w) => { Brain.word(); try { Av3.onWord(w); } catch { /* */ } };
+voice.onChunk = (t, r) => { try { Av3.onChunk(t, r); } catch { /* */ } };
 voice.onAudio = (on) => { Brain.setSpeaking(on); voiceAudible = !!on; try { Hud.setHudSpeaking(on); paintPresence(); } catch { /* */ } }; // v1.15: el cerebro sigue el sonido real (onstart/onboundary/onend)
 voice.onSpeaking = (on) => {
   const sv = document.getElementById("stop-voice"); if (sv) sv.hidden = !on;
@@ -3010,8 +3028,8 @@ async function init() {
   try { if (AVATAR_ENABLED) mountAvatarVideo(document.getElementById("avatar-home"), "./assets/avatar-antares.jpg", "./assets/"); { const al = document.getElementById("avatar-lock"); mountAvatar(al, "./assets/avatar-lock.jpg"); al.classList.add("av-lock"); const lv = document.getElementById("lock-ver"); if (lv) lv.textContent = "v" + APP_VERSION; }
     { const hv = document.getElementById("home-ver"); if (hv) { hv.textContent = "v" + APP_VERSION + " · buscar actualización"; hv.addEventListener("click", () => { hv.textContent = "Buscando…"; forceUpdate(); }); } } Hud.mountHud(document.getElementById("stage")); paintPresence(); } catch (e) { console.warn("Antares: avatar/HUD", e); }
   try {
-    const ps = document.getElementById("presence-sel"); ps.value = presence(); { const pp = document.getElementById("presencia"); if (pp && !AVATAR_ENABLED) pp.hidden = true; }
-    if (!AVATAR_ENABLED && config.presence && config.presence !== "cerebro") { config = { ...config, presence: "cerebro" }; try { memory.saveConfig(config); } catch { /* */ } }
+    const ps = document.getElementById("presence-sel"); ps.value = presence(); 
+    if (!AVATAR_ENABLED && config.presence && !["cerebro", "avatar3d"].includes(config.presence)) { config = { ...config, presence: "cerebro" }; try { memory.saveConfig(config); } catch { /* */ } }
     ps.addEventListener("change", () => { config = { ...config, presence: ps.value }; memory.saveConfig(config); paintPresence(); });
     document.getElementById("vision-btn").addEventListener("click", () => openVision({ getKey: () => config.geminiApiKey || "", model: GEM_MODELS[0], speak: (t) => { try { voice.speak(t); } catch { /* */ } } }));
   } catch (e) { console.warn("Antares: presencia/visión", e); }
