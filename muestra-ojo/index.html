@@ -22,7 +22,7 @@ h1{margin:0;font-size:15px;letter-spacing:.25em}h1 b{color:var(--r)}
 .tick{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top) + 58px);z-index:7;overflow:hidden;white-space:nowrap;font-size:10px;letter-spacing:.15em;border-top:1px solid rgba(34,255,154,.25);border-bottom:1px solid rgba(34,255,154,.25);background:rgba(0,20,12,.55);pointer-events:none}
 .tick span{display:inline-block;padding:3px 0;animation:mq 38s linear infinite;padding-left:100%}
 @keyframes mq{to{transform:translateX(-100%)}}
-.stat{position:fixed;left:16px;top:calc(env(safe-area-inset-top) + 84px);z-index:7;font-size:10px;line-height:1.6;pointer-events:none;background:rgba(0,20,12,.5);padding:6px 8px;border-left:2px solid var(--g)}
+.stat{position:fixed;left:16px;top:calc(env(safe-area-inset-top) + 128px);z-index:7;font-size:10px;line-height:1.6;pointer-events:none;background:rgba(0,20,12,.5);padding:6px 8px;border-left:2px solid var(--g)}
 .stat .no{color:var(--r)}
 nav{position:fixed;left:8px;right:8px;bottom:calc(env(safe-area-inset-bottom) + 14px);z-index:8;display:flex;gap:6px;overflow-x:auto;padding:4px 12px;scrollbar-width:none}
 nav::-webkit-scrollbar{display:none}
@@ -30,30 +30,49 @@ nav button{flex:0 0 auto;background:rgba(0,25,15,.8);color:var(--g);border:1px s
 nav button.off{color:#5b7d6c;border-color:#2b4a3a;text-decoration:line-through}
 nav button.go{border-color:var(--r);color:var(--r)}
 .city{color:#22ff9a;font-size:10px;white-space:nowrap;pointer-events:auto;cursor:pointer;transform:translate(-5px,-50%);text-shadow:0 0 4px #000,0 0 8px #000;display:flex;align-items:center;gap:4px;padding:6px 4px}.city i{width:8px;height:8px;border-radius:50%;background:#22ff9a;box-shadow:0 0 8px #22ff9a}.city b{color:#fff;font-weight:600}
+
+#map{position:fixed;inset:0;z-index:1;opacity:0;pointer-events:none;transition:opacity .7s ease;background:#010805}
+body.mapa #map{opacity:1;pointer-events:auto}body.mapa #globe{opacity:0;pointer-events:none}#globe{transition:opacity .7s ease}
+.maplibregl-ctrl-attrib{font-size:9px!important;background:rgba(0,0,0,.55)!important;color:#7fb79a!important}.maplibregl-ctrl-attrib a{color:#9fd!important}
+.maplibregl-ctrl-bottom-right{bottom:calc(env(safe-area-inset-bottom) + 64px)!important}
+.bus{position:fixed;left:16px;right:16px;top:calc(env(safe-area-inset-top) + 84px);z-index:10;display:flex;gap:6px}
+.bus input{flex:1;min-width:0;height:36px;background:rgba(0,20,12,.85);border:1px solid rgba(34,255,154,.6);color:#d9ffe9;font:inherit;font-size:16px;padding:0 10px;border-radius:4px;outline:none}
+.bus input::placeholder{color:#5b8d74}
+.bus button{flex:0 0 auto;height:36px;background:rgba(0,25,15,.85);border:1px solid var(--r);color:var(--r);font:inherit;font-size:11px;border-radius:4px;padding:0 10px}
+.res{position:fixed;left:16px;right:16px;top:calc(env(safe-area-inset-top) + 124px);z-index:11;background:rgba(0,18,11,.96);border:1px solid var(--g);display:none;max-height:45vh;overflow:auto}
+.res.on{display:block}.res button{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid rgba(34,255,154,.2);color:#d9ffe9;font:inherit;font-size:12px;padding:9px 10px}
+.res small{color:#7fb79a}
+.yo{width:18px;height:18px;border-radius:50%;background:#3ad6ff;border:2px solid #fff;box-shadow:0 0 0 0 rgba(58,214,255,.7);animation:yo 1.8s infinite;transform:translate(-50%,-50%)}
+@keyframes yo{70%{box-shadow:0 0 0 18px rgba(58,214,255,0)}100%{box-shadow:0 0 0 0 rgba(58,214,255,0)}}
+.pin{width:14px;height:14px;background:var(--r);border:2px solid #fff;border-radius:50% 50% 50% 0;transform:translate(-50%,-100%) rotate(-45deg);box-shadow:0 0 10px var(--r)}
+.aviso{position:fixed;left:16px;right:16px;top:calc(env(safe-area-inset-top) + 124px);z-index:12;background:rgba(40,0,8,.94);border:1px solid var(--r);color:#ffd7de;padding:10px 12px;font-size:12px;display:none}.aviso.on{display:block}
+body.app .clk,body.app .sub{display:none}
 .card{position:fixed;left:16px;right:16px;bottom:calc(env(safe-area-inset-bottom) + 70px);z-index:9;background:rgba(0,18,11,.92);border:1px solid var(--g);padding:12px 14px;display:none;box-shadow:0 0 18px rgba(34,255,154,.25)}
 .card.on{display:block}.card h2{margin:0 0 6px;font-size:14px;color:var(--r);letter-spacing:.1em}
 .card table{width:100%;border-collapse:collapse;font-size:12px}.card td{padding:2px 0}.card td:first-child{opacity:.7;width:42%}
 .card .x{position:absolute;right:8px;top:6px;background:none;border:0;color:var(--g);font-size:20px}
 .card .dem{color:#ffc857;font-size:10px;margin-top:6px}
-.legal{position:fixed;right:16px;top:calc(env(safe-area-inset-top) + 84px);z-index:7;font-size:9px;opacity:.6;text-align:right;max-width:150px;pointer-events:none}
+.legal{position:fixed;right:16px;top:calc(env(safe-area-inset-top) + 128px);z-index:7;font-size:9px;opacity:.6;text-align:right;max-width:150px;pointer-events:none}
 </style></head><body>
-<div id="globe"></div><div class="vig"></div><div class="scan"></div>
+<div id="globe"></div><div id="map"></div><div class="vig"></div><div class="scan"></div>
 <div class="br tl"></div><div class="br tr"></div><div class="br bl"></div><div class="br brr"></div><div class="cross"></div>
 <header><div><h1>ANTARES · <b>OJO</b></h1><div class="sub">MUESTRA · SOLO DATOS PÚBLICOS</div></div><div class="clk" id="clk">--:--:--</div></header>
 <div class="tick"><span id="tick">PROCESANDO FLUJO DE DATOS ◆ INICIANDO ENLACES ◆</span></div>
+<div class="bus"><input id="q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Buscar lugar o dirección…" aria-label="Buscar lugar"><button id="yo" type="button">◉ MI UBICACIÓN</button></div><div class="res" id="res"></div><div class="aviso" id="aviso"></div>
 <div class="stat" id="stat"></div>
 <div class="legal">Fuentes abiertas: USGS · CelesTrak · Open-Meteo · RainViewer · ADS-B público. Sin cámaras ni personas.</div>
 <div class="card" id="card"><button class="x" id="cx" aria-label="Cerrar">×</button><h2 id="ct"></h2><table id="cb"></table><div class="dem" id="cd"></div></div>
 <nav id="nav">
 <button class="go" data-go="cr">◎ COSTA RICA</button><button class="go" data-go="gam">◎ GAM</button><button class="go" data-go="mundo">◯ MUNDO</button>
-<button data-l="avi">✈ AVIONES</button><button data-l="sis">◉ SISMOS</button><button data-l="sat">✦ SATÉLITES</button><button data-l="cli">☂ CLIMA</button><button data-l="rad">▦ RADAR</button><button data-l="rut">➝ RUTAS (EJEMPLO)</button>
+<button data-l="avi">✈ AVIONES</button><button data-l="sis">◉ SISMOS</button><button data-l="sat">✦ SATÉLITES</button><button data-l="cli">☂ CLIMA</button><button data-l="rad">▦ RADAR</button><button data-l="rut">➝ RUTAS (EJEMPLO)</button><button data-l="sate" class="off">🛰 VISTA SATÉLITE</button><button data-l="b3d">▲ EDIFICIOS 3D</button>
 </nav>
 <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.46.2/dist/globe.gl.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js"></script>
 <script>
 "use strict";
 const $=s=>document.querySelector(s);
-const on={avi:true,sis:true,sat:true,cli:true,rad:false,rut:true};
+const on={avi:true,sis:true,sat:true,cli:true,rad:false,rut:true,sate:false,b3d:true};
+const APP=/[?&]app=1/.test(location.search);if(APP)document.body.classList.add("app");
 const st={avi:"…",sis:"…",sat:"…",cli:"…",rad:"apagado",rut:"…"};
 const D={avi:[],sis:[],sat:[],cli:[],rut:[]};
 const NAMES={avi:"AVIONES",sis:"SISMOS",sat:"SATÉLITES",cli:"CLIMA",rad:"RADAR",rut:"RUTAS"};
@@ -96,7 +115,7 @@ function render(){
   .ringMaxRadius(d=>d.mag*.45).ringPropagationSpeed(d=>.3+d.mag*.12).ringRepeatPeriod(d=>Math.max(900,3600-d.mag*400)).ringResolution(lowEnd?24:48);
  const parts=[];if(on.avi&&D.avi.length)parts.push(Object.assign(D.avi.slice(),{c:"#ffc857",s:7}));if(on.sat&&D.sat.length)parts.push(Object.assign(D.sat.slice(),{c:"#9fe8ff",s:5}));if(on.sat&&D.issPt)parts.push(Object.assign([D.issPt],{c:"#ff3b5c",s:14}));
  G.particlesData(parts).particleLat("lat").particleLng("lng").particleAltitude("alt").particlesColor(p=>p.c).particlesSize(p=>p.s).particlesSizeAttenuation(false).particleLabel(()=>"").onParticleClick(clickObj);
- G.htmlElementsData(on.cli?D.cli:[]).htmlLat("lat").htmlLng("lng").htmlAltitude(.005).htmlElement(d=>{const e=document.createElement("div");e.className="city";e.innerHTML=`<i></i>${esc(d.name)} <b>${d.t}°</b>`;e.onclick=()=>clickObj(d);return e}).htmlTransitionDuration(0);
+ G.htmlElementsData([...(on.cli?D.cli:[]),...(D.yo?[D.yo]:[]),...(D.busq?[D.busq]:[])]).htmlLat("lat").htmlLng("lng").htmlAltitude(.005).htmlElement(d=>{const e=document.createElement("div");if(d.k==="yo"){e.className="yo";return e}if(d.k==="busq"){e.className="pin";e.title=d.name;return e}e.className="city";e.innerHTML=`<i></i>${esc(d.name)} <b>${d.t}°</b>`;e.onclick=()=>clickObj(d);return e}).htmlTransitionDuration(0);
  G.labelsData([...(on.sat&&D.issPt?[{...D.issPt,name:"ISS"}]:[])]).labelLat("lat").labelLng("lng").labelAltitude(d=>d.k==="iss"?d.alt:.005).labelText(d=>d.k==="iss"?"ISS":d.name.normalize("NFD").replace(/[\u0300-\u036f]/g,"")+" "+d.t).labelSize(d=>d.k==="iss"?1.2:.1).labelDotRadius(0).labelColor(d=>d.k==="iss"?"#ff3b5c":"#22ff9a").labelResolution(2);
  const paths=[...(on.rut?D.rut:[]),...(on.sat&&D.iss?[D.iss]:[])];
  G.pathsData(paths).pathPoints("pts").pathPointLat(p=>p[0]).pathPointLng(p=>p[1]).pathPointAlt(p=>p[2]||.004)
@@ -110,5 +129,7 @@ function clickObj(o){
  else if(o.k==="sis")card("◉ SISMO M"+o.mag.toFixed(1),[["Lugar",esc(o.place)],["Hora",new Date(o.time).toLocaleString("es-CR")],["Profundidad",o.depth.toFixed(0)+" km"],["Fuente","USGS"]]);
 }
 </script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <script src="ojo.js"></script>
+<script src="mapa.js"></script>
 </body></html>

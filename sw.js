@@ -1,6 +1,6 @@
 // Antares Web - Service worker: abre rápido y sin conexión, y recibe las versiones nuevas.
 // Las llamadas a Gemini, Open-Meteo y otros dominios NO se interceptan ni se guardan.
-const VERSION = "antares-v1.21.0";
+const VERSION = "antares-v1.22.0";
 const SHELL = [
   "./",
   "./index.html",
@@ -32,6 +32,7 @@ const SHELL = [
   "./js/avatar.js",
   "./js/hud.js",
   "./js/vision.js",
+  "./js/ojo.js",
   "./js/avatar3d.js",
   "./assets/avatar-antares.jpg",
   "./assets/avatar-lock.jpg",

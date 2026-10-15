@@ -5,18 +5,26 @@ const log=t=>{ticker.push(t);paintStat()};
 const BB={lamin:5,lomin:-93,lamax:18.5,lomax:-76}; // Centroamérica
 
 // 1) Aviones: OpenSky anónimo -> adsb.lol (respaldo)
+const RAW="https://raw.githubusercontent.com/rodolfovelasquez719-del/antares/datos/aviones.json";
+let aviT=0;
+function hace(){if(!aviT)return"";const m=Math.round((Date.now()-aviT)/60000);return m<1?"actualizado hace <1 min":"actualizado hace "+m+" min"}
 async function aviones(){
+  // 1º: copia que guarda cada ~10 min un GitHub Action (ADS-B abierto, del lado del servidor)
+  try{
+    const d=await getJ(RAW+"?t="+Math.floor(Date.now()/60000),10000);
+    if(!d.ac||!d.ac.length)throw 0;
+    aviT=d.t;
+    D.avi=d.ac.map(a=>({k:"avi",cs:a.cs,pais:a.pais||(a.reg?"Matrícula "+a.reg:"—"),tipo:a.tipo,lat:a.lat,lng:a.lng,altm:a.altm,v:a.v,hdg:a.hdg,src:(a.src||d.fuente)+" · "+hace(),alt:Math.min(.06,.004+(a.altm||0)/12000*.05)}));
+  }catch(e0){
   try{
     const d=await getJ(`https://opensky-network.org/api/states/all?lamin=${BB.lamin}&lomin=${BB.lomin}&lamax=${BB.lamax}&lomax=${BB.lomax}`,10000);
-    D.avi=(d.states||[]).filter(s=>s[5]!=null&&s[6]!=null&&!s[8]).map(s=>({k:"avi",cs:(s[1]||"").trim(),pais:s[2],lng:s[5],lat:s[6],altm:s[7]??s[13],v:s[9]!=null?s[9]*3.6:null,hdg:s[10],src:"OpenSky Network",alt:Math.min(.06,.004+(s[7]||0)/12000*.05)}));
-  }catch(e){
-    try{
-      let d;try{d=await getJ("https://api.adsb.lol/v2/lat/11/lon/-85/dist/250",8000)}catch{d=await getJ("https://opendata.adsb.fi/api/v2/lat/11/lon/-85/dist/250",8000)}
-      D.avi=(d.ac||d.aircraft||[]).filter(a=>a.lat!=null&&a.alt_baro!=="ground").map(a=>({k:"avi",cs:(a.flight||a.r||"").trim(),pais:a.r?"Matrícula "+a.r:"—",lng:a.lon,lat:a.lat,altm:typeof a.alt_baro==="number"?a.alt_baro*.3048:null,v:a.gs!=null?a.gs*1.852:null,hdg:a.track,src:"ADS-B abierto (adsb.lol / adsb.fi)",alt:Math.min(.06,.004+((a.alt_baro||0)*.3048)/12000*.05)}));
-    }catch(e2){st.avi=NO;D.avi=[];paintStat();render();return}
+    aviT=Date.now();
+    D.avi=(d.states||[]).filter(s=>s[5]!=null&&s[6]!=null&&!s[8]).map(s=>({k:"avi",cs:(s[1]||"").trim(),pais:s[2],lng:s[5],lat:s[6],altm:s[7]??s[13],v:s[9]!=null?s[9]*3.6:null,hdg:s[10],src:"OpenSky Network (en vivo)",alt:Math.min(.06,.004+(s[7]||0)/12000*.05)}));
+  }catch(e){st.avi=NO;D.avi=[];paintStat();render();window.Mapa&&Mapa.sync();return}
   }
-  st.avi=D.avi.length+" en vuelo";log(D.avi.length+" AERONAVES SOBRE CENTROAMÉRICA");render();
+  st.avi=D.avi.length+" · "+hace();log(D.avi.length+" AERONAVES SOBRE CENTROAMÉRICA");render();window.Mapa&&Mapa.sync();
 }
+setInterval(()=>{if(aviT&&D.avi.length){st.avi=D.avi.length+" · "+hace();paintStat()}},60000);
 // 2) Sismos: USGS semana
 async function sismos(){
   try{
@@ -26,7 +34,7 @@ async function sismos(){
     st.sis=D.sis.length+" (7 días, M2.5+)";log(`SISMOS 7D: ${D.sis.length} · CERCA DE CR: ${cr.length}`);
     const big=D.sis.reduce((a,b)=>b.mag>a.mag?b:a,{mag:0});if(big.mag)log(`MAYOR: M${big.mag.toFixed(1)} ${String(big.place).toUpperCase()}`);
   }catch(e){st.sis=NO;D.sis=[]}
-  paintStat();render();
+  paintStat();render();window.Mapa&&Mapa.sync();
 }
 // 3) Satélites + ISS: CelesTrak + satellite.js
 let SATS=[],ISS=null;
@@ -65,7 +73,7 @@ async function clima(){
     D.cli=d.map((r,i)=>({k:"cli",name:CIUD[i][0],lat:CIUD[i][1],lng:CIUD[i][2],t:Math.round(r.current.temperature_2m),p:r.current.precipitation,w:Math.round(r.current.wind_speed_10m),pp:r.hourly?.precipitation_probability?.[0]??"—"}));
     st.cli=D.cli.length+" ciudades";const a=D.cli[0];log(`ALAJUELA ${a.t}°C · LLUVIA ${a.p} MM · PROB ${a.pp}%`);
   }catch(e){st.cli=NO;D.cli=[]}
-  paintStat();render();
+  paintStat();render();window.Mapa&&Mapa.sync();
 }
 // 4b) Radar: RainViewer (mosaicos zoom 6 sobre Centroamérica, como capa en el globo)
 let radarTiles=null;
@@ -75,7 +83,7 @@ async function radar(){
   st.rad="cargando…";paintStat();
   try{
     const m=await getJ("https://api.rainviewer.com/public/weather-maps.json");
-    const fr=m.radar.past[m.radar.past.length-1];const z=6;
+    const fr=m.radar.past[m.radar.past.length-1];const z=6;window.RV=m.host+fr.path;
     const Mat=G.globeMaterial().constructor,Tex=(G.globeMaterial().map||{}).constructor;
     if(!Tex)throw Error("sin textura");
     const list=[];
@@ -101,8 +109,8 @@ D.rut=[
 st.rut=D.rut.length+" (ejemplo)";
 
 // ---------- controles ----------
-document.querySelectorAll("nav [data-l]").forEach(b=>{const k=b.dataset.l;b.classList.toggle("off",!on[k]);b.onclick=()=>{on[k]=!on[k];b.classList.toggle("off",!on[k]);if(k==="rad"){on.rad?radar():(G.tilesData([]),st.rad="apagado",paintStat())}else render()}});
-document.querySelectorAll("nav [data-go]").forEach(b=>b.onclick=()=>G.pointOfView(b.dataset.go==="cr"?CR:b.dataset.go==="gam"?{lat:9.99,lng:-84.17,altitude:.035}:{lat:10,lng:-70,altitude:2.8},2200));
+document.querySelectorAll("nav [data-l]").forEach(b=>{const k=b.dataset.l;b.classList.toggle("off",!on[k]);b.onclick=()=>{on[k]=!on[k];b.classList.toggle("off",!on[k]);window.Mapa&&Mapa.sync();if(k==="sate"||k==="b3d"){if(on[k]&&window.Mapa&&!Mapa.activo())Mapa.fly(G.pointOfView().lat,G.pointOfView().lng,k==="b3d"?15:11);return}if(k==="rad"){on.rad?radar():(G.tilesData([]),st.rad="apagado",paintStat())}else render()}});
+document.querySelectorAll("nav [data-go]").forEach(b=>b.onclick=()=>{const g=b.dataset.go;if(g==="gam")return Mapa.fly(9.99,-84.17,11.5);Mapa.salir();G.pointOfView(g==="cr"?CR:{lat:10,lng:-70,altitude:2.8},2200)});
 const ctl=G.controls();ctl.minDistance=101;ctl.zoomSpeed=1.2;ctl.enableDamping=true;
 paintStat();render();
 aviones();sismos();satelites();clima();
