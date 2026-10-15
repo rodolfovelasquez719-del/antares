@@ -142,5 +142,6 @@ window.Mapa=(function(){
   $("#q").addEventListener("input",()=>{clearTimeout(qt);qt=setTimeout(()=>buscar(false),900)});
   $("#q").addEventListener("keydown",e=>{if(e.key==="Enter"){clearTimeout(qt);buscar(true)}});
   document.addEventListener("click",e=>{if(!e.target.closest(".res,.bus"))res.classList.remove("on")});
+  const q0=new URLSearchParams(location.search).get("q");if(q0){$("#q").value=q0;setTimeout(()=>buscar(true),2500)}
   return{sync,fly,salir:()=>salir(false),activo:()=>activo};
 })();
