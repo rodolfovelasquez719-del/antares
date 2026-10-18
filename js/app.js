@@ -30,12 +30,13 @@ import { mountAvatar, mountAvatarVideo, setAvatarState } from "./avatar.js";
 import { openVision } from "./vision.js";
 import { OJO_ENABLED, openOjo, closeOjo, isOjoOpen } from "./ojo.js";
 import * as Av3 from "./avatar3d.js";
+import * as Desk from "./desktop.js";
 import { MODELS as GEM_MODELS } from "./gemini.js";
 import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.22.0";
+const APP_VERSION = "1.23.0";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -202,6 +203,7 @@ function refreshBrainCounts() {
   const n = (k) => { try { const v = memory.getData(k); return Array.isArray(v) ? v.length : 0; } catch { return 0; } };
   const c = { Recuerdos: n("antares.facts.v1"), Recordatorios: n(Reminders.K_REMINDERS), Compras: n(Shopping.K_SHOPPING), Rutas: n(Logbook.K_LOG), Trabajo: n(Logbook.K_LOG) };
   Brain.setCounts(c); Hud.setHudCounts(c);
+  try { Desk.paintCards(); } catch { /* */ }
 }
 
 function setVista(v) {
@@ -212,7 +214,7 @@ function setVista(v) {
 function hasMessages() { return !!els.messages.querySelector(".msg, .error-card"); }
 
 function updateLayout() {
-  const compact = estado === "hablando" || estado === "error" || (estado === "reposo" && vista === "chat");
+  const compact = !Desk.isDesk() && (estado === "hablando" || estado === "error" || (estado === "reposo" && vista === "chat"));
   body.classList.toggle("compact", compact);
   const showingChat = compact;
   els.toggleChat.setAttribute("aria-pressed", String(showingChat));
@@ -326,7 +328,7 @@ function syncViewport() {
   const ref = vpBase.get(w);
   const near = isNearBottom();
   const kb = Math.max(0, Math.round(ref - h));
-  const open = kb > 120 || window.innerHeight - h > 120;
+  const open = !Desk.isDesk() && (kb > 120 || window.innerHeight - h > 120);
   document.documentElement.style.setProperty("--app-h", `${Math.round(h)}px`);
   document.documentElement.style.setProperty("--kb", `${open ? kb : 0}px`);
   els.app.style.top = `${Math.round(top)}px`;
@@ -1562,7 +1564,14 @@ els.input.addEventListener("keydown", (ev) => {
     ev.preventDefault();
     if (busy) return;
     els.form.requestSubmit ? els.form.requestSubmit() : els.form.dispatchEvent(new Event("submit", { cancelable: true }));
+    return;
   }
+  if (!Desk.isDesk()) return;
+  if (ev.key === "ArrowUp" && !els.input.value && !ev.shiftKey) {
+    const last = [...els.messages.querySelectorAll(".msg.user .bubble")].pop();
+    const t = last ? (last.innerText || "").trim() : "";
+    if (t) { ev.preventDefault(); els.input.value = t; els.input.dispatchEvent(new Event("input", { bubbles: true })); els.input.setSelectionRange(t.length, t.length); }
+  } else if (ev.key === "Escape" && els.input.value) { ev.preventDefault(); ev.stopPropagation(); els.input.value = ""; els.input.dispatchEvent(new Event("input", { bubbles: true })); }
 });
 els.input.addEventListener("focus", () => { scrollToBottom(false); setTimeout(() => scrollToBottom(false), 350); });
 
@@ -3038,6 +3047,7 @@ async function init() {
     document.getElementById("vision-btn").addEventListener("click", () => openVision({ getKey: () => config.geminiApiKey || "", model: GEM_MODELS[0], speak: (t) => { try { voice.speak(t); } catch { /* */ } } }));
   } catch (e) { console.warn("Antares: presencia/visión", e); }
   try { Brain.mountBrain(document.querySelector("#stage .reactor-wrap")); } catch (e) { console.warn("Antares: cerebro 3D", e); }
+  try { initDesk(); } catch (e) { console.warn("Antares: escritorio", e); }
   setupServiceWorker();
   await loadMetaSafe();
   if (Lock.hasPin()) {
@@ -3126,3 +3136,40 @@ init().catch((e) => {
   setTimeout(() => { if (useLocal() && LB.isDownloaded() && document.visibilityState === "visible") LB.load().catch(() => {}); }, 2500);
   paint();
 })();
+
+// ---------- v1.23: diseño de computadora ----------
+function deskSummary() {
+  if (!isUnlocked()) return null;
+  const now = Date.now(), end = new Date(); end.setHours(23, 59, 59, 999);
+  let up = []; try { up = Reminders.upcoming(now); } catch { /* */ }
+  const hoy = up.filter((r) => r.at <= end.getTime());
+  const prox = up[0];
+  let items = []; try { items = Shopping.loadItems().filter((i) => !i.bought); } catch { /* */ }
+  let log = []; try { log = Logbook.loadLog(); } catch { /* */ }
+  const hoyISO = new Date(now - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const rutasHoy = log.filter((e) => e.date === hoyISO);
+  const ult = rutasHoy[0] || log.slice().sort((x, y) => String(y.date).localeCompare(String(x.date)))[0];
+  let facts = 0; try { facts = (memory.getFacts() || []).length; } catch { /* */ }
+  const hora = (t) => new Date(t).toLocaleTimeString("es-CR", { hour: "numeric", minute: "2-digit" });
+  return [
+    { label: "RECORDATORIOS HOY", n: hoy.length, sub: prox ? `Próximo: ${prox.title} · ${prox.at <= end.getTime() ? hora(prox.at) : Reminders.formatWhen(prox.at, now)}` : "Sin pendientes", panel: "recordatorios" },
+    { label: "COMPRAS", n: items.length, sub: items.length ? items.slice(0, 3).map((i) => i.name).join(", ") + (items.length > 3 ? "…" : "") : "Lista vacía", panel: "compras" },
+    { label: "RUTAS", n: rutasHoy.length || log.length, sub: ult ? `${rutasHoy.length ? "Hoy" : "Última"}: ${ult.name}${ult.km != null ? " · " + ult.km + " km" : ""}` : "Sin rutas registradas", panel: "bitacora" },
+    { label: "RECUERDOS", n: facts, sub: "Guardados en este equipo", panel: "recordatorios" },
+  ];
+}
+function initDesk() {
+  Desk.initDesktop({
+    version: APP_VERSION,
+    ojo: OJO_ENABLED ? () => openOjo() : null,
+    vision: () => document.getElementById("vision-btn").click(),
+    settings: () => { if (panelOpen) { goHome(); setTimeout(() => openSettings(), 400); } else openSettings(); }, // espera el «atrás» del historial
+    checkUpdate: () => document.getElementById("home-ver").click(),
+    panel: (name) => showPanel(name),
+    tab: (s) => selectTab(s),
+    summary: deskSummary,
+    focusInput: () => { closeSettingsIfOpen(); if (panelOpen) goHome(); setTimeout(() => els.input.focus(), 30); },
+    onChange: () => { try { updateLayout(); syncViewport(); } catch { /* */ } },
+  });
+  setInterval(() => { if (Desk.isDesk()) Desk.paintCards(); }, 60000);
+}

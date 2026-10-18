@@ -1137,3 +1137,92 @@ body.kb-open .vision-btn, body.typing .vision-btn { display: none; }
 .ojo-view iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .ojo-cerrar { position: absolute; z-index: 2; top: calc(env(safe-area-inset-top) + 12px); right: 14px; min-height: 36px; padding: 0 14px; font: 600 12px var(--font-hud, monospace); letter-spacing: 1px; color: #fff; background: rgba(255,45,74,.88); border: 1px solid #ff8a9b; border-radius: 10px; }
 body.kb-open .ojo-btn, body.typing .ojo-btn { display: none; }
+
+/* ======================================================================
+   v1.23: diseño de computadora. TODO va bajo body.desk (lo pone js/desktop.js
+   solo en pantallas >= 1024 px). El teléfono no usa ninguna de estas reglas.
+   ====================================================================== */
+.desk-only { display: none; }
+body.desk .app { max-width: none; inset: 0; height: 100vh; display: grid; grid-template-columns: 236px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+body.desk .app > .view { grid-column: 2; grid-row: 1; min-width: 0; }
+/* barra lateral = la misma barra de pestañas, de pie */
+body.desk .tabbar { grid-column: 1; grid-row: 1; display: flex !important; flex-direction: column; gap: 4px; padding: 16px 12px; border-top: 0; border-right: 1px solid var(--line); box-shadow: none; background: linear-gradient(180deg, rgba(6,20,14,.97), rgba(3,10,7,.97)); overflow-y: auto; }
+body.desk .tabbar .desk-only { display: flex; }
+body.desk .desk-brand { align-items: center; gap: 12px; padding: 4px 8px 16px; margin-bottom: 8px; border-bottom: 1px solid var(--line-soft); }
+body.desk .desk-brand b { display: block; font-family: var(--font-hud); font-size: 17px; letter-spacing: 4px; color: var(--cyan); }
+body.desk .desk-brand small { color: var(--muted); font-size: 13px; }
+body.desk .tab { flex: none; flex-direction: row; justify-content: flex-start; gap: 12px; min-height: 44px; padding: 0 12px; font-size: 16.5px; border: 1px solid transparent; transition: background .15s, border-color .15s, color .15s; }
+body.desk .tab svg { width: 20px; height: 20px; }
+body.desk .tab:hover { background: rgba(0,255,156,.06); border-color: var(--line-soft); color: var(--text); }
+body.desk .tab[aria-current="page"] { background: linear-gradient(90deg, rgba(255,45,74,.16), rgba(255,45,74,.02)); border-color: var(--line); color: #fff; box-shadow: inset 3px 0 0 var(--accent); }
+body.desk .tab[aria-current="page"]::before { display: none; }
+body.desk .tab .desk-kbd { margin-left: auto; font: 10px var(--font-read); color: var(--dim); border: 1px solid var(--line-soft); border-radius: 4px; padding: 1px 5px; white-space: nowrap; }
+body.desk .desk-extra { flex: 1; flex-direction: column; gap: 4px; min-height: 0; }
+body.desk .desk-sec { margin: 14px 10px 4px; font-family: var(--font-hud); font-size: 9.5px; letter-spacing: 2.5px; color: var(--dim); }
+body.desk .desk-foot { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 4px; }
+body.desk .desk-ver { background: none; border: 0; text-align: left; padding: 4px 12px; font-size: 12px; color: var(--dim); text-decoration: underline dotted; cursor: pointer; }
+body.desk .desk-ver:hover { color: var(--text); }
+/* la barra no se esconde en escritorio */
+body.desk #settings-view:not([hidden]) ~ .tabbar, body.desk.typing .tabbar, body.desk.kb-open .tabbar { display: flex !important; }
+body.desk.driving .tabbar { display: none !important; }
+body.desk.driving .app { grid-template-columns: 0 minmax(0, 1fr); }
+
+/* Inicio: cerebro a la izquierda, conversación grande a la derecha */
+body.desk #chat-view { display: grid; grid-template-columns: minmax(340px, 37%) minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto auto auto; column-gap: 18px; padding: 0 20px 16px; }
+body.desk #chat-view > .topbar { grid-column: 1 / -1; grid-row: 1; padding: 12px 4px 8px; }
+body.desk #chat-view > .topbar .brand { visibility: hidden; }
+body.desk #toggle-chat { display: none; }
+body.desk #hud { grid-column: 1 / -1; grid-row: 2; margin: 0 0 14px; }
+body.desk #chat-view > .wake-status { grid-column: 2; grid-row: 2; justify-self: center; align-self: end; margin: 0 0 -6px; z-index: 2; }
+body.desk #stage, body.desk #chat-view .dock { display: contents; }
+/* marcos de los dos paneles */
+body.desk #chat-view::before, body.desk #chat-view::after { content: ""; grid-row: 3 / 7; border: 1px solid var(--line); border-radius: 16px; background: linear-gradient(170deg, rgba(10,29,20,.88), rgba(4,13,9,.9)); pointer-events: none; z-index: 0; }
+body.desk #chat-view::before { grid-column: 1; }
+body.desk #chat-view::after { grid-column: 2; }
+body.desk #chat-view > :not(.sr-only):not(.hud-layer), body.desk #stage > :not(.sr-only):not(.hud-layer), body.desk #chat-view .dock > :not(.sr-only) { position: relative; z-index: 1; }
+body.desk #stage > .hud-layer { position: absolute; inset: 0; z-index: 0; opacity: .5; }
+body.desk .stage-center { grid-column: 1; grid-row: 3; padding: 52px 18px 6px; overflow-y: auto; justify-content: safe center; }
+body.desk .reactor-wrap { width: min(320px, 31vh) !important; height: min(320px, 31vh) !important; }
+body.desk .vision-btn { grid-column: 1; grid-row: 3; position: relative; top: auto; right: auto; left: auto; align-self: start; justify-self: end; margin: 14px 14px 0 0; z-index: 3; }
+body.desk .ojo-btn { margin-right: 112px; }
+body.desk.kb-open .vision-btn, body.desk.typing .vision-btn { display: inline-flex; }
+body.desk #messages { grid-column: 2; grid-row: 3; display: flex !important; padding: 18px 22px 10px; font-size: 16px; }
+body.desk[data-estado="escuchando"] #messages { display: flex !important; }
+body.desk #messages .msg { max-width: 78%; }
+body.desk #messages .msg .bubble { max-width: 100%; }
+body.desk .mic-zone { grid-column: 1; grid-row: 4; padding: 4px 0 6px; }
+body.desk #conv-pill, body.desk #stop-voice { grid-column: 1; grid-row: 4; justify-self: center; align-self: center; }
+body.desk .stop-pill { grid-column: 2; grid-row: 4; justify-self: center; margin: 4px 0; }
+body.desk #attachments, body.desk #tutor-chip { grid-column: 2; grid-row: 4; margin: 0 16px; }
+body.desk .desk-cards { grid-column: 1; grid-row: 5 / 7; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 6px 16px 16px; align-self: end; }
+body.desk .desk-card { text-align: left; border: 1px solid var(--line-soft); border-radius: 12px; padding: 9px 12px; background: rgba(3,12,8,.6); color: var(--text); cursor: pointer; font-family: var(--font-ui); transition: border-color .15s, transform .15s; min-width: 0; }
+body.desk .desk-card:hover { border-color: var(--cyan); transform: translateY(-1px); }
+body.desk .desk-card.off { grid-column: 1 / -1; cursor: default; }
+body.desk .desk-card .hud-l { display: block; font-family: var(--font-hud); font-size: 9px; letter-spacing: 1.6px; color: var(--dim); }
+body.desk .desk-card b { display: block; font-size: 21px; line-height: 1.2; color: #fff; }
+body.desk .desk-card small { display: block; color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.desk #composer { grid-column: 2; grid-row: 5; width: auto; margin: 0 16px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
+body.desk #msg-input { max-height: 180px; }
+body.desk .desk-kbh { grid-column: 2; grid-row: 6; display: block; margin: 6px 18px 12px; font-size: 12.5px; color: var(--dim); }
+body.desk .desk-kbh kbd { font: 11px var(--font-read); border: 1px solid var(--line-soft); border-radius: 4px; padding: 1px 5px; color: var(--muted); }
+body.desk .icon-btn:hover, body.desk .mode-btn:hover { border-color: var(--cyan); }
+body.desk .mic-big:hover { filter: brightness(1.12); }
+/* sin modo "escritura" de teléfono */
+body.desk.kb-open .stage-center, body.desk.typing .stage-center { display: flex; }
+/* paneles y ajustes: contenido más ancho, tarjetas en cuadrícula */
+body.desk #panel-view .settings-scroll, body.desk #settings-view .settings-scroll { padding: 8px 28px 28px; }
+body.desk #panel-view .settings-scroll > *, body.desk #settings-view .settings-scroll > * { width: 100%; max-width: 1100px; margin-left: auto; margin-right: auto; }
+body.desk .group-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+body.desk .group-card { min-height: 110px; transition: border-color .15s, transform .15s, box-shadow .15s; }
+body.desk .group-card:hover { border-color: var(--cyan); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,255,156,.08); }
+body.desk #settings-view .settings-scroll > .panel { max-width: 860px; }
+body.desk #settings-view .save-bar { max-width: 860px; margin: 0 auto; width: 100%; }
+body.desk .panel-view .topbar, body.desk #settings-view .topbar { padding: 14px 28px 10px; }
+@media (max-height: 820px) {
+  body.desk .reactor-wrap { width: min(250px, 30vh) !important; height: min(250px, 30vh) !important; }
+  body.desk .stage-center { padding-top: 48px; gap: 4px; }
+  body.desk #hud { margin-bottom: 10px; }
+  body.desk .desk-card { padding: 7px 11px; } body.desk .desk-card b { font-size: 18px; }
+  body.desk .desk-kbh { margin-bottom: 8px; }
+}
+body.desk[data-estado="sinkey"] .desk-cards { display: none; } /* deja espacio a «Configure su API key» */
