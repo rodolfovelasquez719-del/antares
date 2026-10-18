@@ -288,6 +288,11 @@ view.addEventListener("keydown", (e) => {
 document.addEventListener("keydown", (e) => {
   if (view.hidden || view.contains(e.target) || entry === "frase") return;
   if (/^\d$/.test(e.key)) { e.preventDefault(); press(e.key); }
+  else if (e.key === "Backspace") { e.preventDefault(); back(); }
+});
+// Foco atrapado dentro del bloqueo (el resto de la app está inerte)
+document.addEventListener("focusin", (e) => {
+  if (!view.hidden && !view.contains(e.target)) { if (entry === "frase" && !phraseForm.hidden) phraseInput.focus(); else titleEl.focus(); }
 });
 
 function cancelFlow() {

@@ -27,7 +27,7 @@ import * as Sheet from "./sheet.js";
 import * as Brain from "./brain.js";
 import * as Hud from "./hud.js";
 import { mountAvatar, mountAvatarVideo, setAvatarState } from "./avatar.js";
-import { openVision } from "./vision.js";
+import { openVision, closeVision } from "./vision.js";
 import { OJO_ENABLED, openOjo, closeOjo, isOjoOpen } from "./ojo.js";
 import * as Av3 from "./avatar3d.js";
 import * as Desk from "./desktop.js";
@@ -36,7 +36,7 @@ import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.23.0";
+const APP_VERSION = "1.23.1";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -2851,6 +2851,8 @@ function lockApp(reason = "manual") {
   if (estado === "escuchando") voice.cancelListening();
   voice.stop();
   if (!els.modal.hidden) closeModal();
+  try { closeVision(); } catch { /* */ }            // la cámara no queda abierta encima del bloqueo
+  try { if (isOjoOpen()) closeOjo(); } catch { /* */ }
   if (!els.settingsView.hidden) {
     snapshot = null;
     if (historyPushed) { historyPushed = false; history.back(); }

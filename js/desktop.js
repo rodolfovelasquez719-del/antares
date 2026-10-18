@@ -61,6 +61,8 @@ export function initDesktop(d) {
   mq.addEventListener ? mq.addEventListener("change", apply) : mq.addListener(apply);
   document.addEventListener("keydown", (ev) => {
     if (!on) return;
+    // bloqueada, o con Ojo / Visión / un diálogo encima: los atajos no tocan la app de fondo
+    if (document.body.classList.contains("locked") || document.querySelector(".ojo-view, .vis:not([hidden]), #modal:not([hidden])")) return;
     if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && ev.key.toLowerCase() === "k") { ev.preventDefault(); deps.focusInput(); return; }
     if (ev.altKey && !ev.ctrlKey && /^[1-5]$/.test(ev.key)) { ev.preventDefault(); deps.tab(["inicio", "personal", "trabajo", "ocio", "herramientas"][+ev.key - 1]); }
   });
