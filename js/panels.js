@@ -222,7 +222,9 @@ function rowItem(it) {
 
 function newsHtml() {
   if (!digest && !digestBusy) loadDigest(false);
-  if (digestBusy && !digest) return `<p class="empty-note">Reuniendo el resumen del día…</p>`;
+  if (digestBusy && !digest) return `<div class="digest-skel" role="status"><p class="skel-note"><span class="skel-spin" aria-hidden="true"></span>Reuniendo clima, dólar y titulares…</p>
+    <article class="digest-card skel" aria-hidden="true"><h3>Clima</h3><i class="sk" style="width:72%"></i><h3>Dólar</h3><i class="sk" style="width:55%"></i><i class="sk sm" style="width:30%"></i>
+    <h3>Titulares</h3><i class="sk" style="width:92%"></i><i class="sk sm" style="width:22%"></i><i class="sk" style="width:84%"></i><i class="sk sm" style="width:26%"></i><i class="sk" style="width:88%"></i><i class="sk sm" style="width:20%"></i></article></div>`;
   if (digestError && !digest) return `<p class="empty-note">${esc(digestError)}</p><button type="button" class="btn" id="digest-refresh">Reintentar</button>`;
   if (!digest) return "";
   const w = digest.weather;

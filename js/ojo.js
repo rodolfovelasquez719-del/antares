@@ -15,11 +15,15 @@ export function openOjo() {
 }
 function esc(e) { if (e.key === "Escape") closeOjo(); }
 // al cerrar se quita el iframe completo: se detiene todo el dibujo, la ubicación y las descargas
+// v1.23.2: se oculta al instante y el globo se desmonta después (sin congelar el clic)
 export function closeOjo() {
   if (!el) return;
-  const f = el.querySelector("iframe"); if (f) f.src = "about:blank";
-  el.remove(); el = null;
+  const node = el; el = null;
+  node.style.display = "none";
   document.body.classList.remove("ojo-on");
   document.removeEventListener("keydown", esc);
+  const f = node.querySelector("iframe");
+  try { f && f.contentWindow && f.contentWindow.postMessage("ojo:pausa", location.origin); } catch { /* */ }
+  setTimeout(() => { try { if (f) f.src = "about:blank"; } catch { /* */ } setTimeout(() => node.remove(), 0); }, 350);
 }
 export const isOjoOpen = () => !!el;

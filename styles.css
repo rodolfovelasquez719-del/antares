@@ -1265,3 +1265,14 @@ body.desk .lock-ver { position: fixed; bottom: 12px; }
   body.desk .lock-screen .lock-kbh { margin-top: 8px; }
 }
 body.desk .dr-board { max-width: min(560px, calc(100vh - 330px)); min-width: 300px; } /* el tablero y sus botones caben sin desplazar */
+/* v1.23.2: esqueleto mientras se reúne el Resumen del día */
+.digest-skel .skel-note { display: flex; align-items: center; gap: 10px; margin: 4px 0 10px; font-family: var(--font-read); font-size: 15px; color: var(--muted); }
+.skel-spin { width: 18px; height: 18px; flex: none; border-radius: 50%; border: 2px solid rgba(0, 255, 156, .22); border-top-color: var(--cyan); animation: skel-rot .8s linear infinite; }
+.digest-card.skel .sk { display: block; height: 14px; margin: 8px 0 4px; border-radius: 7px;
+  background: linear-gradient(90deg, rgba(0,255,156,.06) 0%, rgba(0,255,156,.16) 45%, rgba(0,255,156,.06) 90%) 0 0 / 300% 100%; animation: skel-sh 1.4s ease-in-out infinite; }
+.digest-card.skel .sk.sm { height: 10px; margin-top: 2px; opacity: .7; }
+@keyframes skel-sh { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@keyframes skel-rot { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .digest-card.skel .sk, .skel-spin { animation: none; } }
+/* v1.23.2: en Ajustes solo se resalta «Ajustes» en la barra lateral */
+body.desk .tab.desk-tab[aria-current="page"] { background: linear-gradient(90deg, rgba(255,45,74,.16), rgba(255,45,74,.02)); border-color: var(--line); color: #fff; }

@@ -36,7 +36,7 @@ import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.23.1";
+const APP_VERSION = "1.23.2";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -1851,7 +1851,15 @@ function paintPanelHeader(focus = true) {
 }
 function navState() { const v = currentView(); return { antares: "panel", group: v.group, tab: v.tab }; }
 function enterPanelView() {
-  if (!els.settingsView.hidden) closeSettings();
+  if (!els.settingsView.hidden) {
+    const pushed = historyPushed;
+    closeSettings();
+    // v1.23.2: el «atrás» que cierra Ajustes no debe cerrar también el panel que se abre ahora
+    if (els.settingsView.hidden && pushed) {
+      skipPops++;
+      setTimeout(() => { if (skipPops > 0) { skipPops = 0; const q = histQueue; histQueue = []; q.forEach((fn) => { try { fn(); } catch { /* */ } }); } }, 1200);
+    }
+  }
   if (!els.settingsView.hidden) return false; // canceló por cambios sin guardar
   if (document.activeElement === els.input) els.input.blur();
   els.chatView.hidden = true;
@@ -2334,6 +2342,7 @@ function openSettings({ focusKey = false, scrollTo = "" } = {}) {
   if (wake && wake.enabled) wake.pause("ajustes");
   els.chatView.hidden = true;
   els.settingsView.hidden = false;
+  if (Desk.isDesk()) deskMarkSettings(true);
   if (!historyPushed) { history.pushState({ antares: "settings" }, ""); historyPushed = true; }
   requestAnimationFrame(() => {
     if (focusKey) { els.apiKey.focus(); $("api").scrollIntoView({ block: "start" }); }
@@ -2348,6 +2357,7 @@ function confirmDiscard() {
 function hideSettings() {
   els.settingsView.hidden = true;
   els.chatView.hidden = false;
+  deskMarkSettings(false);
   snapshot = null;
   setEstado(busy ? "hablando" : (estado === "error" ? "error" : baseEstado()));
   if (settingsOpener && settingsOpener.isConnected && !settingsOpener.disabled) settingsOpener.focus();
@@ -2843,6 +2853,12 @@ function wipePersonalDom() {
 // Bloquear: se borra lo descifrado, el contenido de la pantalla y se cancela lo que esté en curso
 function lockApp(reason = "manual") {
   if (!Lock.hasPin() || !isUnlocked()) { if (Lock.hasPin() && !lockShowing()) showLock(afterUnlock); return; }
+  // v1.23.2 (computadora): recordar la pantalla para volver a ella al desbloquear
+  resumeView = null;
+  if (Desk.isDesk()) {
+    if (!els.settingsView.hidden) resumeView = { settings: true, scroll: els.settingsScroll.scrollTop };
+    else if (panelOpen) { const v = currentView(); resumeView = { group: v.group, tab: v.tab }; }
+  }
   lockEpoch++;
   stopResponse();
   if (wake) wake.stop("lock");
@@ -2908,8 +2924,22 @@ function afterUnlock() {
   syncReminders();
   reminderTick();
   openPanelFromUrl();
-  if (pendingPanel) { const p = pendingPanel; pendingPanel = null; showPanel(p); }
+  if (pendingPanel) { const p = pendingPanel; pendingPanel = null; resumeView = null; showPanel(p); }
+  else if (resumeView && Desk.isDesk()) restoreView(resumeView);
+  resumeView = null;
   syncWake();
+}
+let resumeView = null;
+function restoreView(r) {
+  if (r.settings) { setTimeout(() => { if (!isUnlocked() || lockShowing()) return; openSettings(); requestAnimationFrame(() => { els.settingsScroll.scrollTop = r.scroll || 0; }); }, 450); return; }
+  setTimeout(() => { if (!isUnlocked() || lockShowing()) return; if (r.tab) showPanel(r.tab); else showGroup(r.group); }, 450);
+}
+// en Ajustes la barra lateral resalta solo «Ajustes»; al salir vuelve a marcar la sección real
+function deskMarkSettings(on) {
+  const aj = els.tabbar.querySelector('[data-desk="ajustes"]');
+  if (on) { markTab(null); if (aj) aj.setAttribute("aria-current", "page"); return; }
+  if (aj) aj.removeAttribute("aria-current");
+  if (aj || Desk.isDesk()) markTab(panelOpen ? currentView().group : "inicio");
 }
 // Accesos directos del manifiesto: ?panel=recordatorios|compras|noticias (se usa una sola vez)
 function openPanelFromUrl() {

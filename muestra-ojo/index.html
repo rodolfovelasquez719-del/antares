@@ -20,8 +20,9 @@ h1{margin:0;font-size:15px;letter-spacing:.25em}h1 b{color:var(--r)}
 .sub{font-size:10px;opacity:.75;letter-spacing:.12em}
 .clk{text-align:right;font-size:11px}
 .tick{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top) + 58px);z-index:7;overflow:hidden;white-space:nowrap;font-size:10px;letter-spacing:.15em;border-top:1px solid rgba(34,255,154,.25);border-bottom:1px solid rgba(34,255,154,.25);background:rgba(0,20,12,.55);pointer-events:none}
-.tick span{display:inline-block;padding:3px 0;animation:mq 38s linear infinite;padding-left:100%}
-@keyframes mq{to{transform:translateX(-100%)}}
+.tick{-webkit-mask-image:linear-gradient(90deg,transparent,#000 3%,#000 97%,transparent);mask-image:linear-gradient(90deg,transparent,#000 3%,#000 97%,transparent)}
+.tick span{display:inline-flex;padding:3px 0;animation:mq var(--dur,40s) linear infinite;will-change:transform}.tick span i{font-style:normal;flex:none;padding-right:4em}
+@keyframes mq{from{transform:translateX(0)}to{transform:translateX(-50%)}}@media (prefers-reduced-motion:reduce){.tick span{animation:none}}
 .stat{position:fixed;left:16px;top:calc(env(safe-area-inset-top) + 128px);z-index:7;font-size:10px;line-height:1.6;pointer-events:none;background:rgba(0,20,12,.5);padding:6px 8px;border-left:2px solid var(--g)}
 .stat .no{color:var(--r)}
 nav{position:fixed;left:8px;right:8px;bottom:calc(env(safe-area-inset-bottom) + 14px);z-index:8;display:flex;gap:6px;overflow-x:auto;padding:4px 12px;scrollbar-width:none}
@@ -78,7 +79,21 @@ const D={avi:[],sis:[],sat:[],cli:[],rut:[]};
 const NAMES={avi:"AVIONES",sis:"SISMOS",sat:"SATÉLITES",cli:"CLIMA",rad:"RADAR",rut:"RUTAS"};
 const ticker=[];
 function paintStat(){$("#stat").innerHTML=Object.keys(st).map(k=>`${NAMES[k]}: <span class="${/no disp/.test(st[k])?"no":""}">${st[k]}</span>`).join("<br>");
- $("#tick").textContent=["PROCESANDO FLUJO DE DATOS",...ticker.slice(-8),"ENLACES ACTIVOS: "+Object.values(st).filter(v=>/^\d/.test(v)).length].join("  ◆  ");}
+ setTick(["PROCESANDO FLUJO DE DATOS",...ticker.slice(-8),"ENLACES ACTIVOS: "+Object.values(st).filter(v=>/^\d/.test(v)).length].join("  ◆  "));}
+// marquesina continua: el texto se repite para llenar el ancho y avanza a velocidad fija;
+// el texto nuevo entra al terminar cada vuelta (sin saltos)
+let tickNext=null,tickTxt="",tickBoot=true;
+function setTick(t){if(t===tickTxt)return;tickNext=t;if(tickBoot)applyTick()}
+function applyTick(){if(tickNext==null)return;const s=$("#tick"),box=s.parentElement,t=tickNext;tickNext=null;tickTxt=t;
+ const mk=h=>{const i=document.createElement("i");i.textContent=t+"  ◆  ";if(h)i.setAttribute("aria-hidden","true");return i};
+ s.replaceChildren(mk(false));const u=s.firstChild.getBoundingClientRect().width||1,n=Math.max(1,Math.ceil(box.clientWidth/u));
+ for(let k=1;k<2*n;k++)s.appendChild(mk(true));
+ s.style.setProperty("--dur",(u*n/60).toFixed(1)+"s");s.style.animation="none";void s.offsetWidth;s.style.animation="";
+ tickBoot=/INICIANDO/.test(t)||ticker.length<2;}
+$("#tick").addEventListener("animationiteration",applyTick);
+addEventListener("resize",()=>{if(tickTxt){tickNext=tickTxt;tickTxt="";applyTick()}});
+// la app pide pausar antes de cerrar: se detiene el dibujo para que el cierre no se trabe
+addEventListener("message",e=>{if(e.origin===location.origin&&e.data==="ojo:pausa"){try{G.pauseAnimation()}catch{}document.body.style.display="none"}});
 setInterval(()=>{$("#clk").innerHTML=new Date().toLocaleTimeString("es-CR",{hour12:false})+"<br>"+new Date().toISOString().slice(11,19)+" UTC"},1000);
 async function getJ(u,ms=12000){const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);try{const r=await fetch(u,{signal:c.signal});if(!r.ok)throw Error(r.status);return u.includes("FORMAT=tle")?await r.text():await r.json()}finally{clearTimeout(t)}}
 
