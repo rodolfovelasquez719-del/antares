@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="es"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex"><meta name="theme-color" content="#030a07">
+<title>Antares · Escritorio (muestra)</title>
+<link rel="icon" href="../icons/icon-192.png">
+<style>
+@font-face{font-family:"Orbitron";src:url("../fonts/orbitron-latin.woff2") format("woff2");font-weight:400 900;font-display:swap}
+@font-face{font-family:"Rajdhani";src:url("../fonts/rajdhani-600-latin.woff2") format("woff2");font-weight:600;font-display:swap}
+:root{--bg:#030a07;--bg-2:#05120c;--panel:#06140e;--panel-2:#0a1d14;--line:rgba(255,45,74,.32);--line-soft:rgba(0,255,156,.14);--cyan:#00ff9c;--cyan-2:#5dffb8;--cyan-ink:#00170d;--text:#e8fff3;--muted:#9fd6bb;--dim:#7fae96;--amber:#ffc457;--accent:#ff2d4a;--accent-2:#ff6b80;--glow:0 0 12px rgba(0,255,156,.45);
+--font-ui:"Rajdhani","Segoe UI",system-ui,sans-serif;--font-hud:"Orbitron","Rajdhani",ui-monospace,monospace;--font-read:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--font-ui);font-size:16px}
+body{overflow:hidden;background:radial-gradient(1200px 700px at 30% 40%,rgba(0,255,156,.06),transparent 60%),radial-gradient(900px 600px at 85% 90%,rgba(255,45,74,.05),transparent 60%),var(--bg)}
+body:before{content:"";position:fixed;inset:0;pointer-events:none;background-image:linear-gradient(rgba(0,255,156,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(0,255,156,.035) 1px,transparent 1px);background-size:44px 44px;z-index:0}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.hud{font-family:var(--font-hud);letter-spacing:.14em}
+/* ===== layout escritorio ===== */
+.app{position:relative;z-index:1;display:grid;grid-template-columns:248px 1fr;height:100vh}
+aside{display:flex;flex-direction:column;border-right:1px solid var(--line);background:linear-gradient(180deg,rgba(6,20,14,.96),rgba(3,10,7,.96));padding:18px 14px}
+.brand{display:flex;align-items:center;gap:12px;padding:4px 8px 18px;border-bottom:1px solid var(--line-soft);margin-bottom:12px}
+.orb{width:38px;height:38px;border-radius:50%;border:2px solid var(--cyan);display:grid;place-items:center;box-shadow:var(--glow)}
+.orb i{width:14px;height:14px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent)}
+.brand b{display:block;font-family:var(--font-hud);font-size:18px;letter-spacing:.3em;color:var(--cyan)}.brand b span{color:var(--accent)}
+.brand small{color:var(--muted);font-size:13px}
+nav{display:flex;flex-direction:column;gap:4px}
+nav .sec{font-family:var(--font-hud);font-size:9.5px;letter-spacing:.2em;color:var(--dim);margin:14px 10px 6px}
+nav button{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:0 12px;border:1px solid transparent;border-radius:10px;background:none;font-size:17px;color:var(--muted);text-align:left;transition:background .15s,border-color .15s,color .15s}
+nav button svg{width:20px;height:20px;flex:0 0 20px}
+nav button:hover{background:rgba(0,255,156,.06);border-color:var(--line-soft);color:var(--text)}
+nav button.on{background:linear-gradient(90deg,rgba(255,45,74,.16),rgba(255,45,74,.02));border-color:var(--line);color:#fff;box-shadow:inset 3px 0 0 var(--accent)}
+nav button kbd{margin-left:auto;white-space:nowrap;font:10px var(--font-read);color:var(--dim);border:1px solid var(--line-soft);border-radius:4px;padding:1px 5px}
+.side-foot{margin-top:auto;padding-top:12px;border-top:1px solid var(--line-soft);display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--dim)}
+.side-foot .ver{font-family:var(--font-hud);font-size:10px;letter-spacing:.12em}
+.main{display:grid;grid-template-rows:auto 1fr;min-width:0;min-height:0}
+.top{display:flex;align-items:center;gap:14px;padding:12px 22px;border-bottom:1px solid var(--line-soft);background:rgba(3,10,7,.7);backdrop-filter:blur(6px)}
+.top h1{margin:0;font-family:var(--font-hud);font-size:15px;letter-spacing:.22em;color:var(--cyan)}
+.chipbar{display:flex;gap:10px;margin-left:auto}
+.chip{display:flex;align-items:center;gap:10px;padding:6px 14px;border:1px solid var(--line);border-radius:12px;background:rgba(6,20,14,.8)}
+.chip b{font-family:var(--font-hud);font-size:18px}.chip small{display:block;color:var(--muted);font-size:12px;line-height:1.1}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent)}
+.ib{width:42px;height:42px;border-radius:12px;border:1px solid var(--line-soft);background:rgba(6,20,14,.8);display:grid;place-items:center;color:var(--cyan);transition:border-color .15s,background .15s}
+.ib:hover{border-color:var(--cyan);background:rgba(0,255,156,.08)}.ib svg{width:20px;height:20px}
+.view{min-height:0;overflow:auto;padding:20px 22px}
+.hidden{display:none!important}
+/* inicio: cerebro + chat */
+.home{display:grid;grid-template-columns:minmax(340px,38%) 1fr;gap:20px;height:100%;min-height:0}
+.panel{border:1px solid var(--line);border-radius:16px;background:linear-gradient(170deg,rgba(10,29,20,.9),rgba(4,13,9,.92));position:relative}
+.panel:before,.panel:after{content:"";position:absolute;width:16px;height:16px;border:2px solid var(--cyan);opacity:.7;pointer-events:none}
+.panel:before{top:-1px;left:-1px;border-right:0;border-bottom:0;border-top-left-radius:16px}.panel:after{bottom:-1px;right:-1px;border-left:0;border-top:0;border-bottom-right-radius:16px}
+.brainp{display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:18px;min-height:0;overflow:hidden}@media (max-height:700px){.brainp{overflow:auto}}
+.quick{display:flex;gap:8px;align-self:stretch;justify-content:flex-end}
+.qb{min-height:34px;padding:0 12px;font-family:var(--font-hud);font-size:10px;letter-spacing:.12em;border-radius:10px;background:rgba(3,12,8,.75);border:1px solid rgba(255,45,74,.5);color:#ff2d4a;transition:background .15s}
+.qb.g{border-color:rgba(0,255,156,.5);color:var(--cyan)}.qb:hover{background:rgba(255,45,74,.12)}.qb.g:hover{background:rgba(0,255,156,.1)}
+.reactor-wrap{position:relative;width:min(360px,34vh);height:min(360px,34vh);margin:6px 0 4px;flex:0 0 auto}
+.reactor-wrap canvas.brain{position:absolute;inset:0;width:100%;height:100%}
+.estado{font-family:var(--font-hud);letter-spacing:.3em;color:var(--cyan);font-size:15px;text-shadow:var(--glow)}
+.ver2{font-size:12px;color:var(--dim);text-decoration:underline dotted;margin-top:2px}
+.greet{font-family:var(--font-read);font-size:20px;text-align:center;margin:12px 0 6px}.greet b{color:var(--cyan)}
+.mic{width:86px;height:86px;border-radius:50%;border:3px solid var(--accent);background:radial-gradient(circle,rgba(255,45,74,.14),rgba(3,10,7,.9));box-shadow:0 0 0 6px rgba(255,45,74,.12),0 0 26px rgba(255,45,74,.35);display:grid;place-items:center;color:var(--accent);margin:10px 0 6px;transition:transform .15s,box-shadow .15s}
+.mic:hover{transform:scale(1.04);box-shadow:0 0 0 8px rgba(255,45,74,.18),0 0 34px rgba(255,45,74,.5)}.mic svg{width:32px;height:32px}
+.hint{color:var(--muted);font-size:14px}.hint a{color:var(--cyan)}
+.mini{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-self:stretch;margin-top:16px}
+.mc{border:1px solid var(--line-soft);border-radius:12px;padding:10px 12px;background:rgba(3,12,8,.6);transition:border-color .15s,transform .15s}
+.mc:hover{border-color:var(--cyan);transform:translateY(-1px)}
+.mc .hud{font-size:9px;color:var(--dim)}.mc b{display:block;font-size:22px;color:#fff;margin-top:2px}.mc small{color:var(--muted)}
+.chat{display:grid;grid-template-rows:auto 1fr auto;min-height:0}
+.chat-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line-soft)}
+.chat-h .hud{font-size:11px;color:var(--cyan)}.chat-h small{color:var(--dim);margin-left:auto;font-size:13px}
+.msgs{overflow:auto;padding:18px 22px;display:flex;flex-direction:column;gap:14px;font-family:var(--font-read);font-size:15.5px;line-height:1.5}
+.m{max-width:72%;padding:12px 16px;border-radius:14px}
+.m.u{align-self:flex-end;background:rgba(0,255,156,.1);border:1px solid rgba(0,255,156,.35);border-bottom-right-radius:4px}
+.m.a{align-self:flex-start;background:rgba(6,20,14,.95);border:1px solid var(--line-soft);border-left:3px solid var(--cyan);border-bottom-left-radius:4px}
+.m.a ul{margin:6px 0 0;padding-left:18px}.m time{display:block;font-size:11px;color:var(--dim);margin-top:4px}
+.sug{display:flex;flex-wrap:wrap;gap:8px}.sug button{border:1px solid var(--line-soft);background:rgba(3,12,8,.7);border-radius:16px;padding:6px 12px;font-size:14px;color:var(--muted);transition:all .15s}.sug button:hover{border-color:var(--cyan);color:var(--text)}
+.composer{display:flex;align-items:flex-end;gap:10px;padding:12px 16px 14px;border-top:1px solid var(--line-soft)}
+.composer textarea{flex:1;resize:none;min-height:48px;max-height:180px;padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:#020805;color:var(--text);font:16px/1.4 var(--font-read);outline:none;transition:border-color .15s,box-shadow .15s}
+.composer textarea:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(0,255,156,.12)}
+.send{height:48px;padding:0 20px;border-radius:14px;border:0;background:var(--cyan);color:var(--cyan-ink);font-weight:700;display:flex;align-items:center;gap:8px;transition:filter .15s}.send:hover{filter:brightness(1.12)}.send svg{width:18px;height:18px}
+.kbh{padding:0 18px 10px;font-size:12px;color:var(--dim)}.kbh kbd{font:11px var(--font-read);border:1px solid var(--line-soft);border-radius:4px;padding:1px 5px;color:var(--muted)}
+/* secciones: tarjetas en cuadrícula */
+.sect h2{margin:0 0 4px;font-family:var(--font-hud);letter-spacing:.2em;font-size:18px;color:var(--cyan)}.sect>p{margin:0 0 18px;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.card{border:1px solid var(--line-soft);border-radius:16px;background:linear-gradient(170deg,rgba(10,29,20,.9),rgba(4,13,9,.92));padding:18px;display:flex;flex-direction:column;gap:8px;text-align:left;transition:border-color .15s,transform .15s,box-shadow .15s;min-height:160px}
+.card:hover{border-color:var(--cyan);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,255,156,.08)}
+.card .ic{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;border:1px solid var(--line);color:var(--accent)}.card .ic svg{width:22px;height:22px}
+.card b{font-size:20px;color:#fff}.card span{color:var(--muted);font-family:var(--font-read);font-size:14px}
+.card .cnt{margin-top:auto;font-family:var(--font-hud);font-size:10px;letter-spacing:.14em;color:var(--cyan)}
+.list{grid-column:1/-1}
+.tbl{width:100%;border-collapse:collapse;font-family:var(--font-read);font-size:14.5px}.tbl th{text-align:left;color:var(--dim);font:10px var(--font-hud);letter-spacing:.14em;padding:10px;border-bottom:1px solid var(--line-soft)}.tbl td{padding:11px 10px;border-bottom:1px solid rgba(0,255,156,.06)}.tbl tr:hover td{background:rgba(0,255,156,.04)}
+.tag{font:10px var(--font-hud);letter-spacing:.1em;padding:3px 8px;border-radius:6px;border:1px solid var(--line);color:var(--accent-2)}.tag.g{border-color:rgba(0,255,156,.4);color:var(--cyan)}
+.banner{position:fixed;left:50%;top:22px;transform:translateX(-50%);z-index:5;font:10px var(--font-hud);letter-spacing:.16em;color:var(--amber);background:rgba(20,14,0,.85);border:1px solid rgba(255,196,87,.4);border-radius:8px;padding:5px 10px;pointer-events:none}
+/* 1366x768: más compacto */
+@media (max-width:1440px),(max-height:820px){.app{grid-template-columns:220px 1fr}nav button{min-height:40px;font-size:16px}.reactor-wrap{width:min(220px,27vh);height:min(220px,27vh)}.mc{padding:8px 12px}.mc b{font-size:19px}nav button kbd{display:none}.greet{font-size:18px;margin:8px 0 4px}.mic{width:72px;height:72px}.mini{margin-top:10px}.view{padding:14px 16px}.top{padding:10px 16px}.home{gap:14px}.brainp{padding:14px}}
+/* < 1024 px: el diseño de teléfono de la app (no cambia) */
+.movil{display:none}
+@media (max-width:1023px){.app{display:none}.movil{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;height:100vh;padding:24px;text-align:center;position:relative;z-index:1}.movil a{color:var(--cyan)}}
+</style></head><body>
+<div class="app">
+  <aside>
+    <div class="brand"><div class="orb"><i></i></div><div><b>ANTA<span>RES</span></b><small>Asistente personal</small></div></div>
+    <nav id="nav" aria-label="Secciones">
+      <button class="on" data-v="inicio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>Inicio<kbd>Alt 1</kbd></button>
+      <button data-v="personal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4.5-6 8-6s7 2 8 6"/></svg>Personal<kbd>Alt 2</kbd></button>
+      <button data-v="trabajo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5h6v2M3 12h18"/></svg>Trabajo<kbd>Alt 3</kbd></button>
+      <button data-v="ocio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="7" width="20" height="11" rx="5"/><path d="M7 11v3M5.5 12.5h3M16 12h.01M18 14h.01"/></svg>Ocio<kbd>Alt 4</kbd></button>
+      <button data-v="herramientas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-2.5z"/></svg>Herramientas<kbd>Alt 5</kbd></button>
+      <div class="sec">VISTAS</div>
+      <button data-v="ojo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>Ojo</button>
+      <button data-v="vision"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Visión</button>
+    </nav>
+    <div class="side-foot"><button class="ib" style="width:auto;padding:0 12px;gap:8px;display:flex;align-items:center;justify-content:flex-start;height:40px;color:var(--muted)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Ajustes</button><span class="ver">v1.22.0 · MUESTRA ESCRITORIO</span></div>
+  </aside>
+  <div class="main">
+    <div class="top">
+      <h1 id="ttl">INICIO</h1><span class="tag" style="color:var(--amber);border-color:rgba(255,196,87,.45);white-space:nowrap">MUESTRA · DATOS DE EJEMPLO</span>
+      <div class="chipbar">
+        <div class="chip"><b id="clk">--:--</b><small id="fecha"></small></div>
+        <div class="chip"><b>22°C</b><small>Alajuela<br>Chubascos</small></div>
+        <div class="chip"><span class="dot"></span><div><b style="font-size:15px">En línea</b><small>Gemini</small></div></div>
+        <button class="ib" title="Voz manos libres" aria-label="Voz manos libres"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+        <button class="ib" title="Modo carro" aria-label="Modo carro"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 13l2-5h10l2 5M4 13h16v5H4zM7 18v2M17 18v2"/><circle cx="8" cy="15.5" r="1"/><circle cx="16" cy="15.5" r="1"/></svg></button>
+      </div>
+    </div>
+    <div class="view" id="view-inicio">
+      <div class="home">
+        <section class="panel brainp" aria-label="Antares">
+          <div class="quick"><button class="qb g" data-v="ojo">◎ OJO</button><button class="qb" data-v="vision">👁 VISIÓN</button></div>
+          <div class="reactor-wrap" id="brain"></div>
+          <div class="estado" id="estado">EN ESPERA</div>
+          <span class="ver2">v1.22.0 · buscar actualización</span>
+          <p class="greet"><span id="saludo">Buenas noches</span>, <b>Freddy</b>.<br>¿En qué le puedo ayudar?</p>
+          <button class="mic" id="mic" aria-label="Hablar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+          <span class="hint"><a href="#">Modo conversación</a> · o mantenga <kbd style="font:11px var(--font-read);border:1px solid var(--line-soft);border-radius:4px;padding:1px 5px">Espacio</kbd></span>
+          <div class="mini">
+            <div class="mc"><div class="hud">RECORDATORIOS HOY</div><b>3</b><small>Próximo: pagar la luz 10:00</small></div>
+            <div class="mc"><div class="hud">COMPRAS</div><b>5</b><small>Café, leche, arroz…</small></div>
+            <div class="mc"><div class="hud">RUTAS</div><b>2</b><small>Alajuela → SJO 35 min</small></div>
+            <div class="mc"><div class="hud">RECUERDOS</div><b>12</b><small>Guardados en este equipo</small></div>
+          </div>
+        </section>
+        <section class="panel chat" aria-label="Conversación">
+          <div class="chat-h"><span class="hud">CONVERSACIÓN</span><span class="tag g">GEMINI</span><small>Ctrl+K para escribir · Esc para limpiar</small></div>
+          <div class="msgs" id="msgs">
+            <div class="m u">¿Qué tengo pendiente hoy?<time>9:12 p. m.</time></div>
+            <div class="m a">Tiene tres recordatorios para hoy:<ul><li>Pagar la luz a las 10:00</li><li>Llamar a Evangeline a las 15:00</li><li>Comprar café</li></ul><time>9:12 p. m.</time></div>
+            <div class="m u">¿Cómo está el tráfico de Alajuela a San José?<time>9:13 p. m.</time></div>
+            <div class="m a">Por la Ruta 1 el viaje toma unos <b>35 minutos</b> ahora mismo, con presas leves a la altura de La Valencia. ¿Quiere que le avise cuando baje el tráfico?<time>9:13 p. m.</time></div>
+            <div class="sug"><button>Clima de mañana</button><button>Noticias de Costa Rica</button><button>Agregar a compras</button><button>Abrir el Ojo</button></div>
+          </div>
+          <div>
+            <form class="composer" id="form">
+              <button type="button" class="ib" aria-label="Adjuntar" title="Adjuntar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12.5l-8.5 8.5a6 6 0 0 1-8.5-8.5L12.5 4a4 4 0 0 1 5.7 5.7L9.7 18.2a2 2 0 0 1-2.8-2.8L15 7.3"/></svg></button>
+              <textarea id="in" rows="1" placeholder="Escríbale a Antares…" aria-label="Mensaje"></textarea>
+              <button class="send" type="submit">Enviar<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+            </form>
+            <div class="kbh"><kbd>Enter</kbd> envía · <kbd>Shift</kbd>+<kbd>Enter</kbd> nueva línea · <kbd>↑</kbd> edita el último</div>
+          </div>
+        </section>
+      </div>
+    </div>
+    <div class="view hidden" id="view-sect"></div>
+  </div>
+</div>
+<div class="movil"><div class="orb" style="width:64px;height:64px"><i></i></div><p class="hud" style="color:var(--cyan)">MUESTRA DE ESCRITORIO</p><p>Esta muestra es para pantallas de 1024 px o más.<br>En el teléfono, Antares sigue igual: <a href="../">abrir la app</a>.</p></div>
+<script type="module">
+import { mountBrain } from "../js/brain.js";
+try { mountBrain(document.getElementById("brain")); } catch (e) { console.warn(e); }
+const $ = (s) => document.querySelector(s);
+const pad = (n) => String(n).padStart(2, "0");
+const tick = () => { const d = new Date(); $("#clk").textContent = pad(d.getHours()) + ":" + pad(d.getMinutes()); $("#fecha").textContent = d.toLocaleDateString("es-CR", { weekday: "short", day: "numeric", month: "short" }); };
+tick(); setInterval(tick, 10000);
+{ const h = new Date().getHours(); $("#saludo").textContent = h < 12 ? "Buenos días" : h < 18 ? "Buenas tardes" : "Buenas noches"; }
+const ic = (p) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${p}</svg>`;
+const SECT = {
+  personal: ["PERSONAL", "Su día, avisos y compras.", [["Recordatorios", "Avisos con hora y repetición.", "3 HOY", '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M5 3L2 6M19 3l3 3"/>'], ["Compras", "Lista del súper compartida por voz.", "5 PENDIENTES", '<path d="M3 4h2l3 12h11l2-8H6"/><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/>'], ["Recuerdos", "Lo que Antares sabe de usted.", "12 GUARDADOS", '<path d="M12 21s-7-4.5-7-11a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 6.5-7 11-7 11z"/>'], ["Cumpleaños", "Fechas importantes de la familia.", "1 ESTE MES", '<rect x="4" y="10" width="16" height="10" rx="2"/><path d="M12 10V6M9 4l3 2 3-2"/>']],
+    `<div class="card list"><b>Próximos recordatorios</b><table class="tbl"><thead><tr><th>HORA</th><th>RECORDATORIO</th><th>REPITE</th><th>ESTADO</th></tr></thead><tbody><tr><td>10:00</td><td>Pagar la luz</td><td>Mensual</td><td><span class="tag">HOY</span></td></tr><tr><td>15:00</td><td>Llamar a Evangeline</td><td>—</td><td><span class="tag">HOY</span></td></tr><tr><td>18:30</td><td>Comprar café</td><td>—</td><td><span class="tag g">LISTA</span></td></tr><tr><td>Mañana 7:00</td><td>Revisar aceite del carro</td><td>Cada 2 semanas</td><td><span class="tag g">PROGRAMADO</span></td></tr></tbody></table></div>`],
+  trabajo: ["TRABAJO", "Herramientas para la ruta de hoy.", [["Rutas", "Rutas del día con tiempos y paradas.", "2 RUTAS", '<circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M8 19h7a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h7"/>'], ["Cúbica", "Volumen y peso de la carga.", "CALCULADORA", '<path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M12 22V12M3 7l9 5 9-5"/>'], ["Correo", "Redactar y resumir correos.", "BORRADORES", '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>'], ["Bitácora", "Registro de entregas y kilómetros.", "HOY 84 KM", '<path d="M5 3h11l3 3v15H5z"/><path d="M9 9h6M9 13h6M9 17h4"/>']], ""],
+  ocio: ["OCIO", "Juegos y retos para descansar.", [["Damas", "Juegue contra Antares.", "NIVEL 3", '<circle cx="8" cy="8" r="3"/><circle cx="16" cy="16" r="3"/><rect x="3" y="3" width="18" height="18" rx="2"/>'], ["Trivia", "Preguntas de Costa Rica y el mundo.", "RÉCORD 14", '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17h.01"/>'], ["Robótica", "Retos de programación para aprender.", "RETO 5", '<rect x="5" y="8" width="14" height="11" rx="2"/><path d="M12 4v4M9 13h.01M15 13h.01M9 16h6"/>']], ""],
+  herramientas: ["HERRAMIENTAS", "Fotos, programación y hojas de Excel.", [["Fotos", "Mejore y edite fotos.", "EDITOR", '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/>'], ["Código", "Revise y explique código.", "EDITOR", '<path d="M8 6l-6 6 6 6M16 6l6 6-6 6"/>'], ["Excel", "Hojas y fórmulas con ayuda.", "HOJAS", '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>'], ["Ojo (prueba)", "Globo y mapa con datos públicos.", "ABRIR", '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>'], ["Visión", "Cámara de este equipo, con permiso.", "ABRIR", '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'], ["Buscar con la cámara", "Identifique cosas (nunca personas).", "MUESTRA", '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4"/>']], ""],
+};
+function show(v) {
+  document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("on", b.dataset.v === v));
+  if (v === "ojo") { location.href = "../muestra-ojo/"; return; }
+  if (v === "vision") { $("#ttl").textContent = "VISIÓN"; }
+  const s = SECT[v];
+  $("#view-inicio").classList.toggle("hidden", !!s || v === "vision");
+  $("#view-sect").classList.toggle("hidden", !s && v !== "vision");
+  if (v === "inicio") { $("#ttl").textContent = "INICIO"; return; }
+  if (v === "vision") { $("#view-sect").innerHTML = `<div class="sect"><h2>VISIÓN</h2><p>En la computadora usa la cámara web, solo con su permiso. (En la muestra no se abre la cámara.)</p><div class="grid"><div class="card" style="min-height:360px;grid-column:1/-1;align-items:center;justify-content:center"><span class="hud" style="color:var(--cyan)">◉ CÁMARA WEB · VISTA PREVIA</span><span>Aquí se vería la cámara con el análisis de Gemini al lado.</span></div></div></div>`; return; }
+  $("#ttl").textContent = s[0];
+  $("#view-sect").innerHTML = `<div class="sect"><h2>${s[0]}</h2><p>${s[1]}</p><div class="grid">${s[2].map(([n, d, c, p]) => `<button class="card" type="button"><span class="ic">${ic(p)}</span><b>${n}</b><span>${d}</span><span class="cnt">${c}</span></button>`).join("")}${s[3]}</div></div>`;
+}
+document.querySelectorAll("[data-v]").forEach((b) => b.addEventListener("click", () => show(b.dataset.v)));
+addEventListener("keydown", (e) => {
+  if (e.altKey && /^[1-5]$/.test(e.key)) { e.preventDefault(); show(["inicio", "personal", "trabajo", "ocio", "herramientas"][+e.key - 1]); }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); show("inicio"); $("#in").focus(); }
+});
+// chat de ejemplo: Enter envía, Shift+Enter nueva línea
+const ta = $("#in"), msgs = $("#msgs");
+const grow = () => { ta.style.height = "auto"; ta.style.height = Math.min(180, ta.scrollHeight) + "px"; };
+ta.addEventListener("input", grow);
+let ultimo = "";
+ta.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("#form").requestSubmit(); }
+  if (e.key === "ArrowUp" && !ta.value && ultimo) { e.preventDefault(); ta.value = ultimo; grow(); }
+  if (e.key === "Escape") { ta.value = ""; grow(); }
+});
+const hora = () => new Date().toLocaleTimeString("es-CR", { hour: "numeric", minute: "2-digit" });
+const esc = (s) => s.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
+$("#form").addEventListener("submit", (e) => {
+  e.preventDefault(); const t = ta.value.trim(); if (!t) return; ultimo = t; ta.value = ""; grow();
+  const sug = msgs.querySelector(".sug"); if (sug) sug.remove();
+  msgs.insertAdjacentHTML("beforeend", `<div class="m u">${esc(t).replace(/\n/g, "<br>")}<time>${hora()}</time></div>`);
+  $("#estado").textContent = "PENSANDO"; msgs.scrollTop = msgs.scrollHeight;
+  setTimeout(() => { msgs.insertAdjacentHTML("beforeend", `<div class="m a">(Muestra) En la app real, aquí respondería Gemini a: «${esc(t.slice(0, 80))}».<time>${hora()}</time></div>`); $("#estado").textContent = "EN ESPERA"; msgs.scrollTop = msgs.scrollHeight; }, 700);
+});
+msgs.querySelectorAll(".sug button").forEach((b) => b.addEventListener("click", () => { ta.value = b.textContent; $("#form").requestSubmit(); }));
+</script>
+</body></html>
