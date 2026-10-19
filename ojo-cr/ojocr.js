@@ -45,7 +45,12 @@ async function pronostico(pts) { // pts: [[lng,lat]...] → por punto: [{t,p,mm,
 function muestrear(line, paso) {
   const res = [{ pt: line[0], km: 0, i: 0 }]; let acc = 0, next = paso;
   for (let i = 1; i < line.length; i++) { acc += km(line[i - 1], line[i]); if (acc >= next) { res.push({ pt: line[i], km: acc, i }); next += paso; } }
-  const last = line.length - 1; if (res[res.length - 1].i !== last) res.push({ pt: line[last], km: acc, i: last });
+  const last = line.length - 1;
+  if (res[res.length - 1].i !== last) {
+    // v1.24.1: si el final queda pegado a la última muestra (< medio paso), se reemplaza en vez de repetir el lugar
+    if (res.length > 1 && acc - res[res.length - 1].km < paso / 2) res[res.length - 1] = { pt: line[last], km: acc, i: last };
+    else res.push({ pt: line[last], km: acc, i: last });
+  }
   return res;
 }
 const LUGARES_EXTRA = [["San José", 9.933, -84.08], ["Alajuela", 10.016, -84.214], ["Heredia", 9.998, -84.117], ["Cartago", 9.864, -83.919], ["Puntarenas", 9.976, -84.833], ["Limón", 9.99, -83.03], ["Liberia", 10.635, -85.437], ["San Carlos (Ciudad Quesada)", 10.323, -84.427], ["Grecia", 10.073, -84.311], ["Atenas", 9.977, -84.379], ["Turrialba", 9.905, -83.683], ["Pérez Zeledón", 9.375, -83.705], ["Golfito", 8.64, -83.18], ["Nicoya", 10.148, -85.452], ["Santa Ana", 9.932, -84.182], ["Desamparados", 9.897, -84.064]];
@@ -142,9 +147,15 @@ map.on("load", async () => {
 });
 
 // ---------- corredores + alertas ----------
+// v1.24.1: rutas y pronóstico se piden apenas abre la página, en paralelo con el mapa base
+let preCorr = getJ("rutas.json").then(async (R) => { RUTAS = RUTAS || R; const ms = []; for (const k of Object.keys(R)) for (const m of muestrear(R[k].pts, 14)) ms.push({ k, ...m });
+  const KEY = "ojocr.fx.v1"; try { const c = JSON.parse(sessionStorage.getItem(KEY) || "null"); if (c && Date.now() - c.t < 15 * 60000 && c.n === ms.length) return c.fx; } catch { /* */ }
+  const fx = await pronostico(ms.map((m) => m.pt)); try { sessionStorage.setItem(KEY, JSON.stringify({ t: Date.now(), n: ms.length, fx })); } catch { /* */ } return fx; });
+preCorr.catch(() => {});
 async function cargarCorredores() {
   try {
     if (!RUTAS) RUTAS = await getJ("rutas.json");
+    if (preCorr) { const p = preCorr; preCorr = null; try { await p; } catch { /* se reintenta abajo */ } }
     const ks = Object.keys(RUTAS);
     map.getSource("corr").setData(fc(ks.map((k) => ({ type: "Feature", properties: { k, c: RUTAS[k].c, n: RUTAS[k].n }, geometry: { type: "LineString", coordinates: RUTAS[k].pts } }))));
     map.getSource("corr-lbl").setData(fc(ks.map((k) => { const p = RUTAS[k].pts; return { type: "Feature", properties: { n: k, c: RUTAS[k].c }, geometry: { type: "Point", coordinates: p[Math.floor(p.length * 0.45)] } }; })));
@@ -202,7 +213,7 @@ function renderAlertas() {
   const a = alertasPorRuta.slice().sort((x, y) => y.lv - x.lv || x.t0 - y.t0);
   $("#n-alertas").textContent = a.filter((x) => x.lv === 2).length || "";
   if (!a.length) { $("#alertas").innerHTML = `<div class="item"><span class="dot v"></span><div><b>Sin alertas de lluvia en los corredores</b><small>Próximas 6 horas · actualizado ${hora(Date.now())}</small></div></div>`; return; }
-  $("#alertas").innerHTML = `<ul class="list">${a.map((x, i) => `<li class="item" data-i="${i}"><span class="dot ${CL[x.lv]}"></span><div><b>${esc(texto(x.lv, x.code, x.mm))} en Ruta ${esc(x.k)} · ${esc(x.lugar)} · ${esc(franja(x.t0, x.t1))}</b><small>${esc(RUTAS[x.k].n)} · tramo ${esc(x.tramo)} · hasta ${mmf(x.mm)} mm/h · prob. ${x.p} %</small></div></li>`).join("")}</ul><p class="note">Actualizado ${hora(Date.now())}.</p>`;
+  $("#alertas").innerHTML = `<ul class="list">${a.map((x, i) => `<li class="item" data-i="${i}"><span class="dot ${CL[x.lv]}"></span><div><b>${esc(texto(x.lv, x.code, x.mm))} en Ruta ${esc(x.k)} · ${esc(x.lugar)} · ${esc(franja(x.t0, x.t1))}</b><small>${esc(RUTAS[x.k].n)} · tramo ${esc(x.tramo)} · hasta ${mmf(x.mm)} mm/h · prob. ${x.p} %</small></div></li>`).join("")}</ul><p class="note">Actualizado: ${hora(Date.now())}</p>`;
   $("#alertas").querySelectorAll(".item[data-i]").forEach((li) => li.addEventListener("click", () => { const x = a[+li.dataset.i]; volar(x.pt, 10.5); }));
 }
 
@@ -359,6 +370,7 @@ async function calcular() {
     out.innerHTML = `<div class="wz"><a class="btn waze" href="https://waze.com/ul?ll=${dst[1].toFixed(5)},${dst[0].toFixed(5)}&navigate=yes" target="_blank" rel="noopener">Abrir en Waze ↗</a><button type="button" class="btn" id="ver-traf">Ver tráfico de esta ruta</button><a class="btn waze" href="${earthUrl(mid.pt[1], mid.pt[0], Math.min(400000, mid.tot * 900), 0)}" target="_blank" rel="noopener">🌍 Ruta en Google Earth 3D ↗</a></div><div class="sum"><div><small>DISTANCIA</small><b>${dist.toFixed(dist < 20 ? 1 : 0)} km</b></div><div><small>TIEMPO <span class="est">EST.</span></small><b>${hm(dur)}</b></div><div><small>RIESGO LLUVIA</small><b style="color:${COL[max]}">${["BAJO", "MEDIO", "ALTO"][max]}</b></div></div>
       <p class="note">Salida ${hora(salida)} · llegada estimada ${hora(salida + dur * 1000)} (sin tráfico, sin paradas).</p>
       ${riesgos.length ? `<ul class="list">${riesgos.map((m) => `<li class="item" data-lng="${m.pt[0]}" data-lat="${m.pt[1]}"><span class="dot ${CL[m.lv]}"></span><div><b>≈ ${hora(m.eta)} · ${esc(m.lugar)}</b><small>km ${Math.round(m.km)} · ${texto(m.lv, m.h.code, m.h.mm)} · ${mmf(m.h.mm)} mm/h · prob. ${m.h.p} %</small></div></li>`).join("")}</ul>` : `<div class="item"><span class="dot v"></span><div><b>Sin lluvia importante en el camino</b><small>Según el pronóstico para la hora estimada de paso.</small></div></div>`}`;
+    try { sessionStorage.setItem("ojocr.ruta.v1", JSON.stringify({ o: sel.o, d: sel.d, h: salidaH })); } catch { /* */ }
     out.querySelector("#ver-traf").addEventListener("click", () => trafico(mid.pt[1], mid.pt[0], zw, `Mi ruta: ${sel.o.n} → ${sel.d.n}`));
     if (innerWidth < 900) { const sc = out.closest(".body"); sc.scrollTo({ top: out.offsetTop - sc.offsetTop - 8, behavior: "smooth" }); }
     out.querySelectorAll(".item[data-lng]").forEach((li) => li.addEventListener("click", () => volar([+li.dataset.lng, +li.dataset.lat], 11)));
@@ -375,13 +387,16 @@ const WZ = {
   limon: ["Limón", 9.99, -83.03, 13], liberia: ["Liberia", 10.635, -85.437, 13], pz: ["Pérez Zeledón", 9.375, -83.705, 13],
 };
 const wzUrl = (lat, lon, z, pin = true) => `https://embed.waze.com/es/iframe?zoom=${Math.max(3, Math.min(17, Math.round(z)))}&lat=${lat.toFixed(5)}&lon=${lon.toFixed(5)}${pin ? "&pin=1" : ""}`;
-function trafico(lat = 9.98, lon = -84.15, z = 11, nombre = "Alajuela / GAM", key = "") {
+function trafico(lat = WZ.alajuela[1], lon = WZ.alajuela[2], z = WZ.alajuela[3], nombre = WZ.alajuela[0], key = lat === WZ.alajuela[1] && lon === WZ.alajuela[2] ? "alajuela" : "") {
   const sec = $("#trafico"); sec.hidden = false;
+  $("#tr-load").hidden = false;
   $("#tr-if").src = wzUrl(lat, lon, z);
   $("#tr-sub").textContent = nombre;
   $("#tr-go").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.p === key)));
   $("#tr-x").focus({ preventScroll: true });
 }
+$("#tr-if").addEventListener("load", () => { if ($("#tr-if").src.startsWith("https:")) setTimeout(() => ($("#tr-load").hidden = true), 1200); });
+$("#gs-if").addEventListener("load", () => { if ($("#gs-if").src.startsWith("https:")) $("#gs-load").hidden = true; });
 function cerrarTrafico() { $("#trafico").hidden = true; $("#tr-if").src = "about:blank"; }
 $("#traf-chip").addEventListener("click", () => trafico());
 $("#traf-tab").addEventListener("click", () => trafico());
@@ -417,6 +432,7 @@ const gsEmbed = () => `https://maps.google.com/maps?q=${gs.lat.toFixed(5)},${gs.
 function satGoogle(lat = gs.lat, lon = gs.lon, z = gs.z, n = gs.n, key = "") {
   gs = { ...gs, lat, lon, z, n, key };
   $("#gsat").hidden = false;
+  $("#gs-load").hidden = false;
   $("#gs-if").src = gsEmbed();
   $("#gs-sub").textContent = n;
   $("#gs-earth").href = earthUrl(lat, lon, Math.max(3000, zoomADist(z)), GS_ALT[key] || 0);
@@ -461,8 +477,11 @@ const alPadre = (m) => { try { parent.postMessage(m, location.origin); } catch {
 if (APP) {
   document.body.classList.add("app");
   $("#ap-mundo").hidden = false; $("#ap-x").hidden = false;
+  // fuera de la barra de capas (que se desplaza y se difumina): siempre visibles
+  { const g = document.createElement("div"); g.className = "appg"; g.append($("#ap-mundo"), $("#ap-x")); $("header").append(g); }
   $("#ap-mundo").addEventListener("click", () => alPadre("ojo:mundo"));
-  $("#ap-x").addEventListener("click", () => alPadre("ojo:cerrar"));
+  const t0 = performance.now(); // un doble clic sobre «COSTA RICA» del globo no debe cerrar Ojo al aparecer esta página
+  $("#ap-x").addEventListener("click", () => { if (performance.now() - t0 > 1200) alPadre("ojo:cerrar"); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("#trafico").hidden && $("#gsat").hidden && !document.querySelector(".maplibregl-popup")) alPadre("ojo:cerrar"); });
 }
 addEventListener("message", (e) => {
@@ -472,3 +491,22 @@ addEventListener("message", (e) => {
   document.body.style.display = "none";
 });
 { const h = location.hash.slice(1); if (["alertas", "ruta", "sismos", "volcanes", "fuentes"].includes(h)) tab(h); }
+
+// ---------- v1.24.1 ----------
+// mapa base cargado: se quita el aviso de carga
+{ const quitar = () => { const c = $("#cargando"); if (!c || c.classList.contains("fuera")) return; c.classList.add("fuera"); setTimeout(() => c.remove(), 450); };
+  map.once("load", quitar); setTimeout(quitar, 15000); }
+// Mi ruta se recuerda en esta sesión (p. ej. al ir a MUNDO y volver)
+{ let g = null; try { g = JSON.parse(sessionStorage.getItem("ojocr.ruta.v1") || "null"); } catch { /* */ }
+  if (g && g.o && g.d && !/[?&]ruta=1/.test(location.search)) {
+    elegir("o", g.o); elegir("d", g.d);
+    if (g.h) { salidaH = g.h; $("#salida").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(+x.dataset.h === g.h))); }
+    const ir = () => calcular(); if (map.loaded()) ir(); else map.once("load", () => setTimeout(ir, 0));
+  } }
+// pestaña activa recordada
+document.querySelectorAll(".tabs [role=tab]").forEach((b) => b.addEventListener("click", () => { try { sessionStorage.setItem("ojocr.tab", b.dataset.t); } catch { /* */ } }));
+if (!location.hash) { let t = null; try { t = sessionStorage.getItem("ojocr.tab"); } catch { /* */ } if (t && document.querySelector(`.sec#s-${t}`)) tab(t); }
+// indicador de «hay más botones» en la barra de capas
+{ const c = $(".capas"); const marca = () => { c.classList.toggle("mas", c.scrollLeft + c.clientWidth < c.scrollWidth - 4); c.classList.toggle("menos", c.scrollLeft > 4); };
+  c.addEventListener("scroll", marca, { passive: true }); addEventListener("resize", marca); marca(); setTimeout(marca, 500);
+  c.addEventListener("wheel", (e) => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && c.scrollWidth > c.clientWidth) { c.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false }); }

@@ -10,7 +10,8 @@ function franja(t0, t1) { const a = horaH(t0), b = horaH(t1); if (a === b) retur
 function muestrear(line, paso) {
   const res = [{ pt: line[0], km: 0, i: 0 }]; let acc = 0, next = paso;
   for (let i = 1; i < line.length; i++) { acc += km(line[i - 1], line[i]); if (acc >= next) { res.push({ pt: line[i], km: acc, i }); next += paso; } }
-  const last = line.length - 1; if (res[res.length - 1].i !== last) res.push({ pt: line[last], km: acc, i: last });
+  const last = line.length - 1;
+  if (res[res.length - 1].i !== last) { if (res.length > 1 && acc - res[res.length - 1].km < paso / 2) res[res.length - 1] = { pt: line[last], km: acc, i: last }; else res.push({ pt: line[last], km: acc, i: last }); }
   return res;
 }
 async function getJ(u, ms = 20000) { const c = new AbortController(); const t = setTimeout(() => c.abort(), ms); try { const r = await fetch(u, { signal: c.signal }); if (!r.ok) throw Error("HTTP " + r.status); return r.json(); } finally { clearTimeout(t); } }

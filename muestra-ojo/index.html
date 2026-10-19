@@ -31,6 +31,15 @@ nav button{flex:0 0 auto;background:rgba(0,25,15,.8);color:var(--g);border:1px s
 nav button.off{color:#5b7d6c;border-color:#2b4a3a;text-decoration:line-through}
 nav button.go{border-color:var(--r);color:var(--r)}
 .city{color:#22ff9a;font-size:10px;white-space:nowrap;pointer-events:auto;cursor:pointer;transform:translate(-5px,-50%);text-shadow:0 0 4px #000,0 0 8px #000;display:flex;align-items:center;gap:4px;padding:6px 4px}.city i{width:8px;height:8px;border-radius:50%;background:#22ff9a;box-shadow:0 0 8px #22ff9a}.city b{color:#fff;font-weight:600}
+/* v1.24.1: en el Valle Central las etiquetas se abren en abanico para no encimarse (globe.gl ya usa transform en .city) */
+.city .l{display:flex;align-items:center;gap:4px;position:relative}
+.city[data-c="Alajuela"] .l{flex-direction:row-reverse;transform:translate(calc(-100% + 8px),-14px)}
+.city[data-c="Heredia"] .l{transform:translateY(-15px)}
+.city[data-c="San José"] .l{flex-direction:row-reverse;transform:translate(calc(-100% + 8px),12px)}
+.city[data-c="Cartago"] .l{transform:translateY(14px)}
+/* de lejos: en el Valle Central solo se rotula San José (los demás quedan como punto) */
+body.lejos .city:is([data-c="Alajuela"],[data-c="Heredia"],[data-c="Cartago"],[data-c="Puntarenas"]) .l{font-size:0;gap:0}
+body.lejos .city .l b{display:none}
 
 #map{position:fixed;inset:0;z-index:1;opacity:0;pointer-events:none;transition:opacity .7s ease;background:#010805}
 body.mapa #map{opacity:1;pointer-events:auto}body.mapa #globe{opacity:0;pointer-events:none}#globe{transition:opacity .7s ease}
@@ -112,6 +121,7 @@ addEventListener("resize",()=>G.width(innerWidth).height(innerHeight));
 document.addEventListener("visibilitychange",()=>document.hidden?G.pauseAnimation():G.resumeAnimation());
 const CR={lat:9.9,lng:-84.1,altitude:.22};
 setTimeout(()=>G.pointOfView(CR,4500),900);
+setInterval(()=>{try{document.body.classList.toggle("lejos",G.pointOfView().altitude>.45)}catch{}},400);
 fetch("https://cdn.jsdelivr.net/gh/vasturiano/globe.gl@v2.46.2/example/datasets/ne_110m_admin_0_countries.geojson").then(r=>r.json()).then(g=>{
  G.polygonsData(g.features).polygonAltitude(.0015).polygonCapColor(f=>f.properties.ISO_A2==="CR"?"rgba(34,255,154,.10)":"rgba(0,0,0,0)").polygonSideColor(()=>"rgba(0,0,0,0)").polygonStrokeColor(f=>f.properties.ISO_A2==="CR"?"#22ff9a":"rgba(34,255,154,.35)").polygonsTransitionDuration(0)}).catch(()=>{});
 
@@ -130,7 +140,7 @@ function render(){
   .ringMaxRadius(d=>d.mag*.45).ringPropagationSpeed(d=>.3+d.mag*.12).ringRepeatPeriod(d=>Math.max(900,3600-d.mag*400)).ringResolution(lowEnd?24:48);
  const parts=[];if(on.avi&&D.avi.length)parts.push(Object.assign(D.avi.slice(),{c:"#ffc857",s:7}));if(on.sat&&D.sat.length)parts.push(Object.assign(D.sat.slice(),{c:"#9fe8ff",s:5}));if(on.sat&&D.issPt)parts.push(Object.assign([D.issPt],{c:"#ff3b5c",s:14}));
  G.particlesData(parts).particleLat("lat").particleLng("lng").particleAltitude("alt").particlesColor(p=>p.c).particlesSize(p=>p.s).particlesSizeAttenuation(false).particleLabel(()=>"").onParticleClick(clickObj);
- G.htmlElementsData([...(on.cli?D.cli:[]),...(D.yo?[D.yo]:[]),...(D.busq?[D.busq]:[])]).htmlLat("lat").htmlLng("lng").htmlAltitude(.005).htmlElement(d=>{const e=document.createElement("div");if(d.k==="yo"){e.className="yo";return e}if(d.k==="busq"){e.className="pin";e.title=d.name;return e}e.className="city";e.innerHTML=`<i></i>${esc(d.name)} <b>${d.t}°</b>`;e.onclick=()=>clickObj(d);return e}).htmlTransitionDuration(0);
+ G.htmlElementsData([...(on.cli?D.cli:[]),...(D.yo?[D.yo]:[]),...(D.busq?[D.busq]:[])]).htmlLat("lat").htmlLng("lng").htmlAltitude(.005).htmlElement(d=>{const e=document.createElement("div");if(d.k==="yo"){e.className="yo";return e}if(d.k==="busq"){e.className="pin";e.title=d.name;return e}e.className="city";e.dataset.c=d.name;e.innerHTML=`<span class="l"><i></i>${esc(d.name)} <b>${d.t}°</b></span>`;e.onclick=()=>clickObj(d);return e}).htmlTransitionDuration(0);
  G.labelsData([...(on.sat&&D.issPt?[{...D.issPt,name:"ISS"}]:[])]).labelLat("lat").labelLng("lng").labelAltitude(d=>d.k==="iss"?d.alt:.005).labelText(d=>d.k==="iss"?"ISS":d.name.normalize("NFD").replace(/[\u0300-\u036f]/g,"")+" "+d.t).labelSize(d=>d.k==="iss"?1.2:.1).labelDotRadius(0).labelColor(d=>d.k==="iss"?"#ff3b5c":"#22ff9a").labelResolution(2);
  const paths=[...(on.rut?D.rut:[]),...(on.sat&&D.iss?[D.iss]:[])];
  G.pathsData(paths).pathPoints("pts").pathPointLat(p=>p[0]).pathPointLng(p=>p[1]).pathPointAlt(p=>p[2]||.004)

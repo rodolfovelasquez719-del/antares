@@ -1316,5 +1316,7 @@ body.desk .dr-board { max-width: min(560px, calc(100vh - 330px)); min-width: 300
 /* v1.23.2: en Ajustes solo se resalta «Ajustes» en la barra lateral */
 body.desk .tab.desk-tab[aria-current="page"] { background: linear-gradient(90deg, rgba(255,45,74,.16), rgba(255,45,74,.02)); border-color: var(--line); color: #fff; }
 .cr-sismo[hidden] { display: none; }
-@media (max-width: 520px) { .ojo-cr-btn .xl { display: none; } .ojo-bar .ojo-cr-btn, .ojo-bar .ojo-cerrar { padding: 0 11px; } }
-.ojo-cr-btn .sm { display: none; } @media (max-width: 520px) { .ojo-cr-btn .sm { display: inline; } }
+/* v1.24.1: «COSTA RICA» del globo lejos de «Cerrar» (arriba al centro; en pantallas angostas, abajo a la derecha) */
+.ojo-cr-btn { position: absolute; z-index: 2; top: calc(env(safe-area-inset-top) + 12px); left: 50%; transform: translateX(-50%); touch-action: manipulation; }
+.ojo-view[data-modo="cr"] .ojo-cr-btn { display: none; }
+@media (max-width: 760px) { .ojo-cr-btn { top: auto; left: auto; transform: none; right: 14px; bottom: calc(env(safe-area-inset-bottom) + 76px); min-height: 42px; box-shadow: 0 6px 20px rgba(0,0,0,.6); } }

@@ -3,7 +3,7 @@
 // Reversión solo de Ojo CR: OJO_CR_ENABLED = false (vuelve al globo de v1.23).
 export const OJO_ENABLED = true;
 export const OJO_CR_ENABLED = true;
-let el = null, modo = "cr";
+let el = null, modo = "cr", tCambio = 0;
 const SRC = { mundo: "muestra-ojo/?app=1", cr: "ojo-cr/?app=1" };
 export function openOjo(m, hash = "") {
   if (!OJO_ENABLED) return;
@@ -13,9 +13,12 @@ export function openOjo(m, hash = "") {
   el.className = "ojo-view";
   el.setAttribute("role", "dialog"); el.setAttribute("aria-label", "Ojo: mapa de datos públicos");
   el.innerHTML = `<iframe title="Ojo" allow="geolocation" referrerpolicy="strict-origin-when-cross-origin"></iframe>
-    <div class="ojo-bar">${OJO_CR_ENABLED ? `<button type="button" class="ojo-cr-btn" aria-label="Cambiar a Ojo Costa Rica">🇨🇷 <span class="xl">COSTA RICA</span><span class="sm">CR</span></button>` : ""}<button type="button" class="ojo-cerrar" aria-label="Cerrar Ojo">✕ Cerrar</button></div>`;
-  el.querySelector(".ojo-cerrar").addEventListener("click", closeOjo);
-  const cb = el.querySelector(".ojo-cr-btn"); if (cb) cb.addEventListener("click", () => cambiar("cr"));
+    <div class="ojo-bar"><button type="button" class="ojo-cerrar" aria-label="Cerrar Ojo">✕ Cerrar</button></div>
+    ${OJO_CR_ENABLED ? `<button type="button" class="ojo-cr-btn" aria-label="Cambiar a Ojo Costa Rica">🇨🇷 COSTA RICA</button>` : ""}`;
+  // v1.24.1: «Cerrar» no reacciona justo después de cambiar de modo (evita que un doble clic cierre Ojo)
+  el.querySelector(".ojo-cerrar").addEventListener("click", () => { if (performance.now() - tCambio > 1200) closeOjo(); });
+  // «COSTA RICA» va en otro lugar que «CERRAR» y responde al primer toque aunque el globo esté animando
+  const cb = el.querySelector(".ojo-cr-btn"); if (cb) cb.addEventListener("pointerdown", (e) => { if (e.button === 0) { e.preventDefault(); cambiar("cr"); } }), cb.addEventListener("click", () => { if (modo !== "cr") cambiar("cr"); });
   document.body.appendChild(el);
   document.body.classList.add("ojo-on");
   document.addEventListener("keydown", esc);
@@ -26,7 +29,7 @@ function cambiar(m, hash = "") {
   if (!el) return;
   const f = el.querySelector("iframe");
   try { f.contentWindow && f.contentWindow.postMessage("ojo:pausa", location.origin); } catch { /* */ }
-  modo = m;
+  modo = m; tCambio = performance.now();
   el.dataset.modo = m; // en modo CR los botones (MUNDO / CERRAR) los dibuja la propia página
   f.src = SRC[m] + (hash ? "#" + hash : "");
 }

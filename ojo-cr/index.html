@@ -5,6 +5,10 @@
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#020c08">
 <link rel="icon" href="../icons/favicon-32.png">
+<link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin>
+<link rel="preconnect" href="https://api.open-meteo.com" crossorigin>
+<link rel="preload" as="script" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js" crossorigin>
+<link rel="preload" as="fetch" href="rutas.json" crossorigin>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <style>
 @font-face{font-family:"Orbitron";src:url("../fonts/orbitron-latin.woff2") format("woff2");font-weight:400 900;font-display:swap}
@@ -28,8 +32,8 @@ header{position:fixed;z-index:10;top:calc(var(--st) + 10px);left:10px;right:10px
 #banner[hidden]{display:none}
 #banner b{font-family:var(--hud);font-size:12px;letter-spacing:.1em;color:var(--r)}
 aside{position:fixed;z-index:9;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(8px);box-shadow:0 20px 60px rgba(0,0,0,.55)}
-.tabs{display:flex;gap:4px;padding:8px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none;flex:none}
-.tabs button{flex:1 0 auto;border:1px solid transparent;background:none;border-radius:9px;padding:8px 10px;font:600 11px var(--hud);letter-spacing:.06em;color:var(--muted);cursor:pointer;white-space:nowrap}
+.tabs{display:flex;flex-wrap:wrap;gap:4px;padding:8px;border-bottom:1px solid var(--line);flex:none}
+.tabs button{flex:1 0 auto;min-width:0;border:1px solid transparent;background:none;border-radius:9px;padding:8px 10px;font:600 11px var(--hud);letter-spacing:.06em;color:var(--muted);cursor:pointer;white-space:nowrap}
 .tabs button[aria-selected=true]{color:#fff;border-color:var(--line);background:linear-gradient(90deg,rgba(255,59,92,.2),rgba(34,255,154,.08))}
 .tabs .n{display:inline-block;min-width:18px;margin-left:4px;padding:0 5px;border-radius:9px;background:var(--r);color:#fff;font-size:10px}
 .tabs .n:empty{display:none}
@@ -101,7 +105,8 @@ body.app .brand .lg{display:none}
 @media (max-width:899px){body.app .brand small{display:none}
  body.app .appb{position:fixed;z-index:12;top:calc(var(--st) + 12px);padding:8px 11px}
  body.app #ap-x{right:10px}body.app #ap-mundo{right:58px}body.app .xl2{display:none}}
-@media (min-width:900px){body.app .appb{order:9}}
+.appg,.appb{pointer-events:auto}
+@media (min-width:900px){.appg{display:flex;gap:6px;flex:none}}
 .chip.goo{color:#fff;border-color:rgba(66,133,244,.65)}
 #gsat .tr-top>.seg{flex:none;min-width:0}
 @media (min-width:900px) and (max-width:1600px){.capas .chip{padding:6px 9px;letter-spacing:.04em}.chip .xl{display:none}}
@@ -112,6 +117,15 @@ body.app .brand .lg{display:none}
 .earth-a{display:inline-block;margin-top:6px;padding:5px 9px;border:1px solid rgba(66,133,244,.6);border-radius:8px;color:#e6fff3!important;text-decoration:none;font-weight:600;background:rgba(66,133,244,.14)}
 .ctx b{color:var(--g)}.ctx .earth-a{margin-right:4px}
 @media (max-width:899px){#gsat .tr-top{flex-wrap:wrap}#gsat .tr-top>div:first-child{flex:1 1 60%}.lgb{display:none}}
+/* v1.24.1: carga del mapa y de los iframes */
+#cargando{position:fixed;inset:0;z-index:5;display:grid;place-items:center;background:radial-gradient(circle at 60% 45%,#062a1b,#010a06 70%);transition:opacity .4s;pointer-events:none}
+#cargando.fuera{opacity:0}
+#cargando p{font:600 12px var(--hud);letter-spacing:.2em;color:var(--g);text-align:center}
+.spin{width:38px;height:38px;margin:0 auto 12px;border-radius:50%;border:3px solid rgba(34,255,154,.18);border-top-color:var(--g);animation:gira 1s linear infinite}
+@keyframes gira{to{transform:rotate(1turn)}}
+.tr-frame{position:relative}
+.tr-load{position:absolute;inset:0;display:grid;place-items:center;background:#0b1a13;font:600 11px var(--hud);letter-spacing:.16em;color:var(--g);z-index:1}
+.tr-load[hidden]{display:none}
 .wz{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
 .wz a,.wz button{flex:1 1 150px;text-align:center;text-decoration:none;color:#e6fff3}
 .wz .waze{background:rgba(51,204,255,.12);border-color:rgba(51,204,255,.55)}
@@ -119,15 +133,24 @@ body.app .brand .lg{display:none}
 @media (min-width:900px){
  aside{left:12px;top:calc(var(--st) + 70px);bottom:12px;width:390px;border-radius:16px}
  #banner{left:410px;right:20px}
+ header{flex-wrap:nowrap}
+ .capas{flex:1 1 0;min-width:0;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;justify-content:flex-start;padding:2px 0}
+ .capas::-webkit-scrollbar{display:none}
+ .capas .chip{flex:none}
+ .capas>:first-child{margin-left:auto}
+ .capas.mas{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 40px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 40px),transparent)}
+ .capas.menos{-webkit-mask-image:linear-gradient(90deg,transparent,#000 40px);mask-image:linear-gradient(90deg,transparent,#000 40px)}
+ .capas.mas.menos{-webkit-mask-image:linear-gradient(90deg,transparent,#000 40px,#000 calc(100% - 40px),transparent);mask-image:linear-gradient(90deg,transparent,#000 40px,#000 calc(100% - 40px),transparent)}
  .maplibregl-ctrl-bottom-left{left:410px}
 }
 /* teléfono: hoja inferior */
 @media (max-width:899px){
  header{gap:6px}.brand{padding:6px 10px}.brand .lg{display:none}.brand h1{font-size:13px}.clk{display:none}
  .capas{margin-left:0;width:100%;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}.chip{flex:none;padding:6px 10px}
- #banner{top:calc(var(--st) + 100px);font-size:13.5px}
+ #banner{top:calc(var(--st) + 98px);font-size:13.5px;z-index:11}
+ .capas.mas{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 36px),transparent)}
  aside{left:0;right:0;bottom:0;height:46vh;border-radius:18px 18px 0 0;border-bottom:0;padding-bottom:var(--sb);transition:height .25s}
- aside.min{height:116px}
+ aside.min{height:150px}
  .handle{display:block;width:44px;height:5px;border-radius:3px;background:var(--line);margin:7px auto 0;border:0;padding:0;cursor:pointer;flex:none}
  .maplibregl-ctrl-bottom-right,.maplibregl-ctrl-bottom-left{bottom:46vh}
 }
@@ -209,20 +232,20 @@ body.app .brand .lg{display:none}
 <!-- Tráfico: panel aparte, a pantalla completa. Waze no se superpone ni se mezcla con el mapa de Antares. -->
 <section id="trafico" class="trafico" hidden aria-label="Tráfico en vivo de Waze" role="dialog">
  <div class="tr-top">
-  <div><h2 class="tr-h">TRÁFICO EN VIVO DE WAZE</h2><small class="tr-sub" id="tr-sub">Alajuela / GAM</small></div>
+  <div><h2 class="tr-h">TRÁFICO EN VIVO DE WAZE</h2><small class="tr-sub" id="tr-sub">Alajuela</small></div>
   <a class="btn" id="tr-ext" href="https://www.waze.com/es/live-map/" target="_blank" rel="noopener"><span class="lg">Abrir en </span>waze.com ↗</a>
   <button class="btn tr-x" id="tr-x" type="button" aria-label="Cerrar tráfico">✕ Cerrar</button>
  </div>
  <div class="tr-go" id="tr-go" role="group" aria-label="Centrar en">
   <button data-p="gam">GAM (San José)</button><button data-p="alajuela">Alajuela</button><button data-p="r27">Ruta 27</button><button data-p="r32">Ruta 32 Zurquí</button><button data-p="r1">Ruta 1 Naranjo</button><button data-p="cartago">Cartago</button><button data-p="limon">Limón</button><button data-p="liberia">Liberia</button><button data-p="pz">Pérez Zeledón</button><button data-p="yo">◉ Mi ubicación</button>
  </div>
- <div class="tr-frame"><iframe id="tr-if" title="Tráfico en vivo de Waze" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>
+ <div class="tr-frame"><div class="tr-load" id="tr-load"><div><div class="spin"></div>CARGANDO WAZE…</div></div><iframe id="tr-if" title="Tráfico en vivo de Waze" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>
  <p class="tr-note">Mapa y datos: <b>Waze</b> (mapa en vivo oficial, incrustado). Se muestra aparte del mapa de Antares. Waze abre bastante de cerca: use <b>−</b> para ver más área. Su ubicación solo se usa en este equipo para centrar el mapa.</p>
 </section>
 <!-- Satélite de Google: panel aparte (embed sin clave de Google Maps), no se mezcla con el mapa de Antares -->
 <section id="gsat" class="trafico" hidden aria-label="Satélite de Google" role="dialog">
  <div class="tr-top">
-  <div><h2 class="tr-h">SATÉLITE GOOGLE</h2><small class="tr-sub" id="gs-sub">Alajuela / GAM</small></div>
+  <div><h2 class="tr-h">SATÉLITE GOOGLE</h2><small class="tr-sub" id="gs-sub">Centro del mapa</small></div>
   <div class="seg" role="group" aria-label="Tipo de mapa"><button id="gs-k" aria-pressed="true">Satélite</button><button id="gs-h" aria-pressed="false">Híbrido</button></div>
   <a class="btn" id="gs-earth" href="#" target="_blank" rel="noopener">🌍 <span class="lg">Abrir en </span>Google Earth 3D ↗</a>
   <a class="btn lgb" id="gs-maps" href="#" target="_blank" rel="noopener">Google Maps ↗</a>
@@ -231,9 +254,10 @@ body.app .brand .lg{display:none}
  <div class="tr-go" id="gs-go" role="group" aria-label="Centrar en">
   <button data-p="gam">GAM (San José)</button><button data-p="alajuela">Alajuela</button><button data-p="r27">Ruta 27</button><button data-p="r32">Ruta 32 Zurquí</button><button data-p="r1">Ruta 1 Naranjo</button><button data-p="cartago">Cartago</button><button data-p="limon">Limón</button><button data-p="liberia">Liberia</button><button data-p="pz">Pérez Zeledón</button><button data-p="poas">▲ Poás</button><button data-p="turrialba">▲ Turrialba</button><button data-p="rincon">▲ Rincón de la Vieja</button><button data-p="yo">◉ Mi ubicación</button>
  </div>
- <div class="tr-frame"><iframe id="gs-if" title="Satélite de Google" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen loading="eager"></iframe></div>
+ <div class="tr-frame"><div class="tr-load" id="gs-load"><div><div class="spin"></div>CARGANDO SATÉLITE…</div></div><iframe id="gs-if" title="Satélite de Google" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen loading="eager"></iframe></div>
  <p class="tr-note">Imágenes: <b>Google</b> (mapa incrustado oficial, sin clave). Se muestra aparte del mapa de Antares. «Google Earth 3D» abre una pestaña nueva (o la app de Earth en el teléfono, si está instalada).</p>
 </section>
+<div id="cargando" aria-live="polite"><div><div class="spin"></div><p>CARGANDO MAPA DE COSTA RICA…</p></div></div>
 <div class="toast" id="toast" role="status"></div>
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="ojocr.js"></script>
