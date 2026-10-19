@@ -1135,7 +1135,46 @@ body.kb-open .vision-btn, body.typing .vision-btn { display: none; }
 .ojo-btn { right: 108px; color: #22ff9a; border-color: rgba(34,255,154,.5); }
 .ojo-view { position: fixed; inset: 0; z-index: 950; background: #010805; }
 .ojo-view iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-.ojo-cerrar { position: absolute; z-index: 2; top: calc(env(safe-area-inset-top) + 12px); right: 14px; min-height: 36px; padding: 0 14px; font: 600 12px var(--font-hud, monospace); letter-spacing: 1px; color: #fff; background: rgba(255,45,74,.88); border: 1px solid #ff8a9b; border-radius: 10px; }
+.ojo-bar { position: absolute; z-index: 2; top: calc(env(safe-area-inset-top) + 12px); right: 14px; display: flex; gap: 8px; }
+.ojo-view[data-modo="cr"] .ojo-bar { display: none; } /* en Costa Rica la propia página trae MUNDO y CERRAR */
+.ojo-cerrar, .ojo-cr-btn { min-height: 36px; padding: 0 14px; font: 600 12px var(--font-hud, monospace); letter-spacing: 1px; color: #fff; background: rgba(255,45,74,.88); border: 1px solid #ff8a9b; border-radius: 10px; cursor: pointer; }
+.ojo-cr-btn { background: rgba(3,20,13,.88); border-color: rgba(34,255,154,.6); color: #22ff9a; }
+/* v1.24: resumen de Ojo CR en Inicio */
+.cr-sismo { display: flex; align-items: center; gap: 8px; width: min(440px, 92%); margin: 6px auto 0; padding: 9px 12px; border: 1px solid #ff8a9b; border-radius: 12px; background: rgba(255,45,74,.2); color: #fff; font: 600 13px var(--font-ui, sans-serif); text-align: left; cursor: pointer; }
+.cr-sismo b { color: #ff8a9b; font-family: var(--font-hud, monospace); letter-spacing: .5px; }
+.cr-sismo .x { margin-left: auto; padding: 2px 6px; opacity: .8; }
+.cr-card { display: block; width: min(440px, 92%); margin: 8px auto 0; padding: 9px 12px; border: 1px solid rgba(34,255,154,.35); border-radius: 12px; background: rgba(3,20,13,.6); color: #dfffee; text-align: left; cursor: pointer; font: 500 13px var(--font-ui, sans-serif); }
+.cr-card .h { white-space: nowrap; display: flex; gap: 8px; align-items: baseline; font: 600 11px var(--font-hud, monospace); letter-spacing: 1.2px; color: #22ff9a; }
+.cr-card .h i { font-style: normal; margin-left: auto; color: #8fbfa8; letter-spacing: .3px; font-size: 10px; }
+.cr-card .n { color: #ff5a73; } .cr-card.ok .n { color: #22ff9a; }
+.cr-card p { margin: 3px 0 0; line-height: 1.3; }
+.cr-card p.d { color: #8fbfa8; font-size: 12px; }
+.cr-home { width: 100%; flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 14px 6px; }
+.cr-home:empty { display: none; }
+body.compact .cr-home, body.typing .cr-home, body.kb-open .cr-home, body.driving .cr-home, body:not(.desk)[data-estado]:not([data-estado="reposo"]) .cr-home { display: none; }
+/* teléfono: una sola línea cada uno, para no empujar el micrófono */
+body:not(.desk) .cr-sismo, body:not(.desk) .cr-card { width: min(440px, 100%); margin: 0; padding: 7px 11px; font-size: 12.5px; }
+body:not(.desk) .cr-sismo small, body:not(.desk) .cr-card .h i .l, body:not(.desk) .cr-card p.d { display: none; }
+body:not(.desk) .cr-card { display: flex; align-items: baseline; gap: 8px; }
+body:not(.desk) .cr-card p { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body:not(.desk) .cr-card::after { content: "›"; margin-left: auto; color: #22ff9a; }
+body.desk .cr-home { grid-column: 1; grid-row: 5; padding: 6px 16px 0; }
+body.desk .cr-home .cr-sismo, body.desk .cr-home .cr-card { width: 100%; margin: 0; }
+body.desk #desk-cards { grid-row: 6; }
+@media (max-height: 900px) {
+body.desk .cr-sismo, body.desk .cr-card { width: 100%; margin: 0; padding: 7px 11px; font-size: 12.5px; }
+body.desk .cr-sismo small, body.desk .cr-card .h i .l { display: none; }
+body.desk .cr-card { display: flex; align-items: baseline; gap: 8px; }
+body.desk .cr-card p { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.desk .cr-card::after { content: "›"; margin-left: auto; color: #22ff9a; }
+body.desk .cr-card .h { white-space: nowrap; flex: none; }
+body.desk .cr-card p:not(.d) { flex: none; } body.desk .cr-card p.d { min-width: 0; }
+body.desk .cr-sismo > span:nth-child(2) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+body.desk .cr-sismo br { display: none; }
+body.desk .cr-sismo { padding: 7px 11px; }
+body.desk:has(.cr-card) .reactor-wrap { width: min(320px, 24vh) !important; height: min(320px, 24vh) !important; }
+}
+
 body.kb-open .ojo-btn, body.typing .ojo-btn { display: none; }
 
 /* ======================================================================
@@ -1276,3 +1315,6 @@ body.desk .dr-board { max-width: min(560px, calc(100vh - 330px)); min-width: 300
 @media (prefers-reduced-motion: reduce) { .digest-card.skel .sk, .skel-spin { animation: none; } }
 /* v1.23.2: en Ajustes solo se resalta «Ajustes» en la barra lateral */
 body.desk .tab.desk-tab[aria-current="page"] { background: linear-gradient(90deg, rgba(255,45,74,.16), rgba(255,45,74,.02)); border-color: var(--line); color: #fff; }
+.cr-sismo[hidden] { display: none; }
+@media (max-width: 520px) { .ojo-cr-btn .xl { display: none; } .ojo-bar .ojo-cr-btn, .ojo-bar .ojo-cerrar { padding: 0 11px; } }
+.ojo-cr-btn .sm { display: none; } @media (max-width: 520px) { .ojo-cr-btn .sm { display: inline; } }

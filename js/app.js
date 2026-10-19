@@ -28,7 +28,8 @@ import * as Brain from "./brain.js";
 import * as Hud from "./hud.js";
 import { mountAvatar, mountAvatarVideo, setAvatarState } from "./avatar.js";
 import { openVision, closeVision } from "./vision.js";
-import { OJO_ENABLED, openOjo, closeOjo, isOjoOpen } from "./ojo.js";
+import { OJO_ENABLED, OJO_CR_ENABLED, openOjo, closeOjo, isOjoOpen } from "./ojo.js";
+import { iniciarResumenCR } from "./ojocr-resumen.js";
 import * as Av3 from "./avatar3d.js";
 import * as Desk from "./desktop.js";
 import { MODELS as GEM_MODELS } from "./gemini.js";
@@ -36,7 +37,7 @@ import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.23.2";
+const APP_VERSION = "1.24.0";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -3073,8 +3074,10 @@ async function init() {
     const ps = document.getElementById("presence-sel"); ps.value = presence(); 
     if (!AVATAR_ENABLED && config.presence && !["cerebro", "avatar3d"].includes(config.presence)) { config = { ...config, presence: "cerebro" }; try { memory.saveConfig(config); } catch { /* */ } }
     ps.addEventListener("change", () => { config = { ...config, presence: ps.value }; memory.saveConfig(config); paintPresence(); });
-    { const ob = document.getElementById("ojo-btn"); if (!OJO_ENABLED) ob.hidden = true; else ob.addEventListener("click", openOjo); }
+    { const ob = document.getElementById("ojo-btn"); if (!OJO_ENABLED) ob.hidden = true; else ob.addEventListener("click", () => openOjo()); }
     window.addEventListener("antares:ojo", () => openOjo());
+    // v1.24: tarjeta «Alertas en rutas» y aviso de sismo en Inicio (abren Ojo CR)
+    if (OJO_ENABLED && OJO_CR_ENABLED) { try { iniciarResumenCR(document.getElementById("cr-home"), (h) => openOjo("cr", h)); } catch (e) { console.warn(e); } }
     window.__ojoOn = OJO_ENABLED;
     document.getElementById("vision-btn").addEventListener("click", () => openVision({ getKey: () => config.geminiApiKey || "", model: GEM_MODELS[0], speak: (t) => { try { voice.speak(t); } catch { /* */ } } }));
   } catch (e) { console.warn("Antares: presencia/visión", e); }
