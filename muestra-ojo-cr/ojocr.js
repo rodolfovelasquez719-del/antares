@@ -255,7 +255,7 @@ async function cargarSismos() {
 }
 function popSis(i) {
   const e = SIS[i]; if (!e) return;
-  new maplibregl.Popup({ maxWidth: "300px" }).setLngLat([e.lng, e.lat]).setHTML(`<b>SISMO M${mmf(e.mag)}</b><br>${esc(e.lugar)}<br>${esc(new Date(e.t).toLocaleString("es-CR", { timeZone: TZ }))} (${hace(e.t)})${isFinite(e.prof) ? "<br>Profundidad " + Math.round(e.prof) + " km" : ""}${e.sentido ? "<br>Sentido en: " + esc(e.sentido) : ""}<br><small>Fuente: ${esc(e.src)}${e.link ? ` · <a href="${esc(e.link)}" target="_blank" rel="noopener">informe</a>` : ""}</small>`).addTo(map);
+  new maplibregl.Popup({ maxWidth: "300px" }).setLngLat([e.lng, e.lat]).setHTML(`<b>SISMO M${mmf(e.mag)}</b><br>${esc(e.lugar)}<br>${esc(new Date(e.t).toLocaleString("es-CR", { timeZone: TZ }))} (${hace(e.t)})${isFinite(e.prof) ? "<br>Profundidad " + Math.round(e.prof) + " km" : ""}${e.sentido ? "<br>Sentido en: " + esc(e.sentido) : ""}<br><small>Fuente: ${esc(e.src)}${e.link ? ` · <a href="${esc(e.link)}" target="_blank" rel="noopener">informe</a>` : ""}</small><br>${earthA(e.lat, e.lng, 60000, 0, "🌍 Ver la zona en Google Earth 3D ↗")}`).addTo(map);
 }
 
 // ---------- volcanes (información fija) ----------
@@ -263,7 +263,7 @@ function renderVolcanes() {
   $("#volcanes").innerHTML = VOLC.map((v, i) => `<div class="vol" data-i="${i}"><b>▲ ${esc(v.n.toUpperCase())}</b> <small class="note">${esc(v.alt)}</small><p>${esc(v.d)}</p><p><span class="est">INFO FIJA</span> Estado actual: <a href="https://www.ovsicori.una.ac.cr/" target="_blank" rel="noopener">consultar OVSICORI</a></p></div>`).join("");
   $("#volcanes").querySelectorAll(".vol").forEach((d) => d.addEventListener("click", (ev) => { if (ev.target.closest("a")) return; const v = VOLC[+d.dataset.i]; volar([v.lng, v.lat], 10.5); popVol(+d.dataset.i); }));
 }
-function popVol(i) { const v = VOLC[i]; new maplibregl.Popup({ maxWidth: "290px" }).setLngLat([v.lng, v.lat]).setHTML(`<b>▲ VOLCÁN ${esc(v.n.toUpperCase())}</b> · ${esc(v.alt)}<br>${esc(v.d)}<br><small>Información fija, no es el estado en vivo. <a href="https://www.ovsicori.una.ac.cr/" target="_blank" rel="noopener">Estado oficial en OVSICORI</a></small>`).addTo(map); }
+function popVol(i) { const v = VOLC[i]; new maplibregl.Popup({ maxWidth: "290px" }).setLngLat([v.lng, v.lat]).setHTML(`<b>▲ VOLCÁN ${esc(v.n.toUpperCase())}</b> · ${esc(v.alt)}<br>${esc(v.d)}<br><small>Información fija, no es el estado en vivo. <a href="https://www.ovsicori.una.ac.cr/" target="_blank" rel="noopener">Estado oficial en OVSICORI</a></small><br>${earthA(v.lat, v.lng, 9000, parseInt(v.alt) || 0)}`).addTo(map); }
 
 // ---------- radar (RainViewer) ----------
 async function cargarRadar() {
@@ -356,7 +356,7 @@ async function calcular() {
     const hm = (s) => { const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60); return h ? `${h} h ${m} min` : `${m} min`; };
     const mid = medioRuta(line), zw = Math.max(8, Math.min(15, 14.5 - Math.log2(Math.max(1, mid.tot) / 3)));
     const dst = line[line.length - 1];
-    out.innerHTML = `<div class="wz"><a class="btn waze" href="https://waze.com/ul?ll=${dst[1].toFixed(5)},${dst[0].toFixed(5)}&navigate=yes" target="_blank" rel="noopener">Abrir en Waze ↗</a><button type="button" class="btn" id="ver-traf">Ver tráfico de esta ruta</button></div><div class="sum"><div><small>DISTANCIA</small><b>${dist.toFixed(dist < 20 ? 1 : 0)} km</b></div><div><small>TIEMPO <span class="est">EST.</span></small><b>${hm(dur)}</b></div><div><small>RIESGO LLUVIA</small><b style="color:${COL[max]}">${["BAJO", "MEDIO", "ALTO"][max]}</b></div></div>
+    out.innerHTML = `<div class="wz"><a class="btn waze" href="https://waze.com/ul?ll=${dst[1].toFixed(5)},${dst[0].toFixed(5)}&navigate=yes" target="_blank" rel="noopener">Abrir en Waze ↗</a><button type="button" class="btn" id="ver-traf">Ver tráfico de esta ruta</button><a class="btn waze" href="${earthUrl(mid.pt[1], mid.pt[0], Math.min(400000, mid.tot * 900), 0)}" target="_blank" rel="noopener">🌍 Ruta en Google Earth 3D ↗</a></div><div class="sum"><div><small>DISTANCIA</small><b>${dist.toFixed(dist < 20 ? 1 : 0)} km</b></div><div><small>TIEMPO <span class="est">EST.</span></small><b>${hm(dur)}</b></div><div><small>RIESGO LLUVIA</small><b style="color:${COL[max]}">${["BAJO", "MEDIO", "ALTO"][max]}</b></div></div>
       <p class="note">Salida ${hora(salida)} · llegada estimada ${hora(salida + dur * 1000)} (sin tráfico, sin paradas).</p>
       ${riesgos.length ? `<ul class="list">${riesgos.map((m) => `<li class="item" data-lng="${m.pt[0]}" data-lat="${m.pt[1]}"><span class="dot ${CL[m.lv]}"></span><div><b>≈ ${hora(m.eta)} · ${esc(m.lugar)}</b><small>km ${Math.round(m.km)} · ${texto(m.lv, m.h.code, m.h.mm)} · ${mmf(m.h.mm)} mm/h · prob. ${m.h.p} %</small></div></li>`).join("")}</ul>` : `<div class="item"><span class="dot v"></span><div><b>Sin lluvia importante en el camino</b><small>Según el pronóstico para la hora estimada de paso.</small></div></div>`}`;
     out.querySelector("#ver-traf").addEventListener("click", () => trafico(mid.pt[1], mid.pt[0], zw, `Mi ruta: ${sel.o.n} → ${sel.d.n}`));
@@ -402,4 +402,55 @@ function medioRuta(line) {
   let tot = 0; const seg = []; for (let i = 1; i < line.length; i++) { const d = km(line[i - 1], line[i]); seg.push(d); tot += d; }
   let acc = 0; for (let i = 0; i < seg.length; i++) { if (acc + seg[i] >= tot / 2) return { pt: line[i + 1], tot }; acc += seg[i]; }
   return { pt: line[line.length - 1], tot };
+}
+
+// ---------- Google Earth / Satélite Google (solo enlaces oficiales y el embed sin clave) ----------
+// vista 3D inclinada: @LAT,LON,ALTa,DISTd,35y,0h,45t,0r
+function earthUrl(lat, lon, dist = 6000, alt = 0) { return `https://earth.google.com/web/@${(+lat).toFixed(5)},${(+lon).toFixed(5)},${Math.round(alt)}a,${Math.round(Math.max(300, dist))}d,35y,0h,45t,0r`; }
+const earthA = (lat, lon, dist, alt, txt = "🌍 Abrir en Google Earth 3D ↗") => `<a class="earth-a" href="${earthUrl(lat, lon, dist, alt)}" target="_blank" rel="noopener">${txt}</a>`;
+const zoomADist = (z) => Math.round(40000000 / 2 ** z * 1.2); // distancia de cámara aproximada para un zoom de MapLibre
+$("#earth-chip").addEventListener("click", () => { const c = map.getCenter(); window.open(earthUrl(c.lat, c.lng, zoomADist(map.getZoom())), "_blank", "noopener"); });
+const GS = { ...WZ, poas: ["Volcán Poás", 10.2, -84.233, 14], turrialba: ["Volcán Turrialba", 10.025, -83.767, 14], rincon: ["Volcán Rincón de la Vieja", 10.83, -85.324, 13] };
+const GS_ALT = { poas: 2600, turrialba: 3200, rincon: 1800 };
+let gs = { lat: 9.98, lon: -84.15, z: 11, t: "k", n: "Alajuela / GAM", key: "" };
+const gsEmbed = () => `https://maps.google.com/maps?q=${gs.lat.toFixed(5)},${gs.lon.toFixed(5)}&t=${gs.t}&z=${Math.max(3, Math.min(20, Math.round(gs.z)))}&output=embed`;
+function satGoogle(lat = gs.lat, lon = gs.lon, z = gs.z, n = gs.n, key = "") {
+  gs = { ...gs, lat, lon, z, n, key };
+  $("#gsat").hidden = false;
+  $("#gs-if").src = gsEmbed();
+  $("#gs-sub").textContent = n;
+  $("#gs-earth").href = earthUrl(lat, lon, Math.max(3000, zoomADist(z)), GS_ALT[key] || 0);
+  $("#gs-maps").href = `https://www.google.com/maps/@${lat.toFixed(5)},${lon.toFixed(5)},${Math.round(zoomADist(z) / 2.5)}m/data=!3m1!1e3`;
+  $("#gs-go").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.p === key)));
+  $("#gs-k").setAttribute("aria-pressed", String(gs.t === "k")); $("#gs-h").setAttribute("aria-pressed", String(gs.t === "h"));
+}
+function cerrarSat() { $("#gsat").hidden = true; $("#gs-if").src = "about:blank"; }
+$("#gsat-chip").addEventListener("click", () => { const c = map.getCenter(); satGoogle(c.lat, c.lng, Math.max(10, Math.round(map.getZoom() + 1)), "Centro del mapa"); });
+$("#gs-x").addEventListener("click", cerrarSat);
+$("#gs-k").addEventListener("click", () => { gs.t = "k"; satGoogle(); });
+$("#gs-h").addEventListener("click", () => { gs.t = "h"; satGoogle(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#gsat").hidden) cerrarSat(); });
+$("#gs-go").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+  const k = b.dataset.p;
+  if (k === "yo") {
+    if (!navigator.geolocation) { toast("Este navegador no da la ubicación."); return; }
+    toast("Buscando su ubicación (solo en este equipo)…");
+    navigator.geolocation.getCurrentPosition((p) => satGoogle(p.coords.latitude, p.coords.longitude, 17, "Mi ubicación", "yo"), () => toast("No se pudo obtener la ubicación."), { timeout: 12000, maximumAge: 120000 });
+    return;
+  }
+  const [n, lat, lon, z] = GS[k]; satGoogle(lat, lon, Math.min(20, z + 1), n, k);
+}));
+// clic derecho (computadora) o toque largo (teléfono) sobre el mapa: abrir ese punto en Google
+function menuPunto(ll, toque = false) {
+  cerrarPopups();
+  const d = zoomADist(map.getZoom()) / 3;
+  new maplibregl.Popup({ maxWidth: "290px", className: "ctx", closeOnClick: !toque }).setLngLat(ll).setHTML(`<b>📍 ${ll.lat.toFixed(4)}, ${ll.lng.toFixed(4)}</b><br>${earthA(ll.lat, ll.lng, d, 0)}<br><a class="earth-a" href="#" data-gs="${ll.lat},${ll.lng}">🛰 Ver en Satélite Google</a>`).addTo(map);
+  const a = document.querySelector('.ctx [data-gs]'); if (a) a.addEventListener("click", (e) => { e.preventDefault(); satGoogle(ll.lat, ll.lng, Math.max(13, Math.round(map.getZoom() + 2)), `${ll.lat.toFixed(4)}, ${ll.lng.toFixed(4)}`); });
+}
+map.on("contextmenu", (e) => { e.preventDefault(); menuPunto(e.lngLat); });
+{ // toque largo
+  let t = null, p0 = null;
+  map.on("touchstart", (e) => { clearTimeout(t); const to = e.originalEvent.touches; if (to && to.length !== 1) return; p0 = e.point; const ll = e.lngLat; t = setTimeout(() => { if (navigator.vibrate) navigator.vibrate(20); menuPunto(ll, true); }, 600); });
+  map.on("touchmove", (e) => { if (p0 && Math.hypot(e.point.x - p0.x, e.point.y - p0.y) > 10) clearTimeout(t); });
+  for (const ev of ["touchend", "touchcancel", "movestart", "zoomstart"]) map.on(ev, () => clearTimeout(t));
 }

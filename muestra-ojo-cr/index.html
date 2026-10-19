@@ -96,6 +96,16 @@ a{color:var(--g)}
 .tr-frame iframe{width:100%;height:100%;border:0;display:block}
 .tr-note{margin:8px 2px 0;font-size:12.5px;color:var(--muted)}
 @media (max-width:899px){.tr-top{flex-wrap:nowrap;gap:6px}.tr-top>div{min-width:0}.tr-h{font-size:11.5px;letter-spacing:.1em}.tr-top .btn{padding:8px 10px;font-size:13px}.tr-top .lg{display:none}.trafico{padding-left:8px;padding-right:8px}}
+.chip.goo{color:#fff;border-color:rgba(66,133,244,.65)}
+#gsat .tr-top>.seg{flex:none;min-width:0}
+@media (min-width:900px) and (max-width:1600px){.capas .chip{padding:6px 9px;letter-spacing:.04em}.chip .xl{display:none}}
+@media (min-width:900px) and (max-width:1480px){.clk{display:none}}
+.seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;flex:none}
+.seg button{border:0;background:none;padding:8px 12px;cursor:pointer;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed=true]{background:rgba(34,255,154,.16);color:#fff}
+.earth-a{display:inline-block;margin-top:6px;padding:5px 9px;border:1px solid rgba(66,133,244,.6);border-radius:8px;color:#e6fff3!important;text-decoration:none;font-weight:600;background:rgba(66,133,244,.14)}
+.ctx b{color:var(--g)}.ctx .earth-a{margin-right:4px}
+@media (max-width:899px){#gsat .tr-top{flex-wrap:wrap}#gsat .tr-top>div:first-child{flex:1 1 60%}.lgb{display:none}}
 .wz{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
 .wz a,.wz button{flex:1 1 150px;text-align:center;text-decoration:none;color:#e6fff3}
 .wz .waze{background:rgba(51,204,255,.12);border-color:rgba(51,204,255,.55)}
@@ -127,6 +137,8 @@ a{color:var(--g)}
   <button class="chip" data-capa="vol" aria-pressed="true">▲ VOLCANES</button>
   <button class="chip" data-capa="sat" aria-pressed="false">◐ SATÉLITE</button>
   <button class="chip traf" id="traf-chip" type="button">🚦 TRÁFICO</button>
+  <button class="chip goo" id="gsat-chip" type="button">🛰 <span class="xl">SATÉLITE </span>GOOGLE</button>
+  <button class="chip goo" id="earth-chip" type="button" title="Abrir el centro del mapa en Google Earth (pestaña nueva)">🌍 EARTH<span class="xl"> 3D</span> ↗</button>
  </div>
  <div class="clk" id="clk">--:--</div>
 </header>
@@ -198,6 +210,21 @@ a{color:var(--g)}
  </div>
  <div class="tr-frame"><iframe id="tr-if" title="Tráfico en vivo de Waze" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>
  <p class="tr-note">Mapa y datos: <b>Waze</b> (mapa en vivo oficial, incrustado). Se muestra aparte del mapa de Antares. Waze abre bastante de cerca: use <b>−</b> para ver más área. Su ubicación solo se usa en este equipo para centrar el mapa.</p>
+</section>
+<!-- Satélite de Google: panel aparte (embed sin clave de Google Maps), no se mezcla con el mapa de Antares -->
+<section id="gsat" class="trafico" hidden aria-label="Satélite de Google" role="dialog">
+ <div class="tr-top">
+  <div><h2 class="tr-h">SATÉLITE GOOGLE</h2><small class="tr-sub" id="gs-sub">Alajuela / GAM</small></div>
+  <div class="seg" role="group" aria-label="Tipo de mapa"><button id="gs-k" aria-pressed="true">Satélite</button><button id="gs-h" aria-pressed="false">Híbrido</button></div>
+  <a class="btn" id="gs-earth" href="#" target="_blank" rel="noopener">🌍 <span class="lg">Abrir en </span>Google Earth 3D ↗</a>
+  <a class="btn lgb" id="gs-maps" href="#" target="_blank" rel="noopener">Google Maps ↗</a>
+  <button class="btn tr-x" id="gs-x" type="button" aria-label="Cerrar satélite de Google">✕ Cerrar</button>
+ </div>
+ <div class="tr-go" id="gs-go" role="group" aria-label="Centrar en">
+  <button data-p="gam">GAM (San José)</button><button data-p="alajuela">Alajuela</button><button data-p="r27">Ruta 27</button><button data-p="r32">Ruta 32 Zurquí</button><button data-p="r1">Ruta 1 Naranjo</button><button data-p="cartago">Cartago</button><button data-p="limon">Limón</button><button data-p="liberia">Liberia</button><button data-p="pz">Pérez Zeledón</button><button data-p="poas">▲ Poás</button><button data-p="turrialba">▲ Turrialba</button><button data-p="rincon">▲ Rincón de la Vieja</button><button data-p="yo">◉ Mi ubicación</button>
+ </div>
+ <div class="tr-frame"><iframe id="gs-if" title="Satélite de Google" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen loading="eager"></iframe></div>
+ <p class="tr-note">Imágenes: <b>Google</b> (mapa incrustado oficial, sin clave). Se muestra aparte del mapa de Antares. «Google Earth 3D» abre una pestaña nueva (o la app de Earth en el teléfono, si está instalada).</p>
 </section>
 <div class="toast" id="toast" role="status"></div>
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
