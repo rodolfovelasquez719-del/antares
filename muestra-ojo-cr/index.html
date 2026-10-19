@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="es"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Antares · Ojo CR (muestra)</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#020c08">
+<link rel="icon" href="../icons/favicon-32.png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+@font-face{font-family:"Orbitron";src:url("../fonts/orbitron-latin.woff2") format("woff2");font-weight:400 900;font-display:swap}
+@font-face{font-family:"Rajdhani";src:url("../fonts/rajdhani-600-latin.woff2") format("woff2");font-weight:600;font-display:swap}
+:root{--g:#22ff9a;--g2:#9fe8c5;--r:#ff3b5c;--y:#ffd23f;--bg:#020c08;--panel:rgba(4,20,13,.92);--line:rgba(34,255,154,.28);--muted:#8fc4aa;--hud:"Orbitron",ui-monospace,monospace;--ui:"Rajdhani",system-ui,sans-serif;--st:env(safe-area-inset-top);--sb:env(safe-area-inset-bottom)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:#e6fff3;font:15px/1.35 var(--ui)}
+button,input{font:inherit;color:inherit}
+#map{position:fixed;inset:0}
+.scan{position:fixed;inset:0;pointer-events:none;z-index:2;background:repeating-linear-gradient(0deg,rgba(34,255,154,.035) 0 1px,transparent 1px 3px)}
+.vig{position:fixed;inset:0;pointer-events:none;z-index:2;background:radial-gradient(ellipse at 60% 50%,transparent 55%,rgba(0,0,0,.6))}
+header{position:fixed;z-index:10;top:calc(var(--st) + 10px);left:10px;right:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;pointer-events:none}
+.brand{pointer-events:auto;display:flex;flex-direction:column;padding:8px 14px;border:1px solid var(--line);border-radius:12px;background:var(--panel);backdrop-filter:blur(6px)}
+.brand h1{margin:0;font:700 15px var(--hud);letter-spacing:.22em;color:var(--g);text-shadow:0 0 10px rgba(34,255,154,.5)}.brand h1 b{color:var(--r)}
+.brand small{font:600 10px var(--hud);letter-spacing:.14em;color:var(--muted)}
+.capas{pointer-events:auto;display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+.chip{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:6px 12px;font:600 11px var(--hud);letter-spacing:.08em;cursor:pointer;color:var(--g2)}
+.chip[aria-pressed=true]{background:linear-gradient(90deg,rgba(34,255,154,.28),rgba(255,59,92,.22));color:#fff;border-color:var(--g)}
+.clk{pointer-events:none;font:600 11px var(--hud);color:var(--g2);text-align:right;padding:4px 8px;border-radius:8px;background:rgba(2,12,8,.6)}
+#banner{position:fixed;z-index:11;left:10px;right:10px;margin:0 auto;width:fit-content;top:calc(var(--st) + 66px);max-width:min(640px,calc(100vw - 20px));padding:9px 16px;border-radius:12px;background:rgba(60,4,14,.94);border:1px solid var(--r);color:#fff;box-shadow:0 0 24px rgba(255,59,92,.45);font-weight:600;display:flex;gap:10px;align-items:center;cursor:pointer}
+#banner[hidden]{display:none}
+#banner b{font-family:var(--hud);font-size:12px;letter-spacing:.1em;color:var(--r)}
+aside{position:fixed;z-index:9;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(8px);box-shadow:0 20px 60px rgba(0,0,0,.55)}
+.tabs{display:flex;gap:4px;padding:8px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none;flex:none}
+.tabs button{flex:1 0 auto;border:1px solid transparent;background:none;border-radius:9px;padding:8px 10px;font:600 11px var(--hud);letter-spacing:.06em;color:var(--muted);cursor:pointer;white-space:nowrap}
+.tabs button[aria-selected=true]{color:#fff;border-color:var(--line);background:linear-gradient(90deg,rgba(255,59,92,.2),rgba(34,255,154,.08))}
+.tabs .n{display:inline-block;min-width:18px;margin-left:4px;padding:0 5px;border-radius:9px;background:var(--r);color:#fff;font-size:10px}
+.tabs .n:empty{display:none}
+.body{flex:1;min-height:0;overflow-y:auto;padding:12px 14px 16px}
+.sec[hidden]{display:none}
+h2{margin:2px 0 8px;font:700 12px var(--hud);letter-spacing:.14em;color:var(--g)}
+.note{font-size:13px;color:var(--muted);margin:6px 0}
+.est{display:inline-block;font:600 9.5px var(--hud);letter-spacing:.08em;color:var(--y);border:1px solid rgba(255,210,63,.5);border-radius:6px;padding:1px 5px;vertical-align:1px}
+ul.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+.item{display:flex;gap:10px;align-items:flex-start;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:rgba(0,0,0,.25);cursor:pointer}
+.item:hover{border-color:var(--g)}
+.dot{flex:none;width:12px;height:12px;border-radius:50%;margin-top:4px;box-shadow:0 0 8px currentColor}
+.dot.v{background:var(--g);color:var(--g)}.dot.a{background:var(--y);color:var(--y)}.dot.r{background:var(--r);color:var(--r)}
+.item b{display:block;font-size:15px}.item small{display:block;color:var(--muted);font-size:12.5px}
+.mag{flex:none;min-width:44px;text-align:center;font:700 13px var(--hud);padding:4px 6px;border-radius:8px;border:1px solid var(--line)}
+.mag.hi{border-color:var(--r);color:var(--r);box-shadow:0 0 10px rgba(255,59,92,.35)}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin:4px 0 10px}
+.legend span{display:flex;align-items:center;gap:5px}.legend i{width:18px;height:4px;border-radius:2px}
+.form{display:flex;flex-direction:column;gap:8px}
+.row{display:flex;gap:6px}
+.row input{flex:1;min-width:0;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:rgba(0,0,0,.4);outline:none}
+.row input:focus{border-color:var(--g)}
+.btn{border:1px solid var(--line);background:rgba(34,255,154,.08);border-radius:10px;padding:9px 12px;cursor:pointer;font-weight:600;white-space:nowrap}
+.btn.pri{background:linear-gradient(90deg,#00ff9c,#ff2d4a);color:#00140a;border:0;font-family:var(--hud);font-size:12px;letter-spacing:.08em}
+.btn:disabled{opacity:.5;cursor:default}
+.res{display:flex;flex-direction:column;gap:4px;margin-top:2px}
+.res button{text-align:left;border:1px solid var(--line);background:rgba(0,0,0,.35);border-radius:8px;padding:7px 10px;cursor:pointer;font-size:13.5px}
+.res button:hover{border-color:var(--g)}
+.chosen{font-size:13px;color:var(--g2)}
+.salida{display:flex;gap:4px;flex-wrap:wrap}
+.salida button{border:1px solid var(--line);background:none;border-radius:8px;padding:5px 9px;cursor:pointer;font-size:13px;color:var(--muted)}
+.salida button[aria-pressed=true]{border-color:var(--g);color:#fff;background:rgba(34,255,154,.12)}
+.sum{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:10px 0}
+.sum div{border:1px solid var(--line);border-radius:10px;padding:7px 9px;background:rgba(0,0,0,.3)}
+.sum small{display:block;font:600 9.5px var(--hud);letter-spacing:.1em;color:var(--muted)}.sum b{font:700 16px var(--hud)}
+.vol{padding:10px;border:1px solid var(--line);border-radius:10px;background:rgba(0,0,0,.25);margin-bottom:8px;cursor:pointer}
+.vol b{font-family:var(--hud);font-size:13px;letter-spacing:.06em;color:var(--r)}
+.vol p{margin:4px 0 0;font-size:13.5px;color:#cfeee0}
+a{color:var(--g)}
+.skel{height:52px;border-radius:10px;margin-bottom:7px;background:linear-gradient(90deg,rgba(34,255,154,.05),rgba(34,255,154,.14),rgba(34,255,154,.05)) 0 0/300% 100%;animation:sh 1.3s ease-in-out infinite}
+@keyframes sh{from{background-position:100% 0}to{background-position:0 0}}
+.toast{position:fixed;z-index:12;left:50%;transform:translateX(-50%);bottom:calc(var(--sb) + 16px);padding:8px 14px;border-radius:10px;background:var(--panel);border:1px solid var(--line);font-size:13.5px;opacity:0;transition:opacity .25s;pointer-events:none}
+.toast.on{opacity:1}
+.maplibregl-popup-content{background:var(--panel);color:#e6fff3;border:1px solid var(--line);border-radius:10px;font:14px/1.35 var(--ui);padding:10px 12px}
+.maplibregl-popup-tip{border-top-color:var(--line)!important;border-bottom-color:var(--line)!important}
+.maplibregl-popup-content b{color:var(--g)}
+.maplibregl-popup-close-button{color:var(--g2);font-size:18px}
+.maplibregl-ctrl-attrib{background:rgba(2,12,8,.7)!important;color:var(--muted)}.maplibregl-ctrl-attrib a{color:var(--g2)}
+.handle{display:none}
+/* computadora: panel a la izquierda */
+@media (min-width:900px){
+ aside{left:12px;top:calc(var(--st) + 70px);bottom:12px;width:390px;border-radius:16px}
+ #banner{left:410px;right:20px}
+ .maplibregl-ctrl-bottom-left{left:410px}
+}
+/* teléfono: hoja inferior */
+@media (max-width:899px){
+ header{gap:6px}.brand{padding:6px 10px}.brand .lg{display:none}.brand h1{font-size:13px}.clk{display:none}
+ .capas{margin-left:0;width:100%;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}.chip{flex:none;padding:6px 10px}
+ #banner{top:calc(var(--st) + 100px);font-size:13.5px}
+ aside{left:0;right:0;bottom:0;height:46vh;border-radius:18px 18px 0 0;border-bottom:0;padding-bottom:var(--sb);transition:height .25s}
+ aside.min{height:116px}
+ .handle{display:block;width:44px;height:5px;border-radius:3px;background:var(--line);margin:7px auto 0;border:0;padding:0;cursor:pointer;flex:none}
+ .maplibregl-ctrl-bottom-right,.maplibregl-ctrl-bottom-left{bottom:46vh}
+}
+@media (prefers-reduced-motion:reduce){.skel{animation:none}}
+</style></head><body>
+<div id="map" role="region" aria-label="Mapa de Costa Rica"></div><div class="vig"></div><div class="scan"></div>
+<header>
+ <div class="brand"><h1>ANTARES · <b>OJO CR</b></h1><small>MUESTRA · DATOS PÚBLICOS<span class="lg"> · SIN RASTREO DE PERSONAS</span></small></div>
+ <div class="capas" role="group" aria-label="Capas">
+  <button class="chip" data-capa="corr" aria-pressed="true">▬ CORREDORES</button>
+  <button class="chip" data-capa="radar" aria-pressed="false">▦ RADAR</button>
+  <button class="chip" data-capa="sis" aria-pressed="true">◉ SISMOS</button>
+  <button class="chip" data-capa="vol" aria-pressed="true">▲ VOLCANES</button>
+  <button class="chip" data-capa="sat" aria-pressed="false">◐ SATÉLITE</button>
+ </div>
+ <div class="clk" id="clk">--:--</div>
+</header>
+<div id="banner" hidden role="alert"></div>
+<aside id="panel" aria-label="Panel">
+ <button class="handle" id="handle" aria-label="Mostrar u ocultar el panel"></button>
+ <nav class="tabs" role="tablist">
+  <button role="tab" data-t="alertas" aria-selected="true">ALERTAS<span class="n" id="n-alertas"></span></button>
+  <button role="tab" data-t="ruta" aria-selected="false">MI RUTA</button>
+  <button role="tab" data-t="sismos" aria-selected="false">SISMOS<span class="n" id="n-sismos"></span></button>
+  <button role="tab" data-t="volcanes" aria-selected="false">VOLCANES</button>
+  <button role="tab" data-t="fuentes" aria-selected="false">FUENTES</button>
+ </nav>
+ <div class="body">
+  <section class="sec" id="s-alertas">
+   <h2>ALERTAS PRÓXIMAS 6 HORAS</h2>
+   <div class="legend"><span><i style="background:var(--g)"></i>Sin lluvia importante</span><span><i style="background:var(--y)"></i>Lluvia posible / moderada</span><span><i style="background:var(--r)"></i>Lluvia fuerte o tormenta</span></div>
+   <div id="alertas"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
+   <p class="note" id="alertas-nota">Pronóstico por hora de Open-Meteo en puntos cada ~14 km sobre las rutas 1, 27, 32, 2 y 34. <span class="est">PRONÓSTICO</span></p>
+  </section>
+  <section class="sec" id="s-ruta" hidden>
+   <h2>MI RUTA DE HOY</h2>
+   <div class="form">
+    <div class="row"><input id="o" placeholder="Origen (ej. Alajuela centro)" aria-label="Origen" enterkeyhint="search" autocomplete="off"><button class="btn" id="o-yo" type="button" title="Usar mi ubicación (solo en este equipo)">◉ Yo</button><button class="btn" id="o-b" type="button">Buscar</button></div>
+    <div class="res" id="o-res"></div><div class="chosen" id="o-ok"></div>
+    <div class="row"><input id="d" placeholder="Destino (ej. Puerto de Limón)" aria-label="Destino" enterkeyhint="search" autocomplete="off"><button class="btn" id="d-b" type="button">Buscar</button></div>
+    <div class="res" id="d-res"></div><div class="chosen" id="d-ok"></div>
+    <div><small class="note">Salida:</small> <div class="salida" id="salida"><button data-h="0" aria-pressed="true">Ahora</button><button data-h="1" aria-pressed="false">+1 h</button><button data-h="2" aria-pressed="false">+2 h</button><button data-h="3" aria-pressed="false">+3 h</button></div></div>
+    <button class="btn pri" id="calc" type="button" disabled>CALCULAR RUTA</button>
+   </div>
+   <div id="ruta-out"></div>
+   <p class="note">Ruta y tiempo: OSRM (servidor público de demostración, datos OSM). <span class="est">ESTIMADO SIN TRÁFICO</span> No hay datos de tráfico en vivo gratuitos, así que no se muestran. Su ubicación se usa solo en este equipo y no se guarda.</p>
+  </section>
+  <section class="sec" id="s-sismos" hidden>
+   <h2>SISMOS · COSTA RICA · 7 DÍAS</h2>
+   <div id="sismos"><div class="skel"></div><div class="skel"></div></div>
+   <p class="note">Fuentes: USGS (M ≥ 2,5, región de Costa Rica) y últimos informes de la RSN (UCR). Aviso arriba cuando hay M ≥ 4 en las últimas 24 h.</p>
+  </section>
+  <section class="sec" id="s-volcanes" hidden>
+   <h2>VOLCANES</h2>
+   <div id="volcanes"></div>
+   <p class="note">Información fija de referencia, no es el estado en vivo. El estado y las alertas oficiales los publica <a href="https://www.ovsicori.una.ac.cr/" target="_blank" rel="noopener">OVSICORI-UNA</a> (también la <a href="https://rsn.ucr.ac.cr/actividad-volcanica" target="_blank" rel="noopener">RSN</a>).</p>
+  </section>
+  <section class="sec" id="s-fuentes" hidden>
+   <h2>FUENTES Y LÍMITES</h2>
+   <ul class="note" style="padding-left:18px;margin:0">
+    <li>Mapa: OpenFreeMap (OSM) · Satélite: Esri World Imagery.</li>
+    <li>Clima por hora: Open-Meteo (pronóstico, no observación).</li>
+    <li>Radar: RainViewer (última imagen; la cobertura de radar en Costa Rica puede ser limitada).</li>
+    <li>Sismos: USGS y RSN-UCR. OVSICORI no ofrece un feed abierto accesible desde el navegador.</li>
+    <li>Rutas: trazado aproximado de los corredores calculado con OSRM sobre OSM.</li>
+    <li>Áreas GAM y Alajuela: contornos aproximados, solo de referencia.</li>
+    <li><b>Tráfico en vivo: no disponible</b> con fuentes gratuitas; no se muestra ni se inventa.</li>
+    <li>Nada de cámaras ni de seguimiento de personas.</li>
+   </ul>
+  </section>
+ </div>
+</aside>
+<div class="toast" id="toast" role="status"></div>
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="ojocr.js"></script>
+</body></html>
