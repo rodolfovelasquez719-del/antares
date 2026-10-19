@@ -354,9 +354,12 @@ async function calcular() {
     try { map.fitBounds(b, { padding: innerWidth >= 900 ? { left: 30, right: 60, top: 100, bottom: 50 } : { top: 120, left: 24, right: 24, bottom: 16 }, duration: 900, maxZoom: 12 }); } catch { /* */ }
     const max = Math.max(...ms.map((m) => m.lv)), riesgos = ms.filter((m) => m.lv > 0);
     const hm = (s) => { const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60); return h ? `${h} h ${m} min` : `${m} min`; };
-    out.innerHTML = `<div class="sum"><div><small>DISTANCIA</small><b>${dist.toFixed(dist < 20 ? 1 : 0)} km</b></div><div><small>TIEMPO <span class="est">EST.</span></small><b>${hm(dur)}</b></div><div><small>RIESGO LLUVIA</small><b style="color:${COL[max]}">${["BAJO", "MEDIO", "ALTO"][max]}</b></div></div>
+    const mid = medioRuta(line), zw = Math.max(8, Math.min(15, 14.5 - Math.log2(Math.max(1, mid.tot) / 3)));
+    const dst = line[line.length - 1];
+    out.innerHTML = `<div class="wz"><a class="btn waze" href="https://waze.com/ul?ll=${dst[1].toFixed(5)},${dst[0].toFixed(5)}&navigate=yes" target="_blank" rel="noopener">Abrir en Waze ↗</a><button type="button" class="btn" id="ver-traf">Ver tráfico de esta ruta</button></div><div class="sum"><div><small>DISTANCIA</small><b>${dist.toFixed(dist < 20 ? 1 : 0)} km</b></div><div><small>TIEMPO <span class="est">EST.</span></small><b>${hm(dur)}</b></div><div><small>RIESGO LLUVIA</small><b style="color:${COL[max]}">${["BAJO", "MEDIO", "ALTO"][max]}</b></div></div>
       <p class="note">Salida ${hora(salida)} · llegada estimada ${hora(salida + dur * 1000)} (sin tráfico, sin paradas).</p>
       ${riesgos.length ? `<ul class="list">${riesgos.map((m) => `<li class="item" data-lng="${m.pt[0]}" data-lat="${m.pt[1]}"><span class="dot ${CL[m.lv]}"></span><div><b>≈ ${hora(m.eta)} · ${esc(m.lugar)}</b><small>km ${Math.round(m.km)} · ${texto(m.lv, m.h.code, m.h.mm)} · ${mmf(m.h.mm)} mm/h · prob. ${m.h.p} %</small></div></li>`).join("")}</ul>` : `<div class="item"><span class="dot v"></span><div><b>Sin lluvia importante en el camino</b><small>Según el pronóstico para la hora estimada de paso.</small></div></div>`}`;
+    out.querySelector("#ver-traf").addEventListener("click", () => trafico(mid.pt[1], mid.pt[0], zw, `Mi ruta: ${sel.o.n} → ${sel.d.n}`));
     if (innerWidth < 900) { const sc = out.closest(".body"); sc.scrollTo({ top: out.offsetTop - sc.offsetTop - 8, behavior: "smooth" }); }
     out.querySelectorAll(".item[data-lng]").forEach((li) => li.addEventListener("click", () => volar([+li.dataset.lng, +li.dataset.lat], 11)));
   } catch (e) { out.innerHTML = `<p class="note">No pude calcular la ruta (${esc(e.message)}). El servidor público de OSRM a veces se satura; intente de nuevo.</p>`; }
@@ -364,3 +367,39 @@ async function calcular() {
 }
 // muestra de prueba: ?ruta=1 precarga Alajuela → Limón
 if (/[?&]ruta=1/.test(location.search)) { elegir("o", { n: "Alajuela centro", pt: [-84.2142, 10.0163] }); elegir("d", { n: "Puerto Limón", pt: [-83.0332, 9.9907] }); }
+
+// ---------- Tráfico en vivo de Waze (iframe oficial, panel aparte) ----------
+const WZ = {
+  gam: ["GAM (San José)", 9.933, -84.08, 12], alajuela: ["Alajuela", 10.016, -84.214, 13], r27: ["Ruta 27", 9.92, -84.35, 11],
+  r32: ["Ruta 32 · Zurquí", 10.06, -84.01, 12], r1: ["Ruta 1 · Naranjo", 10.1, -84.39, 12], cartago: ["Cartago", 9.864, -83.919, 13],
+  limon: ["Limón", 9.99, -83.03, 13], liberia: ["Liberia", 10.635, -85.437, 13], pz: ["Pérez Zeledón", 9.375, -83.705, 13],
+};
+const wzUrl = (lat, lon, z, pin = true) => `https://embed.waze.com/es/iframe?zoom=${Math.max(3, Math.min(17, Math.round(z)))}&lat=${lat.toFixed(5)}&lon=${lon.toFixed(5)}${pin ? "&pin=1" : ""}`;
+function trafico(lat = 9.98, lon = -84.15, z = 11, nombre = "Alajuela / GAM", key = "") {
+  const sec = $("#trafico"); sec.hidden = false;
+  $("#tr-if").src = wzUrl(lat, lon, z);
+  $("#tr-sub").textContent = nombre;
+  $("#tr-go").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.p === key)));
+  $("#tr-x").focus({ preventScroll: true });
+}
+function cerrarTrafico() { $("#trafico").hidden = true; $("#tr-if").src = "about:blank"; }
+$("#traf-chip").addEventListener("click", () => trafico());
+$("#traf-tab").addEventListener("click", () => trafico());
+$("#tr-x").addEventListener("click", cerrarTrafico);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#trafico").hidden) cerrarTrafico(); });
+$("#tr-go").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+  const k = b.dataset.p;
+  if (k === "yo") {
+    if (!navigator.geolocation) { toast("Este navegador no da la ubicación."); return; }
+    toast("Buscando su ubicación (solo en este equipo)…");
+    navigator.geolocation.getCurrentPosition((p) => trafico(p.coords.latitude, p.coords.longitude, 14, "Mi ubicación", "yo"), () => toast("No se pudo obtener la ubicación."), { timeout: 12000, maximumAge: 120000 });
+    return;
+  }
+  const [n, lat, lon, z] = WZ[k]; trafico(lat, lon, z, n, k);
+}));
+// punto medio (por distancia) y zoom adecuado para ver una ruta en Waze
+function medioRuta(line) {
+  let tot = 0; const seg = []; for (let i = 1; i < line.length; i++) { const d = km(line[i - 1], line[i]); seg.push(d); tot += d; }
+  let acc = 0; for (let i = 0; i < seg.length; i++) { if (acc + seg[i] >= tot / 2) return { pt: line[i + 1], tot }; acc += seg[i]; }
+  return { pt: line[line.length - 1], tot };
+}
