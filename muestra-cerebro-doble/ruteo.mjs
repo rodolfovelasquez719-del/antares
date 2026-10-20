@@ -50,7 +50,9 @@ export function elegirCerebro(texto, { pcEnLinea = true, adjunto = false, modo =
   if (t.length > 400) return { cerebro: "gem", motivo: "texto largo" };
   if (RIESGO.test(t)) return { cerebro: "gem", motivo: "manejo, seguridad o salud" };
   if (ACTUALIDAD.test(t) || HOY_SERIO.test(t)) return { cerebro: "gem", motivo: "actualidad" };
-  if (DATOS.test(t)) return { cerebro: "gem", motivo: "pregunta de datos" };
+  // «Corrija este texto: … a las 8 …»: en un encargo de redacción las cifras del texto pegado no lo vuelven pregunta de datos
+  const pedido = REDACTAR.test(t) && t.includes(":") ? t.slice(0, t.indexOf(":")) : t;
+  if (DATOS.test(pedido)) return { cerebro: "gem", motivo: "pregunta de datos" };
   if (CASUAL.test(t) || REDACTAR.test(t)) return { cerebro: "pc", motivo: "charla o redacción" };
   return { cerebro: "gem", motivo: "ante la duda" };
 }
@@ -58,3 +60,12 @@ export function elegirCerebro(texto, { pcEnLinea = true, adjunto = false, modo =
 export function respuestaDelicada(respuesta) { const t = norm(respuesta); return RIESGO.test(t) || /\d+\s?(km|kilometr|metros|millas|%|colones|dolares|mg|ml)/.test(t); }
 // búsqueda de Google en Gemini solo para actualidad
 export function necesitaBusqueda(texto) { const t = norm(texto); return ACTUALIDAD.test(t) || HOY_SERIO.test(t); }
+
+// la PC (3b) a veces se le sale el «tú» con don Freddy («¿en qué puedo ayudarte?»). En charla (no en textos que redacta
+// para otras personas) se corrigen las formas más comunes al terminar la respuesta.
+const TU = [[/\b(ayudar|servir|acompañar|explicar|contar|decir|recomendar)te\b/gi, "$1le"], [/\bpuedes\b/gi, "puede"], [/\btienes\b/gi, "tiene"],
+  [/\bquieres\b/gi, "quiere"], [/\bnecesitas\b/gi, "necesita"], [/\bestás\b/gi, "está"], [/\beres\b/gi, "es"], [/\bpara ti\b/gi, "para usted"], [/\bcontigo\b/gi, "con usted"]];
+export function ustedear(texto, pedido = "") {
+  if (REDACTAR.test(norm(pedido))) return texto;
+  return TU.reduce((t, [re, r]) => t.replace(re, (m, g) => { const out = g ? g + "le" : r; return m[0] === m[0].toUpperCase() ? out[0].toUpperCase() + out.slice(1) : out; }), texto);
+}

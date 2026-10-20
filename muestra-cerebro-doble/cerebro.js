@@ -1,7 +1,7 @@
 // Antares · Cerebro doble (muestra). PC (Ollama qwen2.5:3b detrás de un portero con clave y un túnel) + Gemini.
 // La dirección, la clave del cerebro y la key de Gemini se guardan SOLO en este dispositivo (localStorage).
 import { GeminiClient } from "../js/gemini.js";
-import { elegirCerebro, respuestaDelicada, necesitaBusqueda } from "./ruteo.mjs";
+import { elegirCerebro, respuestaDelicada, necesitaBusqueda, ustedear } from "./ruteo.mjs";
 const $ = (s) => document.querySelector(s);
 const K = "antares.cerebroDoble.v1";
 const cfg = (() => { try { return JSON.parse(localStorage.getItem(K) || "{}"); } catch { return {}; } })();
@@ -91,6 +91,7 @@ async function enviar(e) {
       cual = "gem"; extra = " · revisado: la PC tocó un tema delicado"; div.firstChild.textContent = "";
       r = await gemResponder(texto, div);
     }
+    if (cual === "pc" && r?.texto) { const u = ustedear(r.texto, texto); if (u !== r.texto) { r.texto = u; div.firstChild.textContent = u; } }
   } catch (err) {
     if (cual === "pc") { // la compu falló a medio camino: pasa a Gemini
       extra = " · la PC no respondió"; cual = "gem"; revisarPC();
