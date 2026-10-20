@@ -16,7 +16,8 @@ function keyGemini() {
   if (cfg.gk) return cfg.gk;
   try { const c = JSON.parse(localStorage.getItem("antares.config.v1") || "{}"); return c.geminiApiKey || ""; } catch { return ""; }
 }
-const base = () => (cfg.url || "").trim().replace(/\/+$/, "");
+const URL_PC = "https://antares.tail1d77f2.ts.net"; // dirección fija (Tailscale Funnel)
+const base = () => (cfg.url || URL_PC).trim().replace(/\/+$/, "");
 const cab = () => ({ "Content-Type": "application/json", "X-Antares-Token": cfg.tok || "" });
 
 function pintarEstado(e, t) { estado = e; const el = $("#estado"); el.className = "estado " + ({ on: "on", off: "off", tok: "tok" }[e] || ""); $("#estado-t").textContent = t; }
@@ -113,9 +114,9 @@ $("#file").addEventListener("change", async () => {
   adjunto = { mime: f.type, data, name: f.name }; $("#adj").textContent = "📎 " + f.name + " (lo verá Gemini)";
 });
 document.querySelectorAll(".chip[data-modo]").forEach((b) => b.addEventListener("click", () => { modo = b.dataset.modo; document.querySelectorAll(".chip[data-modo]").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); }));
-$("#url").value = cfg.url || ""; $("#tok").value = cfg.tok || ""; $("#gk").value = cfg.gk || "";
-$("#guardar").addEventListener("click", async () => { cfg.url = $("#url").value.trim(); cfg.tok = $("#tok").value.trim(); cfg.gk = $("#gk").value.trim(); guardarCfg(); await revisarPC(); calentar(); if (estado === "on") $("#conf").open = false; });
-$("#olvidar").addEventListener("click", () => { localStorage.removeItem(K); for (const k of ["url", "tok", "gk"]) { cfg[k] = ""; $("#" + k).value = ""; } revisarPC(); });
-if (!cfg.url || !cfg.tok) $("#conf").open = true;
+$("#url").value = cfg.url || URL_PC; $("#tok").value = cfg.tok || ""; $("#gk").value = cfg.gk || "";
+$("#guardar").addEventListener("click", async () => { cfg.url = $("#url").value.trim() === URL_PC ? "" : $("#url").value.trim(); cfg.tok = $("#tok").value.trim(); cfg.gk = $("#gk").value.trim(); guardarCfg(); await revisarPC(); calentar(); if (estado === "on") $("#conf").open = false; });
+$("#olvidar").addEventListener("click", () => { localStorage.removeItem(K); for (const k of ["url", "tok", "gk"]) { cfg[k] = ""; $("#" + k).value = k === "url" ? URL_PC : ""; } revisarPC(); });
+if (!cfg.tok) $("#conf").open = true;
 revisarPC().then(calentar); setInterval(revisarPC, 20000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) revisarPC(); });
