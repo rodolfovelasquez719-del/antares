@@ -59,11 +59,25 @@ function cercaDe(pt, lugares) { let best = null, d = 1e9; for (const [n, lat, ln
 // ---------- mapa ----------
 const OSM_STYLE = "https://tiles.openfreemap.org/styles/dark";
 const CR = { center: [-84.15, 9.75], zoom: innerWidth < 900 ? 6.6 : 7.3 };
-const map = new maplibregl.Map({ container: "map", style: OSM_STYLE, center: CR.center, zoom: CR.zoom, minZoom: 5.5, maxZoom: 17, maxBounds: [[-88.5, 6.5], [-80.5, 12.8]], attributionControl: { compact: true }, fadeDuration: 0, pixelRatio: Math.min(devicePixelRatio, 2) });
+const map = new maplibregl.Map({ container: "map", style: OSM_STYLE, center: CR.center, zoom: CR.zoom, minZoom: 5.5, maxZoom: 17, maxBounds: [[-88.5, 6.5], [-80.5, 12.8]], attributionControl: false, fadeDuration: 0, pixelRatio: Math.min(devicePixelRatio, 2) });
 map.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }), "bottom-right");
 map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
+// v1.24.2: un solo crédito (mapa base + radar + satélite) y en pantallas angostas plegado en «ⓘ» para no montarse con la escala
+map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
+function plegarCreditos() { if (innerWidth >= 900) return; const a = document.querySelector(".maplibregl-ctrl-attrib"); if (a) { a.classList.remove("maplibregl-compact-show"); a.removeAttribute("open"); } }
+map.on("load", () => setTimeout(plegarCreditos, 50)); map.on("sourcedata", (e) => { if (e.sourceDataType === "metadata") setTimeout(plegarCreditos, 50); });
+// el estilo de OpenFreeMap pide íconos que no trae (p. ej. «circle-11»): se dibuja un punto discreto
+map.on("styleimagemissing", (e) => {
+  if (map.hasImage(e.id)) return;
+  const n = 11, d = new Uint8Array(n * n * 4);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) { const r = Math.hypot(x - 5, y - 5), i = (y * n + x) * 4; if (r <= 3.6) { d[i] = 159; d[i + 1] = 232; d[i + 2] = 197; d[i + 3] = r > 2.8 ? 120 : 200; } }
+  try { map.addImage(e.id, { width: n, height: n, data: d }); } catch { /* */ }
+});
 map.on("error", (e) => console.log("mapa:", e.error && e.error.message));
-const on = { corr: true, radar: false, sis: true, vol: true, sat: false };
+const on = { corr: true, radar: false, imerg: false, sis: true, vol: true, sat: false };
+// v1.24.2: las capas elegidas se recuerdan en esta sesión (p. ej. al ir a MUNDO y volver)
+try { Object.assign(on, JSON.parse(sessionStorage.getItem("ojocr.capas") || "{}")); } catch { /* */ }
+const guardarCapas = () => { try { sessionStorage.setItem("ojocr.capas", JSON.stringify(on)); } catch { /* */ } };
 let RUTAS = null, alertasPorRuta = [], radarUrl = null, radarTime = null;
 
 function tinte() {
@@ -140,7 +154,8 @@ map.on("load", async () => {
   renderVolcanes();
   cargarCorredores();
   cargarSismos();
-  cargarRadar();
+  cargarRadar().then(() => { if (on.radar) revisarRadar(false); notaLluvia(); });
+  if (on.imerg) cargarImerg();
   setInterval(cargarCorredores, 20 * 60000);
   setInterval(cargarSismos, 10 * 60000);
   setInterval(cargarRadar, 10 * 60000);
@@ -295,12 +310,65 @@ async function cargarRadar() {
 function aplicarCapas() {
   const vis = (id, v) => { if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", v ? "visible" : "none"); };
   ["corr-glow", "corr-case", "corr", "corr-risk", "corr-lbl"].forEach((id) => vis(id, on.corr));
-  vis("radar", on.radar); vis("sis", on.sis); vis("sis-halo", on.sis); vis("vol", on.vol); vis("esri", on.sat);
+  vis("radar", on.radar); vis("imerg", on.imerg); vis("sis", on.sis); vis("sis-halo", on.sis); vis("vol", on.vol); vis("esri", on.sat);
 }
-document.querySelectorAll(".chip[data-capa]").forEach((b) => b.addEventListener("click", () => {
-  const k = b.dataset.capa; on[k] = !on[k]; b.setAttribute("aria-pressed", String(on[k])); aplicarCapas();
-  if (k === "radar" && on.radar) toast(radarTime ? "Radar RainViewer de " + hora(radarTime) + " (cobertura en CR limitada)" : "Radar no disponible ahora");
-}));
+document.querySelectorAll(".chip[data-capa]").forEach((b) => {
+  b.setAttribute("aria-pressed", String(!!on[b.dataset.capa]));
+  b.addEventListener("click", () => {
+    const k = b.dataset.capa; on[k] = !on[k]; b.setAttribute("aria-pressed", String(on[k])); aplicarCapas(); guardarCapas();
+    if (k === "radar" && on.radar) revisarRadar(true);
+    if (k === "imerg" && on.imerg && !map.getSource("imerg")) cargarImerg();
+    notaLluvia();
+  });
+});
+function marcarCapa(k, v) { on[k] = v; const b = document.querySelector(`.chip[data-capa="${k}"]`); if (b) b.setAttribute("aria-pressed", String(v)); aplicarCapas(); guardarCapas(); notaLluvia(); }
+
+// ---------- v1.24.2: radar vacío + respaldo por satélite (NASA GIBS · GPM IMERG, 30 min) ----------
+let imergTime = null, radarVacio = null;
+async function cargarImerg() {
+  try {
+    const dia = new Date(Date.now() - 2 * 864e5).toISOString().slice(0, 10);
+    const xml = await getJ(`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/1.0.0/IMERG_Precipitation_Rate_30min/default/GoogleMapsCompatible_Level6/all/${dia}T00:00:00Z.xml`, 15000, true);
+    const fin = (xml.match(/<Domain>[^<]*\/([^/<]+Z)\/PT30M<\/Domain>/) || [])[1]; if (!fin) throw Error("sin hora");
+    imergTime = Date.parse(fin);
+    if (map.getLayer("imerg")) map.removeLayer("imerg"); if (map.getSource("imerg")) map.removeSource("imerg");
+    map.addSource("imerg", { type: "raster", tiles: [`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/IMERG_Precipitation_Rate_30min/default/${fin}/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png`], tileSize: 256, maxzoom: 6, attribution: "Lluvia por satélite: NASA GIBS · GPM IMERG" });
+    map.addLayer({ id: "imerg", type: "raster", source: "imerg", layout: { visibility: on.imerg ? "visible" : "none" }, paint: { "raster-opacity": 0.75, "raster-resampling": "linear" } }, map.getLayer("radar") ? "radar" : "areas");
+    document.querySelector('[data-capa="imerg"]').title = "Lluvia estimada por satélite, " + hora(imergTime);
+  } catch (e) { console.warn("imerg", e); imergTime = null; }
+  notaLluvia();
+}
+// ¿las teselas de radar de la zona visible vienen todas transparentes?
+async function radarTodoVacio() {
+  if (!radarUrl) return null;
+  const z = Math.max(5, Math.min(7, Math.floor(map.getZoom()))), b = map.getBounds(), n = 2 ** z;
+  const tx = (lng) => Math.floor((lng + 180) / 360 * n), ty = (lat) => { const r = lat * Math.PI / 180; return Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n); };
+  const W = Math.max(b.getWest(), -86.6), E = Math.min(b.getEast(), -82.4), N = Math.min(b.getNorth(), 11.6), S = Math.max(b.getSouth(), 7.5);
+  const ts = []; for (let x = tx(W); x <= tx(E); x++) for (let y = ty(N); y <= ty(S); y++) ts.push([x, y]);
+  const cv = new OffscreenCanvas(256, 256), cx = cv.getContext("2d", { willReadFrequently: true });
+  let leidas = 0;
+  for (const [x, y] of ts.slice(0, 12)) {
+    try {
+      const r = await fetch(radarUrl.replace("{z}", z).replace("{x}", x).replace("{y}", y)); if (!r.ok) continue;
+      const im = await createImageBitmap(await r.blob()); cx.clearRect(0, 0, 256, 256); cx.drawImage(im, 0, 0); leidas++;
+      const d = cx.getImageData(0, 0, 256, 256).data; for (let i = 3; i < d.length; i += 16) if (d[i] > 8) return false;
+    } catch { /* */ }
+  }
+  return leidas ? true : null;
+}
+async function revisarRadar(aviso) {
+  if (!on.radar) return;
+  radarVacio = await radarTodoVacio();
+  if (radarVacio && !on.imerg) { if (!map.getSource("imerg")) await cargarImerg(); if (imergTime) { marcarCapa("imerg", true); if (aviso) toast("El radar no ve lluvia aquí: se agregó la lluvia estimada por satélite (NASA IMERG).", 4200); } }
+  notaLluvia();
+}
+map.on("moveend", () => { clearTimeout(revisarRadar.t); if (on.radar) revisarRadar.t = setTimeout(() => revisarRadar(false), 900); });
+function notaLluvia() {
+  const el = $("#nota-lluvia"); const l = [];
+  if (on.radar) l.push(!radarTime ? "Radar no disponible ahora." : radarVacio ? `Radar RainViewer de ${hora(radarTime)}: <b>El radar no detecta lluvia aquí ahora o no hay cobertura</b>.` : `Radar RainViewer de ${hora(radarTime)} (cobertura en CR limitada).`);
+  if (on.imerg) l.push(imergTime ? `Lluvia estimada por satélite NASA IMERG de ${hora(imergTime)} (${Math.max(1, Math.round((Date.now() - imergTime) / 3600000))} h de retraso; no es radar).` : "Lluvia por satélite no disponible ahora.");
+  el.innerHTML = l.join("<br>"); el.hidden = !l.length;
+}
 function cerrarPopups() { document.querySelectorAll(".maplibregl-popup").forEach((p) => p.remove()); }
 // el mapa ya tiene padding fijo por el panel (pad()), así que volar/encuadrar centran en la parte visible
 function volar(pt, z) { cerrarPopups(); map.flyTo({ center: pt, zoom: z, speed: 1.4, essential: true, }); if (innerWidth < 900) $("#panel").classList.add("min"); }

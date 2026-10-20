@@ -50,18 +50,43 @@ export async function alertasRutas() {
   al.sort((a, b) => b.lv - a.lv || b.mm - a.mm);
   return { rojas: al.filter((a) => a.lv === 2).length, amarillas: al.filter((a) => a.lv === 1).length, peor: al[0] || null };
 }
-export async function sismoFuerte() { // M>=4 en Costa Rica y alrededores, últimas 24 h (USGS)
+// v1.24.2: USGS con reintentos; si no responde (p. ej. CORS intermitente en algunos teléfonos), RSN (UCR) como respaldo.
+// Devuelve null si no hubo M>=4; lanza error solo si ninguna fuente respondió.
+const MESES = { enero: 0, febrero: 1, marzo: 2, abril: 3, mayo: 4, junio: 5, julio: 6, agosto: 7, septiembre: 8, setiembre: 8, octubre: 9, noviembre: 10, diciembre: 11 };
+function rsnFuertes(xml) {
+  const doc = new DOMParser().parseFromString(xml, "text/xml"); const out = [];
+  for (const it of doc.querySelectorAll("item")) {
+    const title = it.querySelector("title")?.textContent || "", txt = (it.querySelector("description")?.textContent || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    const mag = parseFloat((title.match(/Mag:\s*([\d,\.]+)/) || txt.match(/Magnitud:\s*([\d,\.]+)/) || [])[1]?.replace(",", "."));
+    if (!isFinite(mag)) continue;
+    const f = txt.match(/Fecha:\s*(\d+)\s+de\s+(\w+)\s+del?\s+(\d{4})/i), h = txt.match(/Hora Local:\s*(\d+):(\d+)\s*([ap])/i);
+    let t = Date.parse(it.querySelector("pubDate")?.textContent || "") || 0;
+    if (f && h && MESES[f[2].toLowerCase()] != null) t = Date.UTC(+f[3], MESES[f[2].toLowerCase()], +f[1], (+h[1] % 12) + (h[3].toLowerCase() === "p" ? 12 : 0) + 6, +h[2]);
+    const lugar = (txt.match(/Localizaci[oó]n:\s*(.+?)\s+Coordenadas/) || [])[1] || "Costa Rica";
+    out.push({ id: "rsn-" + t + "-" + mag, mag, lugar, t, src: "RSN" });
+  }
+  return out;
+}
+async function conReintentos(fn, n = 3) { let e; for (let i = 0; i < n; i++) { try { return await fn(); } catch (x) { e = x; await new Promise((r) => setTimeout(r, 1500 * (i + 1))); } } throw e; }
+export async function sismoFuerte() { // M>=4 en Costa Rica y alrededores, últimas 24 h
   const start = new Date(Date.now() - 864e5).toISOString().slice(0, 19);
-  const j = await getJ(`https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=${start}&minlatitude=7.5&maxlatitude=11.6&minlongitude=-86.6&maxlongitude=-82.4&minmagnitude=4&orderby=magnitude&limit=5`);
-  const f = j.features[0]; if (!f) return null;
-  return { id: f.id, mag: f.properties.mag, lugar: f.properties.place || "Costa Rica", t: f.properties.time };
+  try {
+    const j = await conReintentos(() => getJ(`https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=${start}&minlatitude=7.5&maxlatitude=11.6&minlongitude=-86.6&maxlongitude=-82.4&minmagnitude=4&orderby=magnitude&limit=5`, 15000));
+    const f = j.features[0]; if (!f) return null;
+    return { id: f.id, mag: f.properties.mag, lugar: f.properties.place || "Costa Rica", t: f.properties.time, src: "USGS" };
+  } catch {
+    const r = await fetch("https://rsn.ucr.ac.cr/actividad-sismica/ultimos-sismos?format=feed&type=rss", { signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined });
+    if (!r.ok) throw Error("RSN " + r.status);
+    const ev = rsnFuertes(await r.text()).filter((e) => e.mag >= 4 && Date.now() - e.t < 864e5).sort((a, b) => b.mag - a.mag);
+    return ev[0] || null;
+  }
 }
 const hace = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 60 ? `hace ${Math.max(1, m)} min` : `hace ${Math.round(m / 60)} h`; };
 // pinta la tarjeta y el aviso en `root`; abrir(hash) abre Ojo CR
 export function iniciarResumenCR(root, abrir) {
   if (!root) return;
-  root.innerHTML = `<button type="button" class="cr-sismo" hidden></button><button type="button" class="cr-card" aria-label="Alertas en rutas: abrir Ojo Costa Rica"><span class="h">ALERTAS EN RUTAS <i>pronóstico<span class="l"> · próximas 6 h</span></i></span><p class="d">Revisando el pronóstico de los corredores…</p></button>`;
-  const card = root.querySelector(".cr-card"), ban = root.querySelector(".cr-sismo");
+  root.innerHTML = `<button type="button" class="cr-sismo" hidden></button><button type="button" class="cr-card" aria-label="Alertas en rutas: abrir Ojo Costa Rica"><span class="h">ALERTAS EN RUTAS <i>pronóstico<span class="l"> · próximas 6 h</span></i></span><p class="d">Revisando el pronóstico de los corredores…</p></button><p class="cr-nosis" hidden>Sismos: sin datos ahora (USGS y RSN no respondieron)</p>`;
+  const card = root.querySelector(".cr-card"), ban = root.querySelector(".cr-sismo"), nos = root.querySelector(".cr-nosis");
   card.addEventListener("click", () => abrir("alertas"));
   let ultimo = null;
   ban.addEventListener("click", (e) => { if (e.target.closest(".x")) { try { localStorage.setItem("antares.crSismoVisto", ultimo); } catch { /* */ } ban.hidden = true; return; } abrir("sismos"); });
@@ -74,13 +99,14 @@ export function iniciarResumenCR(root, abrir) {
         (r.rojas ? `<p><b class="n">${r.rojas} roja${r.rojas > 1 ? "s" : ""}</b>${r.amarillas ? ` · ${r.amarillas} amarilla${r.amarillas > 1 ? "s" : ""}` : ""}</p>` : `<p><b class="n">Sin alertas rojas</b>${r.amarillas ? ` · ${r.amarillas} amarilla${r.amarillas > 1 ? "s" : ""}` : ""}</p>`) +
         (p ? `<p class="d">Peor: ${esc(texto(p.lv, p.code, p.mm))} en Ruta ${esc(p.k)}${p.lugar ? " · " + esc(p.lugar) : ""} · ${franja(p.t0, p.t1)}</p>` : `<p class="d">Corredores 1, 2, 27, 32 y 34 sin lluvia importante.</p>`);
     }).catch(() => { card.querySelector(".d").textContent = "El pronóstico no respondió; toque para abrir Ojo CR."; });
-    sismoFuerte().then((s) => {
+    sismoFuerte().then((s) => { nos.hidden = true;
       let visto = null; try { visto = localStorage.getItem("antares.crSismoVisto"); } catch { /* */ }
       if (!s || visto === s.id) { ban.hidden = true; return; }
       ultimo = s.id;
-      ban.innerHTML = `<span>⚠</span><span><b>SISMO M${s.mag.toFixed(1).replace(".", ",")}</b> · ${esc(s.lugar)} · ${hace(s.t)}<br><small>USGS · toque para ver en Ojo CR</small></span><span class="x" role="button" aria-label="Ocultar aviso">✕</span>`;
+      ban.innerHTML = `<span>⚠</span><span><b>SISMO M${s.mag.toFixed(1).replace(".", ",")}</b> · ${esc(s.lugar)} · ${hace(s.t)}<br><small>${s.src || "USGS"} · toque para ver en Ojo CR</small></span><span class="x" role="button" aria-label="Ocultar aviso">✕</span>`;
       ban.hidden = false;
-    }).catch(() => { /* sin red: no se muestra */ });
+      nos.hidden = true;
+    }).catch(() => { ban.hidden = true; nos.hidden = false; }); // ninguna fuente respondió: aviso discreto
   }
   tick(); setInterval(tick, 15 * 60000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - (tick.t || 0) > 15 * 60000) { tick.t = Date.now(); tick(); } });

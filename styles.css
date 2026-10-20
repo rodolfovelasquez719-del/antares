@@ -1320,3 +1320,5 @@ body.desk .tab.desk-tab[aria-current="page"] { background: linear-gradient(90deg
 .ojo-cr-btn { position: absolute; z-index: 2; top: calc(env(safe-area-inset-top) + 12px); left: 50%; transform: translateX(-50%); touch-action: manipulation; }
 .ojo-view[data-modo="cr"] .ojo-cr-btn { display: none; }
 @media (max-width: 760px) { .ojo-cr-btn { top: auto; left: auto; transform: none; right: 14px; bottom: calc(env(safe-area-inset-bottom) + 76px); min-height: 42px; box-shadow: 0 6px 20px rgba(0,0,0,.6); } }
+.cr-nosis { margin: 0; font: 500 11px var(--font-ui, sans-serif); color: #8fbfa8; opacity: .8; text-align: center; }
+.cr-nosis[hidden] { display: none; }

@@ -117,6 +117,10 @@ body.app .brand .lg{display:none}
 .earth-a{display:inline-block;margin-top:6px;padding:5px 9px;border:1px solid rgba(66,133,244,.6);border-radius:8px;color:#e6fff3!important;text-decoration:none;font-weight:600;background:rgba(66,133,244,.14)}
 .ctx b{color:var(--g)}.ctx .earth-a{margin-right:4px}
 @media (max-width:899px){#gsat .tr-top{flex-wrap:wrap}#gsat .tr-top>div:first-child{flex:1 1 60%}.lgb{display:none}}
+.nota-lluvia{position:fixed;z-index:8;margin:0;max-width:min(420px,calc(100vw - 24px));padding:7px 11px;border-radius:10px;background:rgba(2,12,8,.86);border:1px solid var(--line);color:var(--g2);font-size:12.5px;line-height:1.35;pointer-events:none}
+.nota-lluvia b{color:var(--y);font-weight:600}.nota-lluvia[hidden]{display:none}
+@media (min-width:900px){.nota-lluvia{right:12px;top:calc(var(--st) + 118px);max-width:380px}}
+@media (max-width:899px){.nota-lluvia{left:10px;right:10px;margin:0 auto;width:fit-content;top:calc(var(--st) + 162px)}}
 /* v1.24.1: carga del mapa y de los iframes */
 #cargando{position:fixed;inset:0;z-index:5;display:grid;place-items:center;background:radial-gradient(circle at 60% 45%,#062a1b,#010a06 70%);transition:opacity .4s;pointer-events:none}
 #cargando.fuera{opacity:0}
@@ -162,6 +166,7 @@ body.app .brand .lg{display:none}
  <div class="capas" role="group" aria-label="Capas">
   <button class="chip" data-capa="corr" aria-pressed="true">▬ CORREDORES</button>
   <button class="chip" data-capa="radar" aria-pressed="false">▦ RADAR</button>
+  <button class="chip" data-capa="imerg" aria-pressed="false" title="Lluvia estimada por satélite (NASA GIBS · GPM IMERG)">☔ LLUVIA SAT.</button>
   <button class="chip" data-capa="sis" aria-pressed="true">◉ SISMOS</button>
   <button class="chip" data-capa="vol" aria-pressed="true">▲ VOLCANES</button>
   <button class="chip" data-capa="sat" aria-pressed="false">◐ SATÉLITE</button>
@@ -219,7 +224,8 @@ body.app .brand .lg{display:none}
    <ul class="note" style="padding-left:18px;margin:0">
     <li>Mapa: OpenFreeMap (OSM) · Satélite: Esri World Imagery.</li>
     <li>Clima por hora: Open-Meteo (pronóstico, no observación).</li>
-    <li>Radar: RainViewer (última imagen; la cobertura de radar en Costa Rica puede ser limitada).</li>
+    <li>Radar: RainViewer (última imagen; la cobertura de radar en Costa Rica puede ser limitada). Si el radar no ve lluvia, se avisa en el mapa.</li>
+    <li>Lluvia por satélite: NASA GIBS · GPM IMERG (cada 30 min, con unas horas de retraso; es una estimación, no un radar).</li>
     <li>Sismos: USGS y RSN-UCR. OVSICORI no ofrece un feed abierto accesible desde el navegador.</li>
     <li>Rutas: trazado aproximado de los corredores calculado con OSRM sobre OSM.</li>
     <li>Áreas GAM y Alajuela: contornos aproximados, solo de referencia.</li>
@@ -258,6 +264,7 @@ body.app .brand .lg{display:none}
  <p class="tr-note">Imágenes: <b>Google</b> (mapa incrustado oficial, sin clave). Se muestra aparte del mapa de Antares. «Google Earth 3D» abre una pestaña nueva (o la app de Earth en el teléfono, si está instalada).</p>
 </section>
 <div id="cargando" aria-live="polite"><div><div class="spin"></div><p>CARGANDO MAPA DE COSTA RICA…</p></div></div>
+<p id="nota-lluvia" class="nota-lluvia" hidden aria-live="polite"></p>
 <div class="toast" id="toast" role="status"></div>
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="ojocr.js"></script>
