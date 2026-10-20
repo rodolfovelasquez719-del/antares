@@ -1,6 +1,7 @@
 // Antares · Cerebro doble (muestra). PC (Ollama qwen2.5:3b detrás de un portero con clave y un túnel) + Gemini.
 // La dirección, la clave del cerebro y la key de Gemini se guardan SOLO en este dispositivo (localStorage).
-import { GeminiClient, needsSearch } from "../js/gemini.js";
+import { GeminiClient } from "../js/gemini.js";
+import { elegirCerebro, respuestaDelicada, necesitaBusqueda } from "./ruteo.mjs";
 const $ = (s) => document.querySelector(s);
 const K = "antares.cerebroDoble.v1";
 const cfg = (() => { try { return JSON.parse(localStorage.getItem(K) || "{}"); } catch { return {}; } })();
@@ -9,7 +10,10 @@ const MODELO_PC = "qwen2.5:3b";
 const SISTEMA = "Usted es Antares, el asistente personal de don Freddy, en Costa Rica. Responda siempre en español de Costa Rica, " +
   "tratándolo de usted (nunca de tú ni de vos), con calidez y de forma breve y clara (2 a 5 frases salvo que pida más). " +
   "Llámelo «don Freddy» de vez en cuando, con naturalidad. Use colones, kilómetros y la hora de Costa Rica (UTC-6). " +
-  "Texto plano, sin markdown. Si no sabe algo o necesita datos actuales (clima, noticias, precios), dígalo con honestidad.";
+  "Texto plano, sin markdown. Si no sabe algo o necesita datos actuales (clima, noticias, precios), dígalo con honestidad. " +
+  "REGLAS FIJAS: trate SIEMPRE al usuario de usted; nunca use tú ni vos (diga «usted puede», nunca «puedes» ni «podés»). " +
+  "Nunca dé consejos de manejo, seguridad, salud, medicina o electricidad, ni datos como distancias, cifras, fechas, precios o definiciones: " +
+  "en esos casos responda solo «Eso prefiero consultarlo con Gemini, don Freddy» y nada más. Usted es solo para conversar y para redactar textos.";
 let estado = "nada", historial = [], modo = "auto", adjunto = null;
 
 function keyGemini() {
@@ -39,16 +43,8 @@ function badge(div, cual, seg, extra = "") {
   b.innerHTML = (cual === "pc" ? "🖥 CEREBRO PC · QWEN 2.5 3B" : "✦ GEMINI") + ` <i>${seg.toFixed(1).replace(".", ",")} s${extra}</i>`;
   div.append(b);
 }
-// ¿quién contesta?
-function elegir(texto) {
-  if (modo === "pc") return estado === "on" ? "pc" : "gem";
-  if (modo === "gem") return "gem";
-  if (adjunto) return "gem";                 // fotos y videos: Gemini
-  if (estado !== "on") return "gem";         // compu apagada o sin clave
-  if (texto.length > 400) return "gem";      // textos largos
-  if (needsSearch(texto)) return "gem";      // actualidad: Gemini busca en Google
-  return "pc";
-}
+// ¿quién contesta? (reglas en ruteo.mjs; ante la duda, Gemini)
+const elegir = (texto) => elegirCerebro(texto, { pcEnLinea: estado === "on", adjunto: !!adjunto, modo });
 async function pcResponder(texto, div) {
   const msgs = [{ role: "system", content: SISTEMA }, ...historial.slice(-8), { role: "user", content: texto }];
   const r = await fetch(base() + "/api/chat", { method: "POST", headers: cab(), body: JSON.stringify({ model: MODELO_PC, stream: true, keep_alive: "30m", messages: msgs, options: { temperature: 0.6, num_predict: 400 } }) });
@@ -73,7 +69,7 @@ async function gemResponder(texto, div) {
   let primera = 0;
   const media = adjunto ? [{ mime: adjunto.mime, data: adjunto.data }] : null;
   const r = await g.ask(texto || "Describa lo que ve.", historial.slice(-8).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content })), [], {
-    search: needsSearch(texto) && !media, media,
+    search: necesitaBusqueda(texto) && !media, media,
     onChunk: (t) => { if (!primera) primera = performance.now(); div.firstChild.textContent = t; div.scrollIntoView({ block: "end" }); },
   });
   if (!r.ok) throw Error([r.title, r.text].filter(Boolean).join(": ") || "Gemini no respondió");
@@ -86,10 +82,15 @@ async function enviar(e) {
   $("#q").value = ""; $("#send").disabled = true;
   burbuja("yo", texto + (adjunto ? `\n📎 ${adjunto.name}` : ""));
   const div = burbuja("ant cursor"); div.append(document.createTextNode("")); div.firstChild.textContent = "";
-  let cual = elegir(texto), extra = "";
+  const dec = elegir(texto); let cual = dec.cerebro, extra = cual === "gem" ? " · " + dec.motivo : "";
   const t0 = performance.now(); let r;
   try {
     r = cual === "pc" ? await pcResponder(texto, div) : await gemResponder(texto, div);
+    // red de seguridad: si la PC igual habló de manejo/seguridad/salud o dio cifras, se reemplaza por Gemini
+    if (cual === "pc" && (respuestaDelicada(r.texto) || /consultarlo con gemini/i.test(r.texto))) {
+      cual = "gem"; extra = " · revisado: la PC tocó un tema delicado"; div.firstChild.textContent = "";
+      r = await gemResponder(texto, div);
+    }
   } catch (err) {
     if (cual === "pc") { // la compu falló a medio camino: pasa a Gemini
       extra = " · la PC no respondió"; cual = "gem"; revisarPC();
