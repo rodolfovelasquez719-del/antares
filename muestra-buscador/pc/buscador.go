@@ -166,7 +166,7 @@ func iniciarBuscador() {
 	}()
 }
 
-var vacias = map[string]bool{"que": true, "paso": true, "hoy": true, "de": true, "la": true, "el": true, "en": true, "los": true, "las": true, "un": true, "una": true, "y": true, "a": true, "del": true, "al": true, "por": true, "para": true, "con": true, "se": true, "es": true, "lo": true, "como": true, "cual": true, "cuales": true, "hay": true, "sobre": true, "noticias": true, "noticia": true, "costa": true, "rica": true, "ultimas": true, "dia": true, "esta": true, "este": true, "me": true, "dime": true, "digame": true, "pasa": true, "pasando": true, "ayer": true, "mi": true}
+var vacias = map[string]bool{"que": true, "paso": true, "hoy": true, "de": true, "la": true, "el": true, "en": true, "los": true, "las": true, "un": true, "una": true, "y": true, "a": true, "del": true, "al": true, "por": true, "para": true, "con": true, "se": true, "es": true, "lo": true, "como": true, "cual": true, "cuales": true, "hay": true, "sobre": true, "noticias": true, "noticia": true, "costa": true, "rica": true, "ultimas": true, "dia": true, "esta": true, "este": true, "me": true, "dime": true, "digame": true, "pasa": true, "pasando": true, "ayer": true, "mi": true, "cuando": true, "fue": true, "ultima": true, "ultimo": true, "donde": true, "quien": true, "porque": true, "tiene": true, "son": true, "era": true, "fueron": true, "sus": true, "su": true}
 
 func terminos(q string) []string {
 	out := []string{}
@@ -187,7 +187,7 @@ func buscarNoticias(q string, horas, n int) []Noticia {
 		p := 0
 		h := norm(x.Titulo + " " + x.Resumen)
 		for _, w := range t { if strings.Contains(h, w) { p++ } }
-		if len(t) > 0 && p == 0 { continue }
+		if len(t) > 0 && (p == 0 || p*2 < len(t)) { continue } // al menos la mitad de las palabras clave
 		ps = append(ps, par{x, p})
 	}
 	nmu.RUnlock()

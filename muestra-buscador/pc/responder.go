@@ -44,7 +44,7 @@ func juntarFuentes(q string) []Fuente {
 			if i >= max { break }
 			tx := n.Resumen
 			if tx == "" { tx = n.Titulo }
-			add(n.Titulo, n.Link, n.Fuente, n.Fecha.In(time.FixedZone("CR", -6*3600)).Format("02/01 3:04 p. m."), corta(tx, 280))
+			add(n.Titulo, n.Link, n.Fuente, n.Fecha.In(time.FixedZone("CR", -6*3600)).Format("02/01 3:04 p. m."), corta(tx, 160))
 		}
 	}
 	if reCambio.MatchString(nq) {
@@ -57,11 +57,17 @@ func juntarFuentes(q string) []Fuente {
 	if actual && !reCambio.MatchString(nq) { addN(ns, 7) } else { addN(ns, 2) }
 	if len(out) < 8 && !(actual && len(out) >= 6) {
 		if v, ok := enCache("d:"+nq, func() any { x, err := ddg(q); if err != nil { return err.Error() }; return x }).([]Res); ok {
-			for _, r := range v { if len(out) >= 6 { break }; add(r.Titulo, r.Link, r.Fuente, "", corta(r.Texto, 280)) }
+			for _, r := range v { if len(out) >= 6 { break }; add(r.Titulo, r.Link, r.Fuente, "", corta(r.Texto, 200)) }
 		}
 	}
 	if len(out) < 8 && !actual {
-		for i, r := range enCache("w:"+nq, func() any { return wiki(q) }).([]Res) { if i >= 2 { break }; add(r.Titulo, r.Link, "Wikipedia", "", corta(r.Texto, 400)) }
+		k := 0
+		for _, r := range enCache("w:"+nq, func() any { return wiki(q) }).([]Res) {
+			if k >= 2 { break }
+			rel := false // solo artículos cuyo título comparte una palabra clave
+			for _, w := range terminos(q) { if strings.Contains(norm(r.Titulo), w) { rel = true; break } }
+			if rel { k++; add(r.Titulo, r.Link, "Wikipedia", "", corta(r.Texto, 300)) }
+		}
 	}
 	return out
 }
@@ -88,7 +94,7 @@ func responder(w http.ResponseWriter, r *http.Request) {
 	ctx.WriteString("\nPREGUNTA DE DON FREDDY: " + q)
 	body, _ := json.Marshal(map[string]any{"model": "qwen2.5:3b", "stream": true, "keep_alive": "30m",
 		"messages": []map[string]string{{"role": "system", "content": sistemaBuscador}, {"role": "user", "content": ctx.String()}},
-		"options": map[string]any{"temperature": 0.2, "num_predict": 350, "num_ctx": 4096}})
+		"options": map[string]any{"temperature": 0.2, "num_predict": 350, "num_ctx": 2048}})
 	resp, err := http.Post(upstream+"/api/chat", "application/json", bytes.NewReader(body))
 	if err != nil { send(map[string]any{"tipo": "error", "error": "cerebro PC: " + err.Error()}); return }
 	defer resp.Body.Close()
