@@ -19,6 +19,15 @@ window.addEventListener("message", (e) => { if (e.origin === location.origin && 
 ver(location.hash.slice(1) || sessionStorage.getItem("micompu.tab") || "salud");
 const c = creds();
 $("#url").value = c.url || URL_PC; $("#tok").value = APP ? "" : c.tok || "";
-$("#guardar").addEventListener("click", () => { guardarLocal($("#url").value.trim().replace(/\/+$/, ""), $("#tok").value.trim()); $("#conf").open = false; recargarSalud(); recargarNoticias(); });
+const CORTA = "Esa no parece la clave de la compu; use el QR de la compu (acceso «Emparejar teléfono con Antares» en el escritorio de la PC).";
+const avisoTok = () => { const t = $("#tok").value.replace(/\s+/g, ""), a = $("#tok-aviso"); a.hidden = !(t && t.length < 30); a.textContent = CORTA; return a.hidden; };
+$("#tok").addEventListener("input", avisoTok);
+$("#guardar").addEventListener("click", () => {
+  const url = $("#url").value.trim().replace(/\/+$/, ""), tok = $("#tok").value.replace(/\s+/g, "");
+  if (tok && !avisoTok()) return;
+  let app = null; try { app = APP && window.parent.__antaresGuardarPC; } catch { /* */ }
+  if (app) { if (tok) app(url, tok); } else guardarLocal(url, tok);
+  $("#conf").open = false; recargarSalud(); recargarNoticias();
+});
 if (!c.tok) $("#conf").open = true;
 iniciarSalud(); iniciarBuscador();

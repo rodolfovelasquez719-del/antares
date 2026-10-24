@@ -39,7 +39,13 @@ import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.25.0";
+const APP_VERSION = "1.25.1";
+// v1.25.1: emparejar con el QR de la compu (#pc-token=…). Se lee y se borra del enlace de inmediato (no queda en el historial).
+let pcEmparejar = null, pcEmparejando = false;
+try {
+  const h = new URLSearchParams(location.hash.slice(1)).get("pc-token");
+  if (location.hash.includes("pc-token")) { history.replaceState(null, "", location.pathname + location.search); pcEmparejar = (h || "").replace(/\s+/g, ""); }
+} catch { /* */ }
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -2943,6 +2949,7 @@ function loadData() {
 }
 function afterUnlock() {
   lastActivity = Date.now();
+  setTimeout(() => { try { aplicarEmparejar(); } catch { /* */ } }, 0);
   loadData();
   bootReady();
   maybeOfferBirthday();
@@ -3112,6 +3119,7 @@ async function init() {
       const pb = document.getElementById("pc-btn"); if (pb) { pb.hidden = false; pb.addEventListener("click", () => openMiCompu()); }
       window.addEventListener("antares:micompu", () => openMiCompu());
       iniciarVigiaPC();
+      aplicarEmparejar();
     } else { const pb = document.getElementById("pc-btn"); if (pb) pb.hidden = true; }
     document.getElementById("vision-btn").addEventListener("click", () => openVision({ getKey: () => config.geminiApiKey || "", model: GEM_MODELS[0], speak: (t) => { try { voice.speak(t); } catch { /* */ } } }));
   } catch (e) { console.warn("Antares: presencia/visión", e); }
@@ -3273,6 +3281,10 @@ function iniciarVigiaPC() {
 (function initPCUI() {
   const u = $("pc-url"), k = $("pc-token"), m = $("pc-mode"), b = $("pc-test"), v = $("pc-toggle");
   if (!u || !PC.PC_ENABLED) { const sec = $("pc-cerebro"); if (sec) sec.hidden = true; return; }
+  const CORTA = "Esa no parece la clave de la compu; use el QR de la compu (acceso «Emparejar teléfono con Antares» en el escritorio de la PC).";
+  const aviso = () => { const t = k.value.replace(/\s+/g, ""), a = $("pc-aviso"); const mal = !!t && t.length < 30; if (a) { a.hidden = !mal; a.textContent = CORTA; } return !mal; };
+  k.addEventListener("input", aviso);
+  window.__antaresGuardarPC = (url, tok) => { u.value = url || PC.PC_URL_DEF; k.value = tok; guardar(); PC.revisarPC(true); };
   const guardar = () => {
     if (!isUnlocked() || !config) return;
     const url = u.value.trim().replace(/\/+$/, ""), tok = k.value.replace(/\s+/g, "");
@@ -3284,10 +3296,40 @@ function iniciarVigiaPC() {
     u.value = (config && config.pcUrl) || c.url || PC.PC_URL_DEF; k.value = c.tok || ""; k.type = "password"; m.value = PC.modoPC();
     // la clave guardada por las muestras en este mismo sitio se adopta una sola vez
     if (config && !config.pcToken && c.tok) guardar();
+    aviso();
     pintarPC(PC.estadoPC());
   };
-  [u, k].forEach((x) => x.addEventListener("change", () => { guardar(); PC.revisarPC(true); }));
+  [u, k].forEach((x) => x.addEventListener("change", () => { if (x === k && !aviso()) return; guardar(); PC.revisarPC(true); }));
   m.addEventListener("change", guardar);
   v.addEventListener("click", () => { k.type = k.type === "password" ? "text" : "password"; });
-  b.addEventListener("click", async () => { guardar(); const t = $("pc-state"); t.textContent = "Probando…"; await PC.revisarPC(true); });
+  b.addEventListener("click", async () => { if (!aviso()) { $("pc-state").textContent = "Clave demasiado corta: no se guardó."; return; } guardar(); const t = $("pc-state"); t.textContent = "Probando…"; await PC.revisarPC(true); });
 })();
+
+// v1.25.1: aplica la clave que llegó por el QR de la compu, la prueba y avisa.
+async function aplicarEmparejar() {
+  if (pcEmparejar === null || pcEmparejando || !PC.PC_ENABLED) return;
+  const tok = pcEmparejar;
+  if (tok.length < 30) { pcEmparejar = null; avisoPC("El código QR no traía una clave válida. Vuelva a abrirlo en la compu.", false); return; }
+  if (Lock.hasPin() && !isUnlocked()) return; // se aplica al desbloquear
+  pcEmparejar = null; pcEmparejando = true;
+  try {
+    if (isUnlocked() && config) {
+      config = { ...config, pcUrl: "", pcToken: tok }; memory.saveConfig(config);
+      try { localStorage.removeItem("antares.cerebroDoble.v1"); } catch { /* */ }
+    } else {
+      localStorage.setItem("antares.cerebroDoble.v1", JSON.stringify({ url: "", tok }));
+    }
+    try { window.__pcFill && window.__pcFill(); } catch { /* */ }
+    const st = $("pc-state"); if (st) st.textContent = "Probando…";
+    const e = await PC.revisarPC(true);
+    if (e.on) avisoPC("Compu emparejada ✓", true);
+    else if (e.code === "clave incorrecta") avisoPC("La compu no aceptó la clave. Regenere el QR en la compu e intente de nuevo.", false);
+    else avisoPC("Clave guardada, pero la compu no responde ahora (" + e.code + "). Se usará cuando esté encendida.", false);
+  } finally { pcEmparejando = false; }
+}
+function avisoPC(texto, ok) {
+  let t = document.getElementById("pc-toast");
+  if (!t) { t = document.createElement("div"); t.id = "pc-toast"; t.setAttribute("role", "status"); document.body.appendChild(t); }
+  t.textContent = texto; t.className = ok ? "ok" : "mal"; t.hidden = false;
+  clearTimeout(avisoPC.t); avisoPC.t = setTimeout(() => { t.hidden = true; }, ok ? 4500 : 9000);
+}

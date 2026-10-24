@@ -92,6 +92,7 @@ ul.nts li{border-bottom:1px solid rgba(34,255,154,.12);padding-bottom:8px;font-s
 body:not(.app) .cerrar{display:none}
 header{padding-top:calc(env(safe-area-inset-top) + 10px)}
 @media (max-width:600px){header h1 small{display:none} .estado{order:3;margin-left:0} #notif{padding:7px 9px;font-size:13px}}
+.aviso-tok{color:#ff5c7a;font-size:.85em;margin:.4em 0}
 </style></head><body>
 <header>
   <h1>ANTARES · <b>MI</b> COMPU<small>SALUD DE LA PC ANTARES · BUSCADOR PROPIO · NOTICIAS DE COSTA RICA</small></h1>
@@ -103,7 +104,7 @@ header{padding-top:calc(env(safe-area-inset-top) + 10px)}
   <div class="campos">
     <p class="nota" id="conf-app">Dentro de Antares la clave se pega en <b>Ajustes › Cerebro de la compu</b>.</p>
     <label for="url">Dirección de la compu</label><input type="url" id="url" autocomplete="off" spellcheck="false">
-    <label for="tok">Clave de la compu (token)</label><input type="password" id="tok" autocomplete="off">
+    <label for="tok">Clave de la compu (token)</label><input type="password" id="tok" autocomplete="off"><p id="tok-aviso" class="aviso-tok" role="alert" hidden></p>
     <p class="nota">Se guardan solo en este dispositivo.</p>
     <div><button class="btn" id="guardar" type="button">Guardar y probar</button></div>
   </div></details>
