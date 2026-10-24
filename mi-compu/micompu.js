@@ -31,16 +31,26 @@ $("#guardar").addEventListener("click", () => {
 });
 if (!c.tok) $("#conf").open = true;
 // v1.25.2: escanear el QR de la compu sin escribir la clave
-$("#escanear").addEventListener("click", async () => {
-  let app = null; try { app = APP && window.parent.__antaresEscanearPC; } catch { /* */ }
-  if (app) { if (await app()) $("#conf").open = false; }
+const escaner = import("../js/escaner.js"); let mod = null; escaner.then((m) => { mod = m; });
+const lanzar = async (img) => {
+  let app = null, emp = null; try { app = APP && window.parent.__antaresEscanearPC; emp = APP && window.parent.__antaresEmparejarTexto; } catch { /* */ }
+  if (img && emp) {
+    const { elegirImagenQR } = mod || await escaner; const r = await elegirImagenQR(); if (!r) return;
+    if (r.error) { const a = $("#tok-aviso"); a.hidden = false; a.textContent = r.error; return; }
+    if (await emp(r.texto, true)) $("#conf").open = false;
+  } else if (!img && app) { if (await app()) $("#conf").open = false; }
   else {
-    const { escanearQR, leerQRCompu } = await import("../js/escaner.js");
-    const t = await escanearQR(); if (t == null) return;
+    const { escanearQR, leerQRCompu, elegirImagenQR } = mod || await escaner;
+    let t;
+    if (img) { const r = await elegirImagenQR(); if (!r) return; if (r.error) { const a = $("#tok-aviso"); a.hidden = false; a.textContent = r.error; return; } t = r.texto; }
+    else { t = await escanearQR(); if (t == null) return; }
     const q = leerQRCompu(t);
     if (!q || q.tok.length < 30) { const a = $("#tok-aviso"); a.hidden = false; a.textContent = "Ese QR no trae la clave de la compu. Use el de «Emparejar teléfono con Antares»."; return; }
     guardarLocal(q.url || $("#url").value.trim().replace(/\/+$/, "") || URL_PC, q.tok); $("#conf").open = false;
+    if (img) { const a = $("#tok-aviso"); a.hidden = false; a.textContent = "Listo. Por seguridad, borre esa foto del QR de su galería."; }
   }
   recargarSalud(); recargarNoticias();
-});
+};
+$("#escanear").addEventListener("click", () => lanzar(false));
+$("#imagen").addEventListener("click", () => lanzar(true));
 iniciarSalud(); iniciarBuscador();

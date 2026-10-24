@@ -2,7 +2,7 @@
 import { GeminiClient, DEFAULT_ASSISTANT_NAME, needsSearch } from "./gemini.js";
 import { memory, thumbs, requestPersistence, LS_LIMIT, flushWrites, isVaultMode, isUnlocked } from "./memory.js";
 import * as Lock from "./lock.js";
-import { escanearQR, leerQRCompu } from "./escaner.js";
+import { escanearQR, leerQRCompu, elegirImagenQR, ultimaFuente } from "./escaner.js";
 import * as Vault from "./vault.js";
 import { showLock, runPinFlow, runTapFlow, isShowing as lockShowing } from "./lockui.js";
 import { looksLikeImportantFact, buildConfirmationQuestion } from "./facts.js";
@@ -40,7 +40,7 @@ import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.25.2";
+const APP_VERSION = "1.25.3";
 // v1.25.1: emparejar con el QR de la compu (#pc-token=…). Se lee y se borra del enlace de inmediato (no queda en el historial).
 let pcEmparejar = null, pcEmparejando = false;
 try {
@@ -3328,23 +3328,33 @@ async function aplicarEmparejar() {
     else avisoPC("Clave guardada, pero la compu no responde ahora (" + e.code + "). Se usará cuando esté encendida.", false);
   } finally { pcEmparejando = false; }
 }
-function avisoPC(texto, ok) {
+function avisoPC(texto, ok, ms) {
   let t = document.getElementById("pc-toast");
   if (!t) { t = document.createElement("div"); t.id = "pc-toast"; t.setAttribute("role", "status"); document.body.appendChild(t); }
   t.textContent = texto; t.className = ok ? "ok" : "mal"; t.hidden = false;
-  clearTimeout(avisoPC.t); avisoPC.t = setTimeout(() => { t.hidden = true; }, ok ? 4500 : 9000);
+  clearTimeout(avisoPC.t); avisoPC.t = setTimeout(() => { t.hidden = true; }, ms || (ok ? 4500 : 9000));
 }
 
 // v1.25.2: escanear el QR de la compu dentro de la app (Ajustes y Mi compu). Reusa el emparejamiento de arriba.
-async function escanearCompu() {
-  const texto = await escanearQR();
+async function escanearCompu(desdeImagen = false) {
+  let texto;
+  if (desdeImagen) { const r = await elegirImagenQR(); if (!r) return false; if (r.error) { avisoPC(r.error, false); return false; } texto = r.texto; }
+  else texto = await escanearQR();
   if (texto == null) return false;
+  return emparejarTexto(texto, desdeImagen || ultimaFuente() === "imagen");
+}
+async function emparejarTexto(texto, deImagen) {
   const q = leerQRCompu(texto);
   if (!q) { avisoPC("Ese QR no es el de la compu. Use el de «Emparejar teléfono con Antares».", false); return false; }
   if (Lock.hasPin() && !isUnlocked()) { avisoPC("Desbloquee Antares y vuelva a escanear.", false); return false; }
   pcEmparejar = { tok: q.tok, url: q.url };
   await aplicarEmparejar();
-  return PC.estadoPC().on;
+  const ok = PC.estadoPC().on;
+  if (ok && deImagen) avisoPC("Compu emparejada ✓ Listo. Por seguridad, borre esa foto del QR de su galería.", true, 9000);
+  return ok;
 }
 window.__antaresEscanearPC = escanearCompu;
+window.__antaresImagenPC = () => escanearCompu(true);
+window.__antaresEmparejarTexto = emparejarTexto; // Mi compu elige la imagen dentro del iframe (gesto local) y pasa el texto
 { const b = document.getElementById("pc-scan"); if (b) b.addEventListener("click", () => escanearCompu()); }
+{ const b = document.getElementById("pc-img"); if (b) b.addEventListener("click", () => escanearCompu(true)); }
