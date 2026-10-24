@@ -2,6 +2,7 @@
 import { GeminiClient, DEFAULT_ASSISTANT_NAME, needsSearch } from "./gemini.js";
 import { memory, thumbs, requestPersistence, LS_LIMIT, flushWrites, isVaultMode, isUnlocked } from "./memory.js";
 import * as Lock from "./lock.js";
+import { escanearQR, leerQRCompu } from "./escaner.js";
 import * as Vault from "./vault.js";
 import { showLock, runPinFlow, runTapFlow, isShowing as lockShowing } from "./lockui.js";
 import { looksLikeImportantFact, buildConfirmationQuestion } from "./facts.js";
@@ -39,12 +40,12 @@ import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.25.1";
+const APP_VERSION = "1.25.2";
 // v1.25.1: emparejar con el QR de la compu (#pc-token=…). Se lee y se borra del enlace de inmediato (no queda en el historial).
 let pcEmparejar = null, pcEmparejando = false;
 try {
   const h = new URLSearchParams(location.hash.slice(1)).get("pc-token");
-  if (location.hash.includes("pc-token")) { history.replaceState(null, "", location.pathname + location.search); pcEmparejar = (h || "").replace(/\s+/g, ""); }
+  if (location.hash.includes("pc-token")) { const q = leerQRCompu(location.href) || {}; history.replaceState(null, "", location.pathname + location.search); pcEmparejar = { tok: (h || "").replace(/\s+/g, ""), url: q.url || "" }; }
 } catch { /* */ }
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
@@ -3308,16 +3309,16 @@ function iniciarVigiaPC() {
 // v1.25.1: aplica la clave que llegó por el QR de la compu, la prueba y avisa.
 async function aplicarEmparejar() {
   if (pcEmparejar === null || pcEmparejando || !PC.PC_ENABLED) return;
-  const tok = pcEmparejar;
+  const { tok, url } = pcEmparejar;
   if (tok.length < 30) { pcEmparejar = null; avisoPC("El código QR no traía una clave válida. Vuelva a abrirlo en la compu.", false); return; }
   if (Lock.hasPin() && !isUnlocked()) return; // se aplica al desbloquear
   pcEmparejar = null; pcEmparejando = true;
   try {
     if (isUnlocked() && config) {
-      config = { ...config, pcUrl: "", pcToken: tok }; memory.saveConfig(config);
+      config = { ...config, pcUrl: url && url !== PC.PC_URL_DEF ? url : "", pcToken: tok }; memory.saveConfig(config);
       try { localStorage.removeItem("antares.cerebroDoble.v1"); } catch { /* */ }
     } else {
-      localStorage.setItem("antares.cerebroDoble.v1", JSON.stringify({ url: "", tok }));
+      localStorage.setItem("antares.cerebroDoble.v1", JSON.stringify({ url: url && url !== PC.PC_URL_DEF ? url : "", tok }));
     }
     try { window.__pcFill && window.__pcFill(); } catch { /* */ }
     const st = $("pc-state"); if (st) st.textContent = "Probando…";
@@ -3333,3 +3334,17 @@ function avisoPC(texto, ok) {
   t.textContent = texto; t.className = ok ? "ok" : "mal"; t.hidden = false;
   clearTimeout(avisoPC.t); avisoPC.t = setTimeout(() => { t.hidden = true; }, ok ? 4500 : 9000);
 }
+
+// v1.25.2: escanear el QR de la compu dentro de la app (Ajustes y Mi compu). Reusa el emparejamiento de arriba.
+async function escanearCompu() {
+  const texto = await escanearQR();
+  if (texto == null) return false;
+  const q = leerQRCompu(texto);
+  if (!q) { avisoPC("Ese QR no es el de la compu. Use el de «Emparejar teléfono con Antares».", false); return false; }
+  if (Lock.hasPin() && !isUnlocked()) { avisoPC("Desbloquee Antares y vuelva a escanear.", false); return false; }
+  pcEmparejar = { tok: q.tok, url: q.url };
+  await aplicarEmparejar();
+  return PC.estadoPC().on;
+}
+window.__antaresEscanearPC = escanearCompu;
+{ const b = document.getElementById("pc-scan"); if (b) b.addEventListener("click", () => escanearCompu()); }

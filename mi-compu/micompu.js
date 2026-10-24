@@ -30,4 +30,17 @@ $("#guardar").addEventListener("click", () => {
   $("#conf").open = false; recargarSalud(); recargarNoticias();
 });
 if (!c.tok) $("#conf").open = true;
+// v1.25.2: escanear el QR de la compu sin escribir la clave
+$("#escanear").addEventListener("click", async () => {
+  let app = null; try { app = APP && window.parent.__antaresEscanearPC; } catch { /* */ }
+  if (app) { if (await app()) $("#conf").open = false; }
+  else {
+    const { escanearQR, leerQRCompu } = await import("../js/escaner.js");
+    const t = await escanearQR(); if (t == null) return;
+    const q = leerQRCompu(t);
+    if (!q || q.tok.length < 30) { const a = $("#tok-aviso"); a.hidden = false; a.textContent = "Ese QR no trae la clave de la compu. Use el de «Emparejar teléfono con Antares»."; return; }
+    guardarLocal(q.url || $("#url").value.trim().replace(/\/+$/, "") || URL_PC, q.tok); $("#conf").open = false;
+  }
+  recargarSalud(); recargarNoticias();
+});
 iniciarSalud(); iniciarBuscador();

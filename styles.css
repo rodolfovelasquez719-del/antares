@@ -1344,3 +1344,7 @@ body.desk.kb-open .pc-btn, body.desk.typing .pc-btn { display: inline-flex; }
 #pc-toast.ok{color:#2bff9a;border:1px solid #2bff9a;box-shadow:0 0 24px #2bff9a55}
 #pc-toast.mal{color:#ff5c7a;border:1px solid #ff3b5c;box-shadow:0 0 24px #ff3b5c55}
 .pc-aviso{color:#ff5c7a;font-size:.9em;margin:6px 0 0}
+
+/* v1.25.2 · botones de la compu sin desbordar en teléfono */
+#pc-cerebro .btn-row{display:flex;flex-wrap:wrap;gap:8px}
+#pc-cerebro .btn-row .btn{flex:1 1 auto;min-width:0;white-space:normal}
