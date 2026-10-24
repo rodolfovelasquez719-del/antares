@@ -115,6 +115,11 @@ function renderLanding() {
           ${c ? `<span class="gc-count">${c}</span>` : ""}
           <svg class="gc-go" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button></li>`; }).join("")}
+      ${g === "herramientas" && window.__pcOn ? `<li><button type="button" class="group-card" data-micompu="1">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></g></svg>
+          <span class="gc-text"><strong>Mi compu</strong><small>Salud de la PC (disco, calor, red, alertas), buscador propio y noticias de Costa Rica.</small></span>
+          <svg class="gc-go" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button></li>` : ""}
       ${g === "herramientas" && window.__ojoOn ? `<li><button type="button" class="group-card" data-ojo="1">
           <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></g></svg>
           <span class="gc-text"><strong>Ojo · Costa Rica</strong><small>Lluvia en rutas, Mi ruta, sismos, volcanes, tráfico Waze y Google Earth. También el globo MUNDO.</small></span>
@@ -123,6 +128,7 @@ function renderLanding() {
     </ul>`;
   root.dataset.tab = `landing-${g}`;
   (root.closest(".settings-scroll") || root).scrollTop = 0;
+  root.querySelectorAll("[data-micompu]").forEach((b) => b.addEventListener("click", () => window.dispatchEvent(new Event("antares:micompu"))));
   root.querySelectorAll("[data-ojo]").forEach((b) => b.addEventListener("click", () => window.dispatchEvent(new Event("antares:ojo"))));
   root.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => {
     tab = b.dataset.open; landing = null; editingId = null; W.clearStatus(); O.clearStatus(); T.clearStatus(); render(); onNav({ from: "landing", ...currentView() });

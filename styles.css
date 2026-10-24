@@ -1322,3 +1322,19 @@ body.desk .tab.desk-tab[aria-current="page"] { background: linear-gradient(90deg
 @media (max-width: 760px) { .ojo-cr-btn { top: auto; left: auto; transform: none; right: 14px; bottom: calc(env(safe-area-inset-bottom) + 76px); min-height: 42px; box-shadow: 0 6px 20px rgba(0,0,0,.6); } }
 .cr-nosis { margin: 0; font: 500 11px var(--font-ui, sans-serif); color: #8fbfa8; opacity: .8; text-align: center; }
 .cr-nosis[hidden] { display: none; }
+
+/* v1.25: Mi compu y cerebro doble */
+.pc-btn { right: 186px; color: #9fe8c5; border-color: rgba(34,255,154,.4); display: inline-flex; align-items: center; gap: 6px; }
+.pc-btn[hidden] { display: none; }
+body.kb-open .pc-btn, body.typing .pc-btn { display: none; }
+body.desk .pc-btn { margin-right: 200px; }
+body.desk.kb-open .pc-btn, body.desk.typing .pc-btn { display: inline-flex; }
+.pc-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #555; flex: none; }
+.pc-dot[data-st="on"] { background: #22ff9a; box-shadow: 0 0 8px #22ff9a; }
+.pc-dot[data-st="off"] { background: #ff2d4a; box-shadow: 0 0 8px #ff2d4a; }
+.desk-tab .pc-dot { margin-left: auto; }
+.pc-alerta { border-color: #ff2d4a !important; color: #ff8a9b !important; animation: pcAl 1.6s ease-in-out infinite; }
+@keyframes pcAl { 50% { box-shadow: 0 0 14px rgba(255,45,74,.7); } }
+#pc-test .pc-dot { margin-right: 6px; }
+.micompu-view { background: #020c08; }
+@media (max-width: 380px) { .pc-btn { right: 172px; padding: 0 9px; } }

@@ -1,6 +1,6 @@
 // Antares Web - Service worker: abre rápido y sin conexión, y recibe las versiones nuevas.
 // Las llamadas a Gemini, Open-Meteo y otros dominios NO se interceptan ni se guardan.
-const VERSION = "antares-v1.24.2";
+const VERSION = "antares-v1.25.0";
 const SHELL = [
   "./",
   "./index.html",
@@ -34,6 +34,9 @@ const SHELL = [
   "./js/vision.js",
   "./js/ojo.js",
   "./js/ojocr-resumen.js",
+  "./js/pc.js",
+  "./js/ruteo.mjs",
+  "./js/micompu.js",
   "./js/desktop.js",
   "./js/avatar3d.js",
   "./assets/avatar-antares.jpg",
@@ -148,6 +151,7 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.includes("/muestra-avatar-vivo/")) return;
   if (url.pathname.includes("/muestra-avatar-3d/")) return;
   if (url.pathname.includes("/muestra-ojo/")) return;
+  if (url.pathname.includes("/mi-compu/")) return; // v1.25: Mi compu siempre de la red (datos en vivo de la PC)
   if (url.pathname.includes("/ojo-cr/")) return; // v1.24: Ojo CR siempre de la red (sus datos son en vivo)
   if (url.pathname.includes("/muestra-buscar/")) return;
   if (url.pathname.includes("/muestra-escritorio/")) return;

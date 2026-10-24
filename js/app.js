@@ -29,6 +29,8 @@ import * as Hud from "./hud.js";
 import { mountAvatar, mountAvatarVideo, setAvatarState } from "./avatar.js";
 import { openVision, closeVision } from "./vision.js";
 import { OJO_ENABLED, OJO_CR_ENABLED, openOjo, closeOjo, isOjoOpen } from "./ojo.js";
+import * as PC from "./pc.js";
+import { openMiCompu, closeMiCompu, isMiCompuOpen } from "./micompu.js";
 import { iniciarResumenCR } from "./ojocr-resumen.js";
 import * as Av3 from "./avatar3d.js";
 import * as Desk from "./desktop.js";
@@ -37,7 +39,7 @@ import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.24.2";
+const APP_VERSION = "1.25.0";
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -142,6 +144,7 @@ function makeClient(apiKey = config.geminiApiKey) {
     },
   });
 }
+const modoPC = () => PC.modoPC();
 const assistantName = () => (config.assistantName || "").trim() || DEFAULT_ASSISTANT_NAME;
 const shortModel = (m) => (m || "").replace(/^gemini-/, "");
 // v1.18: cerebro local (WebLLM). auto = Gemini si hay red y key; local si no (cuando el modelo ya está descargado)
@@ -602,7 +605,8 @@ function renderBot(text, { sources = [], meta = "", id = "", sticker = "", react
 function formatMeta(r, uploadMs = 0) {
   const secs = ((r.ms + uploadMs) / 1000).toFixed(1).replace(".", ",");
   const up = uploadMs >= 1000 ? ` (incl. ${(uploadMs / 1000).toFixed(1).replace(".", ",")} s de subida)` : "";
-  return `${secs} s${up}${r.model ? " · " + shortModel(r.model) : ""}${r.stopped ? " · detenida" : ""}`;
+  const cer = r.brain === "pc" ? "🖥 PC · " : r.brain === "gem" ? "✦ Gemini · " : "";
+  return `${cer}${secs} s${up}${r.model ? " · " + shortModel(r.model) : ""}${r.stopped ? " · detenida" : ""}${r.brainNote ? " · " + r.brainNote : ""}`;
 }
 
 const ICON_CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5 10 17 19 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -850,17 +854,35 @@ async function runJob(job) {
     }
     if (abortCtrl.signal.aborted) { if (stream) stream.wrap.remove(); showNote("Respuesta detenida."); setEstado(baseEstado()); return; }
     const search = !media && !!config.webSearch && needsSearch(job.prompt);
-    const r = await client.ask(job.prompt, history, job.facts, {
-      search, media, signal: abortCtrl.signal, extraSystem: job.extraSystem || "",
-      onChunk: (partial) => {
-        Brain.chunk();
-        if (!stream) stream = createStreamingBubble();
-        const near = isNearBottom();
-        if (stream.bubble.classList.contains("pending")) { stream.bubble.classList.remove("pending"); els.connSub.textContent = "Respondiendo…"; }
-        stream.bubble.textContent = Social.stripPartial(partial); // las etiquetas ocultas nunca se ven
-        if (near) scrollToBottom(false);
-      },
-    });
+    const onChunk = (partial) => {
+      Brain.chunk();
+      if (!stream) stream = createStreamingBubble();
+      const near = isNearBottom();
+      if (stream.bubble.classList.contains("pending")) { stream.bubble.classList.remove("pending"); els.connSub.textContent = "Respondiendo…"; }
+      stream.bubble.textContent = Social.stripPartial(partial); // las etiquetas ocultas nunca se ven
+      if (near) scrollToBottom(false);
+    };
+    // v1.25: cerebro doble. Solo mensajes de texto normales (sin fotos ni correo/código/sticker) y con clave de la PC.
+    let r = null, dec = null, nota = "";
+    if (PC.PC_ENABLED && PC.tieneClave() && !media && !job.kind && !(job.items || []).length) {
+      await PC.revisarPC();
+      dec = PC.decidir(job.text || job.prompt);
+      if (dec.cerebro === "pc") {
+        els.connSub.textContent = "Pensando en la compu…";
+        try {
+          const p = await PC.preguntarPC(job.text || job.prompt, history, { signal: abortCtrl.signal, onChunk, nombre: (config.userName || "Freddy").replace(/^don\s+/i, "") });
+          if (p.delicada) { nota = "revisado: la PC tocó un tema delicado"; if (stream) stream.bubble.textContent = "…"; }
+          else r = { ...p, brain: "pc" };
+        } catch (e) {
+          if (abortCtrl.signal.aborted) r = { ok: false, stopped: true, text: "" };
+          else { nota = "la PC no respondió"; PC.revisarPC(true); if (stream) stream.bubble.textContent = "…"; }
+        }
+      }
+    }
+    if (!r) {
+      r = await client.ask(job.prompt, history, job.facts, { search, media, signal: abortCtrl.signal, extraSystem: job.extraSystem || "", onChunk });
+      if (dec) { r.brain = "gem"; r.brainNote = nota || (modoPC() === "auto" ? dec.motivo : ""); }
+    }
     if (stream) stream.wrap.remove();
     if (epoch !== lockEpoch) return; // se bloqueó mientras respondía: no se muestra ni se guarda nada
     if (r.ok) {
@@ -2305,6 +2327,7 @@ function setConnStatus(kind, text, details = "") {
 }
 
 function fillSettings() {
+  try { window.__pcFill && window.__pcFill(); } catch { /* */ }
   els.apiKey.value = config.geminiApiKey || "";
   setKeyVisible(false);
   els.assistantName.value = config.assistantName || DEFAULT_ASSISTANT_NAME;
@@ -2870,6 +2893,7 @@ function lockApp(reason = "manual") {
   if (!els.modal.hidden) closeModal();
   try { closeVision(); } catch { /* */ }            // la cámara no queda abierta encima del bloqueo
   try { if (isOjoOpen()) closeOjo(); } catch { /* */ }
+  try { if (isMiCompuOpen()) closeMiCompu(); } catch { /* */ }
   if (!els.settingsView.hidden) {
     snapshot = null;
     if (historyPushed) { historyPushed = false; history.back(); }
@@ -3079,6 +3103,16 @@ async function init() {
     // v1.24: tarjeta «Alertas en rutas» y aviso de sismo en Inicio (abren Ojo CR)
     if (OJO_ENABLED && OJO_CR_ENABLED) { try { iniciarResumenCR(document.getElementById("cr-home"), (h) => openOjo("cr", h)); } catch (e) { console.warn(e); } }
     window.__ojoOn = OJO_ENABLED;
+    // v1.25: Mi compu (salud, buscador, noticias de la PC ANTARES) y cerebro doble
+    if (PC.PC_ENABLED) {
+      PC.initPC(() => (isUnlocked() ? config : null));
+      window.__pcOn = true;
+      window.__antaresPC = () => (isUnlocked() ? PC.credenciales() : { url: PC.PC_URL_DEF, tok: "" });
+      window.__antaresGemKey = () => (isUnlocked() && config ? config.geminiApiKey || "" : "");
+      const pb = document.getElementById("pc-btn"); if (pb) { pb.hidden = false; pb.addEventListener("click", () => openMiCompu()); }
+      window.addEventListener("antares:micompu", () => openMiCompu());
+      iniciarVigiaPC();
+    } else { const pb = document.getElementById("pc-btn"); if (pb) pb.hidden = true; }
     document.getElementById("vision-btn").addEventListener("click", () => openVision({ getKey: () => config.geminiApiKey || "", model: GEM_MODELS[0], speak: (t) => { try { voice.speak(t); } catch { /* */ } } }));
   } catch (e) { console.warn("Antares: presencia/visión", e); }
   try { Brain.mountBrain(document.querySelector("#stage .reactor-wrap")); } catch (e) { console.warn("Antares: cerebro 3D", e); }
@@ -3197,6 +3231,7 @@ function initDesk() {
   Desk.initDesktop({
     version: APP_VERSION,
     ojo: OJO_ENABLED ? () => openOjo() : null,
+    micompu: PC.PC_ENABLED ? () => openMiCompu() : null,
     vision: () => document.getElementById("vision-btn").click(),
     settings: () => { if (panelOpen) { goHome(); setTimeout(() => openSettings(), 400); } else openSettings(); }, // espera el «atrás» del historial
     checkUpdate: () => document.getElementById("home-ver").click(),
@@ -3208,3 +3243,51 @@ function initDesk() {
   });
   setInterval(() => { if (Desk.isDesk()) Desk.paintCards(); }, 60000);
 }
+
+// ---------- v1.25: vigía de la PC (estado del cerebro doble y avisos de salud de la compu) ----------
+let alertasVistas = new Set();
+function pintarPC(st) {
+  const on = st && st.on, sin = !PC.tieneClave();
+  document.querySelectorAll(".pc-dot").forEach((d) => { d.dataset.st = sin ? "sin" : on ? "on" : "off"; d.title = sin ? "Sin clave de la PC" : "Compu: " + st.code; });
+  const t = document.getElementById("pc-state"); if (t) { t.textContent = sin ? "Sin clave: todo lo responde Gemini (como siempre)." : on ? "Compu en línea: la PC contesta charla y redacción; Gemini lo demás." : `Compu ${st.code}: todo lo responde Gemini.`; t.className = "lb-state" + (on ? " ok" : sin ? "" : " err"); }
+}
+async function vigiaSalud() {
+  if (!isUnlocked() || !PC.tieneClave() || document.hidden) return;
+  try {
+    const j = await PC.saludPC(); if (!j) return;
+    const al = j.alertas || [];
+    document.querySelectorAll(".pc-btn, [data-desk=micompu], [data-micompu]").forEach((b) => b.classList.toggle("pc-alerta", al.length > 0));
+    if ("Notification" in window && Notification.permission === "granted") {
+      for (const a of al) { const k = a.clave + "|" + a.inicio; if (alertasVistas.has(k)) continue; alertasVistas.add(k);
+        try { const reg = await navigator.serviceWorker?.getRegistration(); const titulo = "Antares · " + (a.nivel === "alerta" ? "ALERTA de la compu" : "Aviso de la compu");
+          if (reg) reg.showNotification(titulo, { body: a.texto, tag: "pc-" + a.clave, icon: "./icons/icon-192.png" }); else new Notification(titulo, { body: a.texto, tag: "pc-" + a.clave }); } catch { /* */ } }
+    }
+  } catch { /* compu apagada: sin aviso */ }
+}
+function iniciarVigiaPC() {
+  PC.onEstadoPC(pintarPC);
+  const ciclo = () => { if (isUnlocked() && !document.hidden) PC.revisarPC(true).then(vigiaSalud); };
+  setTimeout(ciclo, 4000); setInterval(ciclo, 5 * 60 * 1000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) setTimeout(ciclo, 800); });
+}
+(function initPCUI() {
+  const u = $("pc-url"), k = $("pc-token"), m = $("pc-mode"), b = $("pc-test"), v = $("pc-toggle");
+  if (!u || !PC.PC_ENABLED) { const sec = $("pc-cerebro"); if (sec) sec.hidden = true; return; }
+  const guardar = () => {
+    if (!isUnlocked() || !config) return;
+    const url = u.value.trim().replace(/\/+$/, ""), tok = k.value.replace(/\s+/g, "");
+    config = { ...config, pcUrl: url && url !== PC.PC_URL_DEF ? url : "", pcToken: tok, cerebroPC: m.value };
+    memory.saveConfig(config);
+  };
+  window.__pcFill = () => {
+    const c = PC.credenciales();
+    u.value = (config && config.pcUrl) || c.url || PC.PC_URL_DEF; k.value = c.tok || ""; k.type = "password"; m.value = PC.modoPC();
+    // la clave guardada por las muestras en este mismo sitio se adopta una sola vez
+    if (config && !config.pcToken && c.tok) guardar();
+    pintarPC(PC.estadoPC());
+  };
+  [u, k].forEach((x) => x.addEventListener("change", () => { guardar(); PC.revisarPC(true); }));
+  m.addEventListener("change", guardar);
+  v.addEventListener("click", () => { k.type = k.type === "password" ? "text" : "password"; });
+  b.addEventListener("click", async () => { guardar(); const t = $("pc-state"); t.textContent = "Probando…"; await PC.revisarPC(true); });
+})();
