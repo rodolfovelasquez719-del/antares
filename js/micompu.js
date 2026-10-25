@@ -12,12 +12,21 @@ export function openMiCompu(tab = "") {
   document.addEventListener("keydown", esc);
   window.addEventListener("message", msg);
   el.querySelector("iframe").src = "mi-compu/?app=1" + (tab ? "#" + tab : "");
+  // v1.25.4: una entrada de historial para que «atrás» (gesto de borde en iOS, botón en Android) cierre Mi compu
+  try { if (!(history.state && history.state.micompu)) history.pushState({ ...(history.state || {}), micompu: 1 }, ""); } catch { /* */ }
+  window.addEventListener("popstate", atras);
 }
-function msg(e) { if (e.origin === location.origin && el && e.source === el.querySelector("iframe").contentWindow && e.data === "micompu:cerrar") closeMiCompu(); }
+function atras() { if (el) closeMiCompu({ historial: true }); }
+// cualquier mensaje «micompu:cerrar» del mismo origen cierra (iOS puede cambiar la identidad del iframe tras recargarlo)
+function msg(e) { if (e.origin === location.origin && e.data === "micompu:cerrar") closeMiCompu(); }
+window.__antaresCerrarMiCompu = () => closeMiCompu();
 function esc(e) { if (e.key === "Escape") closeMiCompu(); }
-export function closeMiCompu() {
-  if (!el) return;
+export function closeMiCompu({ historial = false } = {}) {
+  document.querySelectorAll(".micompu-view").forEach((n) => { if (n !== el) n.remove(); }); // restos de capas viejas
+  if (!el) { document.body.classList.remove("ojo-on"); return; }
   const node = el; el = null;
+  window.removeEventListener("popstate", atras);
+  try { if (!historial && history.state && history.state.micompu) history.back(); } catch { /* */ }
   node.style.display = "none";
   document.body.classList.remove("ojo-on");
   document.removeEventListener("keydown", esc);

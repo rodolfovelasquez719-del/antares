@@ -5,9 +5,35 @@ import { iniciarBuscador, recargarNoticias } from "./buscador.js";
 const APP = new URLSearchParams(location.search).has("app") && window.parent !== window;
 document.body.classList.toggle("app", APP);
 $("#conf-app").hidden = !APP;
-const cerrar = () => window.parent.postMessage("micompu:cerrar", location.origin);
+// v1.25.4: «Cerrar» SIEMPRE vuelve a la app. 1) dentro de la app: llamada directa + mensaje a la ventana de arriba;
+// 2) si en 450 ms sigue abierto (o es una página suelta, p. ej. tras recargar), navega a la raíz de la app.
+const RAIZ = new URL("../", location.href).href; // …/antares/
+function irALaApp() {
+  let arriba = window;
+  try { if (window.top !== window && window.top.location.origin === location.origin) arriba = window.top; } catch { arriba = window; }
+  try {
+    const ref = document.referrer && new URL(document.referrer);
+    if (arriba === window && history.length > 1 && ref && ref.origin === location.origin && !ref.pathname.includes("/mi-compu/")) { history.back(); setTimeout(() => location.replace(RAIZ), 700); return; }
+  } catch { /* */ }
+  arriba.location.replace(RAIZ);
+}
+let cerrando = false;
+const cerrar = () => {
+  if (cerrando) return; cerrando = true; setTimeout(() => { cerrando = false; }, 1200);
+  if (window.parent !== window) {
+    let directo = false;
+    try { const f = window.parent.__antaresCerrarMiCompu; if (typeof f === "function") { f(); directo = true; } } catch { /* */ }
+    try { window.parent.postMessage("micompu:cerrar", location.origin); } catch { /* */ }
+    setTimeout(() => {
+      // si la capa sigue a la vista (mensaje perdido, iOS), salir navegando
+      let visible = true;
+      try { const fe = window.frameElement; visible = !!(fe && fe.isConnected && fe.getClientRects().length); } catch { visible = !directo; }
+      if (visible) irALaApp();
+    }, 450);
+  } else irALaApp();
+};
 $("#cerrar").addEventListener("click", cerrar);
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && APP) cerrar(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") cerrar(); });
 function ver(v) {
   if (!["salud", "buscar", "noticias"].includes(v)) v = "salud";
   document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.v === v)));
