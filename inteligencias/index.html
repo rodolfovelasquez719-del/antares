@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="es"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#020805"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="referrer" content="no-referrer">
+<title>Antares · Panel de inteligencias</title>
+<style>@font-face{font-family:Orbitron;src:url(../fonts/orbitron-latin.woff2) format("woff2");font-weight:400 900;font-display:swap}@font-face{font-family:Rajdhani;src:url(../fonts/rajdhani-600-latin.woff2) format("woff2");font-weight:500 700;font-display:swap}</style>
+<style>
+:root{--bg:#020805;--panel:#06140dcc;--line:#1f5c3f;--txt:#d6ffe9;--dim:#86b8a0;--verde:#2bff9a;--rojo:#ff3b5c;--hud:Orbitron,system-ui,sans-serif;--ui:Rajdhani,system-ui,sans-serif}
+*{box-sizing:border-box}html,body{margin:0;background:radial-gradient(1200px 700px at 50% -10%,#0b2a1c 0%,var(--bg) 60%) fixed;color:var(--txt);font:500 16px/1.4 var(--ui);min-height:100vh}
+body:before{content:"";position:fixed;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,#ffffff05 0 1px,transparent 1px 3px);z-index:0}
+header{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:calc(env(safe-area-inset-top) + 10px) 14px 10px;background:#020805e6;backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+h1{font:700 15px var(--hud);letter-spacing:3px;margin:0;color:var(--verde);text-shadow:0 0 12px #2bff9a66;flex:1;min-width:200px}h1 b{color:var(--rojo)}
+.btn{font:700 14px var(--ui);letter-spacing:.5px;color:var(--txt);background:#0b2418;border:1px solid var(--line);border-radius:10px;min-height:40px;padding:0 14px;cursor:pointer;touch-action:manipulation}
+.btn:hover{border-color:var(--verde)}.volver{position:relative;z-index:50;touch-action:manipulation;background:#2a0b12;border-color:#ff3b5c88;color:#ffd6dd;text-decoration:none;display:inline-flex;align-items:center}
+.chip{font:600 13px var(--ui);color:var(--txt);background:#0b2418;border:1px solid var(--line);border-radius:999px;padding:4px 10px;cursor:pointer;margin-left:6px}
+#voz[aria-pressed=true]{border-color:var(--verde);box-shadow:0 0 12px #2bff9a55}
+main{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(340px,1fr);gap:16px;padding:16px;max-width:1400px;margin:0 auto}
+.conf{grid-column:1/-1;border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:8px 12px}.conf summary{cursor:pointer;font:600 12px var(--hud);letter-spacing:2px;color:var(--dim)}
+.conf .fila{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.conf input{flex:1;min-width:200px;background:#010a06;border:1px solid var(--line);border-radius:10px;color:var(--txt);padding:10px;font:500 15px var(--ui)}
+.nota{color:var(--dim);font-size:14px;margin:6px 0}
+#tablero{position:relative;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-areas:"ruta . guardian" "hogar jefe tutor" ". taller .";gap:18px 16px;align-items:center;padding:8px}
+#lineas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:visible}
+#lineas line{stroke:var(--c);stroke-opacity:.22;stroke-width:1.5;stroke-dasharray:4 6}
+#lineas line.activa{stroke-opacity:1;stroke-width:3;stroke-dasharray:10 8;animation:fluir .6s linear infinite;filter:drop-shadow(0 0 6px var(--c))}
+@keyframes fluir{to{stroke-dashoffset:-36}}#pulso{filter:drop-shadow(0 0 10px #fff)}
+#jefe{grid-area:jefe;position:relative;z-index:1;justify-self:center;width:170px;aspect-ratio:1;border-radius:50%;border:2px solid var(--verde);background:radial-gradient(circle,#0f3a26 0%,#03100a 70%);box-shadow:0 0 30px #2bff9a44,inset 0 0 30px #2bff9a33;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;cursor:pointer;color:var(--txt);font:inherit}
+#jefe .nucleo{width:46px;height:46px;border-radius:50%;background:radial-gradient(circle,#fff 0,#ff3b5c 35%,#5a0010 70%);box-shadow:0 0 24px #ff3b5c;animation:latir 2.4s ease-in-out infinite}
+#jefe.piensa .nucleo{animation-duration:.6s}#jefe b{font:700 14px var(--hud);letter-spacing:3px;color:var(--verde);margin-top:8px}#jefe small{font-size:12px;color:var(--dim);padding:0 14px}
+@keyframes latir{50%{transform:scale(1.15);box-shadow:0 0 40px #ff3b5c}}
+.intel{position:relative;z-index:1;border:1px solid color-mix(in srgb,var(--c) 45%,transparent);border-radius:14px;background:linear-gradient(160deg,color-mix(in srgb,var(--c) 10%,#04110b) 0%,#030b07 100%);padding:12px;transition:box-shadow .25s,transform .25s}
+#i-ruta{grid-area:ruta}#i-guardian{grid-area:guardian}#i-hogar{grid-area:hogar}#i-tutor{grid-area:tutor}#i-taller{grid-area:taller}
+.intel.activa{box-shadow:0 0 0 2px var(--c),0 0 30px color-mix(in srgb,var(--c) 60%,transparent);transform:translateY(-2px)}
+.intel-top{display:flex;gap:10px;align-items:flex-start}.ico{font-size:28px;line-height:1;filter:drop-shadow(0 0 8px var(--c))}
+.intel h2{margin:0;font:700 13px var(--hud);letter-spacing:2px;color:var(--c)}.intel p{margin:2px 0 0;font-size:14px;color:var(--dim)}
+.luz{margin-left:auto;flex:none;width:11px;height:11px;border-radius:50%;background:#555;box-shadow:0 0 6px #555}
+.intel[data-st=on] .luz{background:var(--verde);box-shadow:0 0 10px var(--verde)}.intel[data-st=off] .luz{background:var(--rojo);box-shadow:0 0 10px var(--rojo)}
+.intel[data-st=wait] .luz{background:#ffc94a;box-shadow:0 0 10px #ffc94a}.intel[data-st=alerta] .luz{background:var(--rojo);animation:latir 1s infinite}
+.est{font-size:13px!important;color:var(--txt)!important;opacity:.85;margin:8px 0!important;min-height:18px}
+.hablar{width:100%;border-color:color-mix(in srgb,var(--c) 60%,transparent);color:var(--c)}
+#panel-chat{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:14px;background:var(--panel);min-height:520px;max-height:calc(100vh - 110px);position:sticky;top:76px}
+#modo{padding:10px 12px;border-bottom:1px solid var(--line);font-size:15px}
+#chat{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:92%;padding:9px 12px;border-radius:12px;white-space:pre-wrap;word-wrap:break-word}
+.msg.yo{align-self:flex-end;background:#0f3a26;border:1px solid #2bff9a55}
+.msg.jefe{align-self:flex-start;font-size:14px;color:var(--dim);background:none;padding:2px 4px}
+.msg.ant{align-self:flex-start;background:#04110b;border:1px solid color-mix(in srgb,var(--c) 50%,transparent);border-left:3px solid var(--c)}
+.quien{font:700 11px var(--hud);letter-spacing:2px;margin-bottom:4px}.badge{font-size:12px;color:var(--dim);margin-top:6px}
+.cursor:after{content:"▋";animation:parp 1s steps(2) infinite;color:var(--verde)}@keyframes parp{50%{opacity:0}}
+#f{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line)}
+#q{flex:1;min-width:0;background:#010a06;border:1px solid var(--line);border-radius:12px;color:var(--txt);padding:10px 12px;font:500 16px var(--ui);resize:none}
+#send{background:linear-gradient(90deg,#2bff9a,#ff3b5c);color:#021;border:0}
+.mini{display:inline-flex;align-items:center;gap:4px;margin-right:8px;vertical-align:middle}.mini b{color:#ff3b5c;font-weight:400}.mini i{position:relative;width:46px;height:2px;background:color-mix(in srgb,var(--c) 30%,transparent);overflow:visible}
+.mini i:after{content:"";position:absolute;top:-3px;left:0;width:8px;height:8px;border-radius:50%;background:var(--c);box-shadow:0 0 8px var(--c);animation:viaje .7s ease-out forwards}@keyframes viaje{to{left:calc(100% - 8px)}}
+.vacio{color:var(--dim);font-size:14px;text-align:center;margin:auto 10px}
+@media (max-width:440px){h1{min-width:0;font-size:12px;letter-spacing:2px}header .btn{padding:0 10px}}
+@media (max-width:900px){
+  main{grid-template-columns:1fr;padding:10px;gap:12px}
+  #tablero{grid-template-columns:1fr 1fr;grid-template-areas:"jefe jefe" "ruta guardian" "hogar tutor" "taller taller";gap:12px}
+  #jefe{width:132px}#jefe small{font-size:11px}
+  #panel-chat{position:static;min-height:420px;max-height:none}
+  #chat{max-height:55vh}
+  .intel{padding:10px}.intel p{font-size:13px}.ico{font-size:24px}
+}
+</style></head>
+<body>
+<header>
+  <a class="btn volver cerrar" id="volver" href="../" aria-label="Cerrar el panel y volver a Antares">✕ CERRAR</a>
+  <h1>PANEL DE <b>INTELIGENCIAS</b></h1>
+  <button class="btn" id="voz" type="button" aria-pressed="false" title="Leer en voz alta las respuestas">🔊 Voz</button>
+</header>
+<main>
+  <details class="conf" id="conf"><summary>CONEXIÓN</summary>
+    <p class="nota" id="gk-nota"></p>
+    <div class="fila" id="gk-fila"><input id="gk" type="password" autocomplete="off" placeholder="Key de Gemini (se guarda solo en este dispositivo)"><button class="btn" id="gk-guardar" type="button">Guardar</button></div>
+    <p class="nota">La compu (Guardián y el cerebro de la PC) usa el emparejamiento de <b>Mi compu</b>.</p>
+  </details>
+  <section id="tablero" aria-label="Inteligencias">
+    <svg id="lineas" aria-hidden="true"></svg>
+    <button type="button" id="jefe" aria-label="Antares, el jefe: que decida quién contesta"><span class="nucleo"></span><b>ANTARES</b><small id="jefe-est">jefe</small></button>
+  </section>
+  <section id="panel-chat" aria-label="Conversación">
+    <div id="modo"></div>
+    <div id="chat" aria-live="polite"><p class="vacio">Pregunte lo que sea: Antares decide qué inteligencia lo atiende. O toque «Hablar» en una tarjeta.</p></div>
+    <form id="f"><textarea id="q" rows="1" placeholder="Pregúntele a Antares…" enterkeyhint="send" aria-label="Pregunta"></textarea><button class="btn" id="send" type="submit">Enviar</button></form>
+  </section>
+</main>
+<script type="module" src="../js/intel-panel.js?v=1.26.0"></script>
+</body></html>

@@ -18,13 +18,14 @@ function build() {
   extra.className = "desk-extra desk-only";
   extra.innerHTML = `<p class="desk-sec">VISTAS</p>
     ${deps.ojo ? `<button type="button" class="tab desk-tab" data-desk="ojo">${svg('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>')}<span>Ojo</span></button>` : ""}
+    ${deps.intel ? `<button type="button" class="tab desk-tab" data-desk="intel">${svg('<circle cx="12" cy="12" r="2.6"/><circle cx="5" cy="5.5" r="1.8"/><circle cx="19" cy="5.5" r="1.8"/><circle cx="5" cy="18.5" r="1.8"/><circle cx="19" cy="18.5" r="1.8"/><path d="M6.4 6.8l3.6 3.4M17.6 6.8L14 10.2M6.4 17.2l3.6-3.4M17.6 17.2L14 13.8"/>')}<span>Inteligencias</span></button>` : ""}
     ${deps.micompu ? `<button type="button" class="tab desk-tab" data-desk="micompu">${svg('<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>')}<span>Mi compu</span><i class="pc-dot" aria-hidden="true"></i></button>` : ""}
     <button type="button" class="tab desk-tab" data-desk="vision">${svg('<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>')}<span>Visión</span></button>
     <div class="desk-foot"><button type="button" class="tab desk-tab" data-desk="ajustes">${svg('<circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/>')}<span>Ajustes</span></button>
     <button type="button" class="desk-ver" data-desk="ver">v${esc(deps.version)} · buscar actualización</button></div>`;
   tabbar.appendChild(extra);
   extra.addEventListener("click", (ev) => { const b = ev.target.closest("[data-desk]"); if (!b) return; const k = b.dataset.desk;
-    if (k === "ojo") deps.ojo && deps.ojo(); else if (k === "micompu") deps.micompu && deps.micompu(); else if (k === "vision") deps.vision(); else if (k === "ajustes") deps.settings(); else if (k === "ver") deps.checkUpdate(); });
+    if (k === "ojo") deps.ojo && deps.ojo(); else if (k === "micompu") deps.micompu && deps.micompu(); else if (k === "intel") deps.intel && deps.intel(); else if (k === "vision") deps.vision(); else if (k === "ajustes") deps.settings(); else if (k === "ver") deps.checkUpdate(); });
   // tarjetas de resumen con datos reales (debajo del micrófono)
   const cards = document.createElement("div");
   cards.className = "desk-cards desk-only"; cards.id = "desk-cards";

@@ -4,7 +4,7 @@ let jsqrCarga = null;
 function cargarJsQR() {
   if (window.jsQR) return Promise.resolve(window.jsQR);
   if (!jsqrCarga) jsqrCarga = new Promise((ok, mal) => {
-    const s = document.createElement("script"); s.src = new URL("../vendor/jsqr/jsQR.js?v=1.25.4", import.meta.url).href;
+    const s = document.createElement("script"); s.src = new URL("../vendor/jsqr/jsQR.js?v=1.26.0", import.meta.url).href;
     s.onload = () => (window.jsQR ? ok(window.jsQR) : mal(new Error("jsQR"))); s.onerror = () => { jsqrCarga = null; mal(new Error("jsQR")); };
     document.head.appendChild(s);
   });

@@ -8,7 +8,7 @@ import { memory } from "./memory.js";
 
 const S = (_d, properties = {}, required = []) => ({ type: "OBJECT", properties, ...(required.length ? { required } : {}) });
 const str = (description, extra = {}) => ({ type: "STRING", description, ...extra });
-export const SECTIONS = ["personal", "trabajo", "ocio", "herramientas", "recordatorios", "compras", "noticias", "rutas", "cubica", "correo", "bitacora", "damas", "trivia", "robotica", "fotos", "codigo", "excel", "inicio", "ajustes"];
+export const SECTIONS = ["personal", "trabajo", "ocio", "herramientas", "recordatorios", "compras", "noticias", "inteligencias", "cubica", "correo", "bitacora", "damas", "trivia", "robotica", "fotos", "codigo", "excel", "inicio", "ajustes"];
 
 export const FUNCTIONS = [
   { name: "crear_recordatorio", description: "Crea un recordatorio con aviso en una fecha y hora.", parameters: S("", { texto: str("Qué hay que recordar, corto (ej. «Llamar a Wendy»)"), fecha_hora: str("Fecha y hora local ISO 8601 sin zona, ej. 2026-10-13T07:00. Calcúlela con la fecha actual dada.") }, ["texto", "fecha_hora"]) },

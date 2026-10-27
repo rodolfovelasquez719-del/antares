@@ -1348,3 +1348,7 @@ body.desk.kb-open .pc-btn, body.desk.typing .pc-btn { display: inline-flex; }
 /* v1.25.2 · botones de la compu sin desbordar en teléfono */
 #pc-cerebro .btn-row{display:flex;flex-wrap:wrap;gap:8px}
 #pc-cerebro .btn-row .btn{flex:1 1 auto;min-width:0;white-space:normal}
+
+/* v1.26 · Panel de inteligencias */
+.intel-view { background: #020805; }
+.group-card.intel-card { border-color: #2bff9a88; box-shadow: 0 0 18px #2bff9a33; }

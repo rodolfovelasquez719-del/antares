@@ -32,6 +32,7 @@ import { openVision, closeVision } from "./vision.js";
 import { OJO_ENABLED, OJO_CR_ENABLED, openOjo, closeOjo, isOjoOpen } from "./ojo.js";
 import * as PC from "./pc.js";
 import { openMiCompu, closeMiCompu, isMiCompuOpen } from "./micompu.js";
+import { openIntel, closeIntel, isIntelOpen } from "./inteligencias.js";
 import { iniciarResumenCR } from "./ojocr-resumen.js";
 import * as Av3 from "./avatar3d.js";
 import * as Desk from "./desktop.js";
@@ -40,7 +41,7 @@ import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.25.4";
+const APP_VERSION = "1.26.0";
 // v1.25.1: emparejar con el QR de la compu (#pc-token=…). Se lee y se borra del enlace de inmediato (no queda en el historial).
 let pcEmparejar = null, pcEmparejando = false;
 try {
@@ -1057,7 +1058,7 @@ async function handleLocal(kind, text) {
       const reply = res.ok ? Routes.routeText(res) : res.error;
       const sources = res.ok ? [{ title: "Abrir la ruta en Google Maps", uri: res.mapsUrl }] : [];
       const w = renderBot(reply, { sources, meta: res.ok ? "Distancias: OSRM · lugares: Open-Meteo / OpenStreetMap" : "" });
-      if (res.ok) addActions(w, [{ label: "Copiar lista", run: () => copyText(reply) }, { label: "Ver en el panel Rutas", run: () => showPanel("rutas") }]);
+      if (res.ok) addActions(w, [{ label: "Copiar lista", run: () => copyText(reply) }, { label: "Preguntarle a Ruta", run: () => showPanel("inteligencias") }]);
       handleSave(memory.addMessage("assistant", reply, sources.length ? { sources } : null), "la respuesta");
     } catch (e) {
       note.remove();
@@ -1867,7 +1868,7 @@ function syncHistory() {
     else { history.pushState(navState(), ""); panelPushed = true; }
   });
 }
-const PANEL_NAME = { noticias: "Resumen del día", recordatorios: "Recordatorios", compras: "Compras", rutas: "Rutas", cubica: "Cúbica", correo: "Correo", bitacora: "Bitácora", damas: "Damas", trivia: "Trivia", robotica: "Robótica", fotos: "Fotos", codigo: "Código", excel: "Excel" };
+const PANEL_NAME = { noticias: "Resumen del día", recordatorios: "Recordatorios", compras: "Compras", cubica: "Cúbica", correo: "Correo", bitacora: "Bitácora", damas: "Damas", trivia: "Trivia", robotica: "Robótica", fotos: "Fotos", codigo: "Código", excel: "Excel" };
 function markTab(section) {
   els.tabbar.querySelectorAll(".tab").forEach((t) => { if (t.dataset.section === section) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current"); });
 }
@@ -1900,6 +1901,8 @@ function enterPanelView() {
 // abre un panel concreto (desde la portada, el chat, ?panel= o el service worker)
 function showPanel(name) {
   if (!isUnlocked()) return;
+  // v1.26: la sección Rutas se reemplazó por el Panel de inteligencias (Ruta sigue sabiendo de rutas por chat)
+  if (name === "inteligencias" || name === "rutas") { if (panelOpen) { hidePanelNow(); setTimeout(() => openIntel(), 400); } else openIntel(); return; } // espera el «atrás» del historial del panel
   if (!enterPanelView()) return;
   openPanel(name);
   paintPanelHeader();
@@ -2901,6 +2904,7 @@ function lockApp(reason = "manual") {
   try { closeVision(); } catch { /* */ }            // la cámara no queda abierta encima del bloqueo
   try { if (isOjoOpen()) closeOjo(); } catch { /* */ }
   try { if (isMiCompuOpen()) closeMiCompu(); } catch { /* */ }
+  try { if (isIntelOpen()) closeIntel(); } catch { /* */ }
   if (!els.settingsView.hidden) {
     snapshot = null;
     if (historyPushed) { historyPushed = false; history.back(); }
@@ -3119,6 +3123,7 @@ async function init() {
       window.__antaresGemKey = () => (isUnlocked() && config ? config.geminiApiKey || "" : "");
       const pb = document.getElementById("pc-btn"); if (pb) { pb.hidden = false; pb.addEventListener("click", () => openMiCompu()); }
       window.addEventListener("antares:micompu", () => openMiCompu());
+      window.addEventListener("antares:intel", () => showPanel("inteligencias"));
       iniciarVigiaPC();
       aplicarEmparejar();
     } else { const pb = document.getElementById("pc-btn"); if (pb) pb.hidden = true; }
@@ -3232,7 +3237,7 @@ function deskSummary() {
   return [
     { label: "RECORDATORIOS HOY", n: hoy.length, sub: prox ? `Próximo: ${prox.title} · ${prox.at <= end.getTime() ? hora(prox.at) : Reminders.formatWhen(prox.at, now)}` : "Sin pendientes", panel: "recordatorios" },
     { label: "COMPRAS", n: items.length, sub: items.length ? items.slice(0, 3).map((i) => i.name).join(", ") + (items.length > 3 ? "…" : "") : "Lista vacía", panel: "compras" },
-    { label: "RUTAS", n: rutasHoy.length || log.length, sub: ult ? `${rutasHoy.length ? "Hoy" : "Última"}: ${ult.name}${ult.km != null ? " · " + ult.km + " km" : ""}` : "Sin rutas registradas", panel: "bitacora" },
+    { label: "🧠 INTELIGENCIAS", n: 5, sub: "Ruta, Guardián, Hogar, Tutor y Taller", panel: "inteligencias" },
     { label: "RECUERDOS", n: facts, sub: "Guardados en este equipo", panel: "recordatorios" },
   ];
 }
@@ -3241,6 +3246,7 @@ function initDesk() {
     version: APP_VERSION,
     ojo: OJO_ENABLED ? () => openOjo() : null,
     micompu: PC.PC_ENABLED ? () => openMiCompu() : null,
+    intel: () => showPanel("inteligencias"),
     vision: () => document.getElementById("vision-btn").click(),
     settings: () => { if (panelOpen) { goHome(); setTimeout(() => openSettings(), 400); } else openSettings(); }, // espera el «atrás» del historial
     checkUpdate: () => document.getElementById("home-ver").click(),

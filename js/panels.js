@@ -1,4 +1,4 @@
-// Paneles: Personal (Recordatorios, Compras, Resumen del día), Trabajo (Rutas, Cúbica, Correo, Bitácora), Ocio (Damas, Trivia, Robótica)
+// Paneles: Personal (Recordatorios, Compras, Resumen del día), Trabajo (Inteligencias [capa], Cúbica, Correo, Bitácora), Ocio (Damas, Trivia, Robótica)
 // y Herramientas (Fotos, Código, Excel).
 import * as R from "./reminders.js";
 import * as S from "./shopping.js";
@@ -19,14 +19,14 @@ const timeVal = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
 const GROUPS = {
   personal: [["noticias", "Resumen"], ["recordatorios", "Recordatorios"], ["compras", "Compras"]],
-  trabajo: [["rutas", "Rutas"], ["cubica", "Cúbica"], ["correo", "Correo"], ["bitacora", "Bitácora"]],
+  trabajo: [["cubica", "Cúbica"], ["correo", "Correo"], ["bitacora", "Bitácora"]],
   ocio: [["damas", "Damas"], ["trivia", "Trivia"], ["robotica", "Robótica"]],
   herramientas: [["fotos", "Fotos"], ["codigo", "Código"], ["excel", "Excel"]],
 };
 const GROUP_LABEL = { personal: "Personal", trabajo: "Trabajo", ocio: "Ocio", herramientas: "Herramientas" };
 const ALL_TABS = Object.values(GROUPS).flat().map(([id]) => id);
 const groupOf = (t) => Object.keys(GROUPS).find((g) => GROUPS[g].some(([id]) => id === t)) || "personal";
-const lastInGroup = { personal: "recordatorios", trabajo: "rutas", ocio: "damas", herramientas: "fotos" };
+const lastInGroup = { personal: "recordatorios", trabajo: "cubica", ocio: "damas", herramientas: "fotos" };
 
 export function initPanels(el, changeCb, workDeps = {}, ocioDeps = {}, navCb, toolDeps = {}) {
   root = el; onChange = changeCb || (() => {}); onNav = navCb || (() => {});
@@ -85,7 +85,6 @@ const CARD = {
   noticias: ["Resumen del día", "Clima, dólar y titulares", '<path d="M5 5.5h11v13H6.5A1.5 1.5 0 0 1 5 17zM16 9h3v8a1.5 1.5 0 0 1-3 0M8 9h5M8 12h5M8 15h3"/>'],
   recordatorios: ["Recordatorios", "Alarmas y avisos", '<path d="M12 4a5 5 0 0 0-5 5v3.5L5.5 16h13L17 12.5V9a5 5 0 0 0-5-5zM10 19a2 2 0 0 0 4 0"/>'],
   compras: ["Compras", "Lista por tienda", '<path d="M4 5h2l2 10h9.5l2-7H7M10 19.5h.01M17 19.5h.01"/>'],
-  rutas: ["Rutas", "Orden de paradas y distancias", '<path d="M6 18.5a2 2 0 1 0 0-.01M18 6.5a2 2 0 1 0 0-.01M6 16.5V11a3 3 0 0 1 3-3h4a3 3 0 0 0 3-3"/>'],
   cubica: ["Cúbica", "Carga del camión", '<path d="M12 3.5l7.5 4v9L12 20.5l-7.5-4v-9zM4.5 7.5L12 11.5l7.5-4M12 11.5v9"/>'],
   correo: ["Correo", "Redactar y revisar correos", '<path d="M4 6.5h16v11H4zM4 7l8 6 8-6"/>'],
   bitacora: ["Bitácora", "Registro de rutas del día", '<path d="M6.5 4h11v16h-11zM9.5 8h5M9.5 11.5h5M9.5 15h3"/>'],
@@ -108,6 +107,11 @@ function renderLanding() {
   root.innerHTML = `
     <p class="landing-intro">${{ personal: "Su día, avisos y compras.", trabajo: "Herramientas para la ruta de hoy.", ocio: "Juegos y retos para descansar.", herramientas: "Fotos, programación y hojas de Excel." }[g]}</p>
     <ul class="group-cards ${g}" aria-label="${GROUP_LABEL[g]}">
+      ${g === "trabajo" ? `<li><button type="button" class="group-card intel-card" data-intel="1">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.6"/><circle cx="5" cy="5.5" r="1.8"/><circle cx="19" cy="5.5" r="1.8"/><circle cx="5" cy="18.5" r="1.8"/><circle cx="19" cy="18.5" r="1.8"/><path d="M6.4 6.8l3.6 3.4M17.6 6.8L14 10.2M6.4 17.2l3.6-3.4M17.6 17.2L14 13.8"/></g></svg>
+          <span class="gc-text"><strong>🧠 INTELIGENCIAS</strong><small>Antares reparte su pregunta: Ruta (trabajo y rutas), Guardián (la compu), Hogar, Tutor y Taller.</small></span>
+          <svg class="gc-go" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button></li>` : ""}
       ${GROUPS[g].map(([id]) => { const [name, desc, icon] = CARD[id]; const c = cardCount(id);
         return `<li><button type="button" class="group-card" data-tab="${id}" data-open="${id}">
           <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${icon}</g></svg>
@@ -128,6 +132,7 @@ function renderLanding() {
     </ul>`;
   root.dataset.tab = `landing-${g}`;
   (root.closest(".settings-scroll") || root).scrollTop = 0;
+  root.querySelectorAll("[data-intel]").forEach((b) => b.addEventListener("click", () => window.dispatchEvent(new Event("antares:intel"))));
   root.querySelectorAll("[data-micompu]").forEach((b) => b.addEventListener("click", () => window.dispatchEvent(new Event("antares:micompu"))));
   root.querySelectorAll("[data-ojo]").forEach((b) => b.addEventListener("click", () => window.dispatchEvent(new Event("antares:ojo"))));
   root.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => {
