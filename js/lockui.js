@@ -1,5 +1,6 @@
 // Antares Web - Pantalla de bloqueo y teclado de código (desbloquear, crear, cambiar, confirmar).
 import * as L from "./lock.js";
+import * as LB from "./lockbrain.js"; // v1.27: cerebro animado del bloqueo
 
 const $ = (id) => document.getElementById(id);
 const view = $("lock-view"), app = $("app");
@@ -56,7 +57,15 @@ const fmtWait = (ms) => {
   const s = Math.ceil(ms / 1000);
   return s >= 120 ? `${Math.ceil(s / 60)} min` : s >= 60 ? `${Math.floor(s / 60)} min ${s % 60 ? (s % 60) + " s" : ""}`.trim() : `${s} s`;
 };
-function setState(s) { view.dataset.lock = s; }
+const ARCO_CERRADO = "M8 10.5V8a4 4 0 0 1 8 0v2.5", ARCO_ABIERTO = "M8 10.5V8a4 4 0 0 1 7.6-1.7";
+function setState(s) {
+  const prev = view.dataset.lock; view.dataset.lock = s;
+  try {
+    const arco = $("lock-arco");
+    if (s === "ok") { LB.rafaga(); arco && arco.setAttribute("d", ARCO_ABIERTO); }
+    else { arco && arco.setAttribute("d", ARCO_CERRADO); LB.tono(s === "error" ? "error" : "normal"); if (s === "error" && prev !== "error") LB.chispa(true, 6); }
+  } catch { /* */ }
+}
 function say(t) { msg.textContent = t || "\u00a0"; }
 function paint() {
   dots.forEach((d, i) => d.classList.toggle("on", i < pin.length));
@@ -70,6 +79,7 @@ function show() {
   app.inert = true;
   app.setAttribute("aria-hidden", "true");
   document.body.classList.add("locked");
+  try { LB.montar($("lock-brain")); LB.activar(true); } catch { /* */ }
   requestAnimationFrame(() => titleEl.focus());
 }
 function hide() {
@@ -77,6 +87,7 @@ function hide() {
   app.inert = false;
   app.removeAttribute("aria-hidden");
   document.body.classList.remove("locked");
+  try { LB.activar(false); } catch { /* */ }
   clearInterval(waitTimer);
   mode = null; pin = firstPin = oldPin = ""; paint();
   phraseInput.value = ""; L.forgetVerified(verified); verified = null;
@@ -157,7 +168,7 @@ function checkWait() {
 }
 
 function wrong(r, base = T().wrong) {
-  setState("normal"); void view.offsetWidth; setState("error");
+  setState("normal"); void view.offsetWidth; setState("error"); try { navigator.vibrate && navigator.vibrate(120); } catch { /* */ }
   if (r.wait) { setTimeout(() => checkWait(), 450); say(base); }
   else say(r.left ? `${base} · ${r.left} ${r.left === 1 ? "intento restante" : "intentos restantes"}` : base);
   setTimeout(() => { pin = ""; paint(); phraseInput.value = ""; if (entry === "frase" && !phraseInput.disabled) phraseInput.focus(); }, 450);
@@ -255,7 +266,7 @@ function finish(result) {
 function press(d) {
   if (!mode || working || tapResolve || pin.length >= L.PIN_LENGTH || view.dataset.lock === "espera") return;
   if (view.dataset.lock === "error" || view.dataset.lock === "ok") { setState("normal"); }
-  pin += d; paint();
+  pin += d; paint(); LB.chispa(false, 2);
   if (pin.length === L.PIN_LENGTH) setTimeout(() => complete(pin), 120);
 }
 phraseForm.addEventListener("submit", (e) => {
@@ -273,7 +284,7 @@ phraseShow.addEventListener("click", () => {
   phraseShow.setAttribute("aria-label", show ? "Ocultar la frase" : "Mostrar la frase");
   phraseInput.focus();
 });
-function back() { if (working || view.dataset.lock === "espera") return; pin = pin.slice(0, -1); paint(); }
+function back() { if (working || view.dataset.lock === "espera" || !pin) return; pin = pin.slice(0, -1); paint(); LB.chispa(true, 1); }
 
 for (const k of keys) if (k.dataset.d) k.addEventListener("click", () => press(k.dataset.d));
 del.addEventListener("click", back);
@@ -370,3 +381,7 @@ export function runTapFlow(title, subText) {
     askTap().then((ok) => { hide(); resolve(ok); });
   });
 }
+
+// v1.27: en el bloqueo no hay zoom de doble toque ni de gesto (iOS): era lo que «ponía rara» la pantalla al escribir y borrar
+view.addEventListener("dblclick", (e) => e.preventDefault(), { passive: false });
+document.addEventListener("gesturestart", (e) => { if (!view.hidden) e.preventDefault(); });

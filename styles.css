@@ -1352,3 +1352,33 @@ body.desk.kb-open .pc-btn, body.desk.typing .pc-btn { display: inline-flex; }
 /* v1.26 · Panel de inteligencias */
 .intel-view { background: #020805; }
 .group-card.intel-card { border-color: #2bff9a88; box-shadow: 0 0 18px #2bff9a33; }
+
+/* ---------- v1.27: bloqueo con cerebro animado; sin zoom de doble toque; tamaño fijo a la pantalla ---------- */
+.lock-screen { touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; overscroll-behavior: none; }
+.lock-screen .key, .lock-screen .btn, .lock-screen button { touch-action: manipulation; }
+/* con código de números, el bloqueo ocupa la pantalla completa y NO usa --app-h (que cambia con el zoom/teclado);
+   con frase segura sí sigue al teclado */
+.lock-screen:not([data-entry="frase"]) { inset: 0; height: 100%; height: 100dvh; }
+.lock-screen .phrase-row .field { font-size: 18px; } /* ≥16 px: iOS no hace zoom al enfocar */
+.lock-orbe { position: relative; flex: none; width: 148px; height: 148px; contain: layout; }
+.lock-orbe canvas { position: absolute; inset: -10%; width: 120%; height: 120%; display: block; pointer-events: none; }
+.lock-anillo { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; will-change: transform; }
+.lock-anillo.a1 { inset: -6px; border: 1.5px dashed rgba(0,255,156,.38); box-shadow: 0 0 18px rgba(0,255,156,.2), inset 0 0 18px rgba(0,255,156,.1); animation: lockGira 26s linear infinite; }
+.lock-anillo.a2 { inset: -14px; border: 1px solid transparent; border-top-color: rgba(255,45,74,.7); border-bottom-color: rgba(255,45,74,.35); animation: lockGira 9s linear infinite reverse; }
+@keyframes lockGira { to { transform: rotate(1turn); } }
+.lock-candado { position: absolute; right: -2px; bottom: -2px; z-index: 2; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: #0a0306; border: 1px solid rgba(255,45,74,.65); box-shadow: 0 0 12px rgba(255,45,74,.45); transition: border-color .3s, box-shadow .3s; }
+.lock-candado svg { width: 20px; height: 20px; color: #ff4d66; transition: color .3s; }
+[data-lock="ok"] .lock-candado { border-color: var(--cyan); box-shadow: 0 0 14px var(--cyan); }
+[data-lock="ok"] .lock-candado svg { color: var(--cyan); }
+[data-lock="espera"] .lock-orbe { filter: saturate(.3); opacity: .6; }
+.lock-screen .pin-dots i { transform: scale(1); transition: background-color .12s, box-shadow .12s, transform .12s; }
+.lock-screen .pin-dots i.on { transform: scale(1.12); }
+.lock-screen .key:active { transform: scale(.94); }
+.lock-screen .key { transition: transform .08s, background .1s, box-shadow .1s; }
+@media (max-height: 700px) { .lock-orbe { width: 96px; height: 96px; } }
+body.desk .lock-screen .lock-orbe { width: 140px; height: 140px; }
+@media (prefers-reduced-motion: reduce) {
+  .lock-anillo.a1, .lock-anillo.a2, [data-lock="error"] .pin-dots, [data-lock="error"] .phrase-row { animation: none; }
+  .lock-screen .pin-dots i, .lock-screen .key { transition: none; }
+  .lock-screen .key:active { transform: none; }
+}

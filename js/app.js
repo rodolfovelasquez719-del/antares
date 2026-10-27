@@ -41,7 +41,7 @@ import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.26.0";
+const APP_VERSION = "1.27.0";
 // v1.25.1: emparejar con el QR de la compu (#pc-token=…). Se lee y se borra del enlace de inmediato (no queda en el historial).
 let pcEmparejar = null, pcEmparejando = false;
 try {
@@ -330,6 +330,8 @@ function isTyping() { return document.activeElement === els.input; }
 function syncViewport() {
   vpRaf = 0;
   const vv = window.visualViewport;
+  // v1.27: con zoom (doble toque o pellizco en iOS) el área visible se encoge sin que haya teclado: no se toca nada
+  if (vv && vv.scale > 1.01) return;
   const h = vv ? vv.height : window.innerHeight;
   const top = vv ? Math.max(0, vv.offsetTop) : 0;
   const w = Math.round(window.innerWidth);
@@ -3104,7 +3106,7 @@ async function init() {
     }
   });
   syncViewport();
-  try { if (AVATAR_ENABLED) mountAvatarVideo(document.getElementById("avatar-home"), "./assets/avatar-antares.jpg", "./assets/"); { const al = document.getElementById("avatar-lock"); mountAvatar(al, "./assets/avatar-lock.jpg"); al.classList.add("av-lock"); const lv = document.getElementById("lock-ver"); if (lv) lv.textContent = "v" + APP_VERSION; }
+  try { if (AVATAR_ENABLED) mountAvatarVideo(document.getElementById("avatar-home"), "./assets/avatar-antares.jpg", "./assets/"); { const lv = document.getElementById("lock-ver"); if (lv) lv.textContent = "v" + APP_VERSION; } /* v1.27: el bloqueo usa el cerebro animado (lockbrain.js), ya no la foto */
     { const hv = document.getElementById("home-ver"); if (hv) { hv.textContent = "v" + APP_VERSION + " · buscar actualización"; hv.addEventListener("click", () => { hv.textContent = "Buscando…"; forceUpdate(); }); } } Hud.mountHud(document.getElementById("stage")); paintPresence(); } catch (e) { console.warn("Antares: avatar/HUD", e); }
   try {
     const ps = document.getElementById("presence-sel"); ps.value = presence(); 
