@@ -126,7 +126,7 @@ function dibujarOjos(mx, ey, sep, t) {
   const now = performance.now();
   if (now > OJO.hasta) { OJO.mx = OJO.my = null; OJO.animo = now - OJO.ultimo > 5000 ? "feliz" : "normal"; }
   // parpadeo de vez en cuando (a veces doble)
-  if (t > OJO.prox) { OJO.parp = 1; OJO.prox = t + 2.5 + Math.random() * 4; if (Math.random() < .2) OJO.prox = t + .35; }
+  if (t > OJO.prox) { OJO.parp = 1; OJO.n = (OJO.n || 0) + 1; OJO.prox = t + 2.5 + Math.random() * 4; if (Math.random() < .2) OJO.prox = t + .35; }
   const cierre = OJO.parp > 0 ? Math.sin(OJO.parp * Math.PI) : 0; OJO.parp = Math.max(0, OJO.parp - .18);
   // dirección de la mirada (suavizada); sin objetivo, mira alrededor despacio
   const tx = OJO.mx == null ? Math.sin(t * .5) * .35 : Math.max(-1, Math.min(1, (OJO.mx - mx) / (W * .4)));
@@ -170,10 +170,14 @@ function ubicarEtiquetas() {
     b.lx = x; b.ly = y; b.lw = ew * 2 - 12; b.lh = eh * 2 - 8;
   }
   // separa etiquetas que se encimen (empuja en vertical, dentro de la pantalla)
-  for (let pase = 0; pase < 4; pase++) for (const a of brazos) for (const o of brazos) {
+  for (let pase = 0; pase < 6; pase++) for (const a of brazos) for (const o of brazos) {
     if (a === o || a.lx == null || o.lx == null) continue;
     const dx = Math.abs(a.lx - o.lx) - (a.lw + o.lw) / 2 - 4, dy = Math.abs(a.ly - o.ly) - (a.lh + o.lh) / 2 - 4;
-    if (dx < 0 && dy < 0) { const s = a.ly <= o.ly ? -1 : 1; a.ly += s * (-dy / 2 + .5); o.ly -= s * (-dy / 2 + .5); }
+    if (dx < 0 && dy < 0) {
+      if (dx > dy) { const s = a.lx <= o.lx ? -1 : 1; a.lx += s * (-dx / 2 + .5); o.lx -= s * (-dx / 2 + .5); } // empuje por el lado más corto
+      else { const s = a.ly <= o.ly ? -1 : 1; a.ly += s * (-dy / 2 + .5); o.ly -= s * (-dy / 2 + .5); }
+    }
+    for (const b of [a, o]) { b.lx = Math.max(b.lw / 2 + 6, Math.min(W - b.lw / 2 - 6, b.lx)); b.ly = Math.max(b.lh / 2 + 74, Math.min(H - b.lh / 2 - 44, b.ly)); }
   }
   for (const b of brazos) { if (b.lx == null) continue; b.ly = Math.max(b.lh / 2 + 74, Math.min(H - b.lh / 2 - 44, b.ly)); b.el.style.left = b.lx + "px"; b.el.style.top = b.ly + "px"; }
 }
