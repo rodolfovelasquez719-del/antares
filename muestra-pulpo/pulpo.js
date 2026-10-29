@@ -167,11 +167,18 @@ function ubicarEtiquetas() {
     const p = b.pts[b.pts.length - 1]; if (!p) continue;
     const ew = b.el.offsetWidth / 2 + 6, eh = b.el.offsetHeight / 2 + 4;
     const x = Math.max(ew, Math.min(W - ew, p[0])), y = Math.max(eh + 70, Math.min(H - eh - 40, p[1]));
-    b.el.style.left = x + "px"; b.el.style.top = y + "px";
+    b.lx = x; b.ly = y; b.lw = ew * 2 - 12; b.lh = eh * 2 - 8;
   }
+  // separa etiquetas que se encimen (empuja en vertical, dentro de la pantalla)
+  for (let pase = 0; pase < 4; pase++) for (const a of brazos) for (const o of brazos) {
+    if (a === o || a.lx == null || o.lx == null) continue;
+    const dx = Math.abs(a.lx - o.lx) - (a.lw + o.lw) / 2 - 4, dy = Math.abs(a.ly - o.ly) - (a.lh + o.lh) / 2 - 4;
+    if (dx < 0 && dy < 0) { const s = a.ly <= o.ly ? -1 : 1; a.ly += s * (-dy / 2 + .5); o.ly -= s * (-dy / 2 + .5); }
+  }
+  for (const b of brazos) { if (b.lx == null) continue; b.ly = Math.max(b.lh / 2 + 74, Math.min(H - b.lh / 2 - 44, b.ly)); b.el.style.left = b.lx + "px"; b.el.style.top = b.ly + "px"; }
 }
 function ponerEstado(b, e, ms = 0) { b.e = e; b.hasta = ms ? performance.now() + ms : 0; b.el.dataset.e = e; b.el.setAttribute("aria-label", b.n + ": " + EST[e]); if (sel === b.i) $("#h-e").textContent = "Estado: " + EST[e]; }
-function pulso(b, rojo = false, n = 3) { b.luz = 1; for (let k = 0; k < n; k++) b.pulsos.push({ s: 1 + k * .12, v: .018 + Math.random() * .006, rojo }); for (let k = 0; k < 10; k++) chispas.push({ x: HX, y: HY, vx: (Math.random() - .5) * 4, vy: (Math.random() - .5) * 4, a: 1, rojo }); if (QUIETO.matches) unCuadro(); }
+function pulso(b, rojo = false, n = 3) { b.luz = 1; for (let k = 0; k < n; k++) b.pulsos.push({ s: 1 + k * .12, v: .018 + Math.random() * .006, rojo }); for (let k = 0; k < 10; k++) chispas.push({ x: HX, y: HY, vx: (Math.random() - .5) * 4, vy: (Math.random() - .5) * 4, a: 1, rojo }); }
 function tocar(i) {
   const b = brazos[i]; mirarBrazo(b, b.e === "alerta" ? "sorpresa" : "normal", 3000, b.e === "alerta"); sel = i; brazos.forEach((o) => o.el.classList.toggle("sel", o.i === i));
   pulso(b, b.e === "alerta", 4); navigator.vibrate?.(12);
@@ -185,8 +192,8 @@ $("#h-c").onclick = () => { $("#hoja").classList.remove("ver"); sel = -1; brazos
 const ALERTAS = { rutas: "Presa fuerte en la ruta 27", salud: "Disco de ANTARES al 92 %", noticias: "Noticia importante de hoy", estudio: "Repaso pendiente", record: "Cita en 30 minutos", juegos: "Nuevo reto disponible", vision: "Foto lista para revisar", memoria: "Dato nuevo guardado" };
 let tDemo = 0;
 function demo(now) {
+  for (const b of brazos) if (b.hasta && now > b.hasta) { const pens = b.e === "pensando"; ponerEstado(b, "idle"); if (pens) pulso(b, false, 2); }
   if (!$("#demo").checked) return;
-  for (const b of brazos) if (b.hasta && now > b.hasta) { if (b.e === "pensando") pulso(b, false, 2); ponerEstado(b, "idle"); }
   if (now < tDemo) return; tDemo = now + 1400 + Math.random() * 1800;
   const libres = brazos.filter((b) => b.e === "idle"); if (!libres.length) return;
   const b = libres[(Math.random() * libres.length) | 0];
@@ -208,11 +215,13 @@ function unCuadro(now = performance.now()) {
   cx.globalCompositeOperation = "source-over";
   dibujarCabeza(t); holograma(t); cx.globalAlpha = 1; ubicarEtiquetas(); demo(now);
 }
-function bucle(now) { raf = requestAnimationFrame(bucle); if (now - ult < 32) return; ult = now; unCuadro(now); }
+let cuadros = 0;
+function bucle(now) { raf = requestAnimationFrame(bucle); if (now - ult < 32) return; ult = now; cuadros++; unCuadro(now); }
 function andar() { if (!raf && !document.hidden) raf = requestAnimationFrame(bucle); }
 function parar() { cancelAnimationFrame(raf); raf = 0; }
 document.addEventListener("visibilitychange", () => (document.hidden ? parar() : andar()));
 cv.addEventListener("pointerdown", (e) => mirar(e.clientX, e.clientY, "normal", 1800));
+addEventListener("keydown", (e) => { if (e.key === "Escape") $("#h-c").click(); });
 addEventListener("resize", () => { medir(); unCuadro(); });
 armarCerebro(); medir(); unCuadro(); andar();
 // en movimiento reducido el bucle sigue a menor costo pero sin ondulación; el demo sigue funcionando
@@ -239,3 +248,6 @@ async function revisarCorazones() {
 addEventListener("online", revisarCorazones); addEventListener("offline", revisarCorazones);
 document.querySelectorAll(".cz").forEach((c) => (c.onclick = () => { avisar(`<b>${c.querySelector("b").textContent}</b>: ${c.querySelector("i").textContent}. Si un corazón se detiene, los otros siguen latiendo.`); revisarCorazones(); }));
 revisarCorazones(); setInterval(revisarCorazones, 60000);
+
+// solo para pruebas automáticas (sin datos privados)
+window.__pulpo = { ojo: () => ({ ...OJO }), brazos: () => brazos.map((b) => ({ n: b.n, e: b.e, pulsos: b.pulsos.length })), cuadros: () => cuadros, chispas: () => chispas.length, corriendo: () => !!raf };

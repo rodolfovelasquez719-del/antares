@@ -13,7 +13,7 @@ header{position:fixed;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top)
 h1{margin:0;font-size:17px;letter-spacing:.14em;font-weight:700;color:var(--v);text-shadow:0 0 12px #00ff9c88}
 h1 small{display:block;font-size:11px;letter-spacing:.06em;color:#8fbfae;font-weight:400}
 .corazones{display:flex;gap:6px;pointer-events:auto}
-.cz{display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 6px;border:1px solid #00ff9c33;border-radius:10px;background:#03130eaa;min-width:62px;font-size:10px;color:#a8d8c6;cursor:pointer}
+.cz{font:inherit;color:inherit;display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 6px;border:1px solid #00ff9c33;border-radius:10px;background:#03130eaa;min-width:62px;font-size:10px;color:#a8d8c6;cursor:pointer}
 .cz svg{width:20px;height:20px;fill:var(--v);filter:drop-shadow(0 0 5px var(--v));animation:latido 1s ease-in-out infinite}
 .cz[data-e=rev] svg{fill:#ffc84a;filter:drop-shadow(0 0 5px #ffc84a);animation-duration:1.6s}
 .cz[data-e=off] svg{fill:#4a5652;filter:none;animation:none;opacity:.6}
@@ -47,9 +47,9 @@ h1 small{display:block;font-size:11px;letter-spacing:.06em;color:#8fbfae;font-we
 <header>
   <h1>ANTARES<small>Pulpo · muestra</small></h1>
   <div class="corazones" role="list" aria-label="Tres corazones">
-    <div class="cz" id="cz-gem" role="listitem" data-e="rev"><svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.3C.9 8.2 3 4.5 6.6 4.5c2.1 0 3.6 1.2 5.4 3.2 1.8-2 3.3-3.2 5.4-3.2 3.6 0 5.7 3.7 4.2 7.2C19.5 16.4 12 21 12 21z"/></svg><b>Gemini</b><i>…</i></div>
-    <div class="cz" id="cz-pc" role="listitem" data-e="rev"><svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.3C.9 8.2 3 4.5 6.6 4.5c2.1 0 3.6 1.2 5.4 3.2 1.8-2 3.3-3.2 5.4-3.2 3.6 0 5.7 3.7 4.2 7.2C19.5 16.4 12 21 12 21z"/></svg><b>Cerebro local</b><i>…</i></div>
-    <div class="cz" id="cz-off" role="listitem" data-e="rev"><svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.3C.9 8.2 3 4.5 6.6 4.5c2.1 0 3.6 1.2 5.4 3.2 1.8-2 3.3-3.2 5.4-3.2 3.6 0 5.7 3.7 4.2 7.2C19.5 16.4 12 21 12 21z"/></svg><b>Sin internet</b><i>…</i></div>
+    <button type="button" class="cz" id="cz-gem" role="listitem" data-e="rev"><svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.3C.9 8.2 3 4.5 6.6 4.5c2.1 0 3.6 1.2 5.4 3.2 1.8-2 3.3-3.2 5.4-3.2 3.6 0 5.7 3.7 4.2 7.2C19.5 16.4 12 21 12 21z"/></svg><b>Gemini</b><i>…</i></button>
+    <button type="button" class="cz" id="cz-pc" role="listitem" data-e="rev"><svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.3C.9 8.2 3 4.5 6.6 4.5c2.1 0 3.6 1.2 5.4 3.2 1.8-2 3.3-3.2 5.4-3.2 3.6 0 5.7 3.7 4.2 7.2C19.5 16.4 12 21 12 21z"/></svg><b>Cerebro local</b><i>…</i></button>
+    <button type="button" class="cz" id="cz-off" role="listitem" data-e="rev"><svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.3C.9 8.2 3 4.5 6.6 4.5c2.1 0 3.6 1.2 5.4 3.2 1.8-2 3.3-3.2 5.4-3.2 3.6 0 5.7 3.7 4.2 7.2C19.5 16.4 12 21 12 21z"/></svg><b>Sin internet</b><i>…</i></button>
   </div>
 </header>
 <div id="brazos"></div>
@@ -59,5 +59,5 @@ h1 small{display:block;font-size:11px;letter-spacing:.06em;color:#8fbfae;font-we
   <h2 id="h-t"></h2><div class="est" id="h-e"></div><p id="h-d"></p><ul id="h-l"></ul>
   <button id="h-c">Cerrar</button>
 </section>
-<script type="module" src="./pulpo.js?v=3"></script>
+<script type="module" src="./pulpo.js?v=4"></script>
 </body></html>
