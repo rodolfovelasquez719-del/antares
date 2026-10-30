@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="es-CR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2a0f45">
+<title>Viernes</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Fredoka:wght@500;700&family=Playfair+Display:ital,wght@0,600;1,500&family=Quicksand:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="orb" aria-hidden="true"><span>V</span></div>
+  <div><h1>Viernes</h1><p id="hello">Tu asistente, Wendy ✨</p></div>
+  
+</header>
+
+<main>
+  <!-- CHAT -->
+  <section id="v-chat" class="view active">
+    <div id="chat-log" class="log"></div>
+    <form id="chat-form" class="composer">
+      <button type="button" id="mic" class="icon-btn" aria-label="Hablar">🎙️</button>
+      <input id="chat-in" autocomplete="off" placeholder="Escríbeme o toca el micrófono…">
+      <button class="send" aria-label="Enviar">➤</button>
+    </form>
+  </section>
+
+  <!-- BUSCAR -->
+  <section id="v-search" class="view">
+    <h2>Buscar</h2>
+    <form id="search-form" class="searchbar"><input id="search-in" placeholder="Pregúntame lo que sea…"><button class="send">🔎</button></form>
+    <div class="chips" id="search-chips">
+      <button>Tendencias de pulseras 2026</button><button>¿Dónde comprar mostacilla en San José?</button><button>Clima en Costa Rica hoy</button>
+    </div>
+    <div id="search-out" class="card answer hidden"></div>
+  </section>
+
+  <!-- FOTOS -->
+  <section id="v-photo" class="view">
+    <h2>Editor de fotos</h2>
+    <label class="upload big" id="ph-upload"><input type="file" accept="image/*" id="ph-file" hidden>📷 Elegir o tomar foto</label>
+    <div id="ph-editor" class="hidden">
+      <div class="stage"><canvas id="ph-canvas"></canvas></div>
+      <div class="toolbar" id="ph-tabs">
+        <button data-t="adj" class="on">☀️ Luz</button><button data-t="fx">🎨 Filtros</button><button data-t="crop">✂️ Recorte</button>
+        <button data-t="bg">🪄 Fondo</button><button data-t="txt">🔤 Texto</button><button data-t="ai">✨ IA</button>
+      </div>
+      <div class="panel" data-p="adj">
+        <label>Brillo <input type="range" id="a-b" min="50" max="160" value="100"></label>
+        <label>Contraste <input type="range" id="a-c" min="50" max="160" value="100"></label>
+        <label>Saturación <input type="range" id="a-s" min="0" max="200" value="100"></label>
+        <label>Calidez <input type="range" id="a-w" min="-40" max="40" value="0"></label>
+        <div class="row"><button id="a-auto">✨ Luz automática</button><button id="a-apply" class="pri">Aplicar</button></div>
+      </div>
+      <div class="panel hidden" data-p="fx">
+        <div class="chips" id="fx-list"></div>
+      </div>
+      <div class="panel hidden" data-p="crop">
+        <div class="chips" id="crop-list">
+          <button data-r="1">Cuadrado 1:1</button><button data-r="0.8">Post 4:5</button><button data-r="0.5625">Story 9:16</button><button data-r="1.91">Facebook 1.91:1</button>
+        </div>
+        <div class="row"><button id="rot-l">⟲ Girar</button><button id="rot-r">⟳ Girar</button><button id="flip">⇋ Espejo</button></div>
+      </div>
+      <div class="panel hidden" data-p="bg">
+        <div class="row"><button id="bg-remove" class="pri">🪄 Quitar fondo</button><button id="bg-blur">💫 Desenfocar fondo</button></div>
+        <p class="hint">Fondo nuevo (después de quitarlo):</p>
+        <div class="swatches" id="bg-list"></div>
+        <p class="hint" id="bg-status"></p>
+      </div>
+      <div class="panel hidden" data-p="txt">
+        <input id="t-text" placeholder="Texto, precio o marca (ej. ₡7.000)">
+        <div class="row"><input type="color" id="t-color" value="#ffffff"><select id="t-font"><option value="Fredoka">Divertida</option><option value="Great Vibes">Elegante</option><option value="Playfair Display">Clásica</option><option value="Quicksand">Simple</option></select>
+        <button id="t-add" class="pri">Añadir</button></div>
+        <div class="chips" id="stickers"></div>
+        <div class="row"><button id="t-wm">💧 Marca de agua</button><button id="t-price">🏷️ Etiqueta precio</button><button id="t-clear">Quitar textos</button></div>
+        <p class="hint">Arrastra los textos y stickers con el dedo.</p>
+      </div>
+      <div class="panel hidden" data-p="ai">
+        <p class="warn">⚠️ Edición con IA: <b>limitada</b>. Con la key gratuita de Google suele no estar disponible o se agota rápido. Las demás herramientas son ilimitadas.</p>
+        <input id="ai-in" placeholder="Ej.: pon un fondo de mármol blanco">
+        <button id="ai-go" class="pri">✨ Editar con IA</button><p class="hint" id="ai-status"></p>
+      </div>
+      <div class="row sticky"><button id="ph-undo">↶ Deshacer</button><button id="ph-new">Otra foto</button><button id="ph-save" class="pri">⬇️ Guardar / Compartir</button></div>
+    </div>
+  </section>
+
+  <!-- VISIÓN -->
+  <section id="v-vision" class="view">
+    <h2>Visión 👁️</h2>
+    <p class="hint">Tómale una foto a cualquier cosa (por ejemplo, un producto para Evangeline) y te explico qué es, para qué sirve, si es segura para su edad y dónde comprarla en Costa Rica.</p>
+    <label class="upload big"><input type="file" accept="image/*" capture="environment" id="vi-file" hidden>📸 Tomar foto</label>
+    <label class="upload"><input type="file" accept="image/*" id="vi-file2" hidden>🖼️ Elegir de mis fotos</label>
+    <img id="vi-img" class="vi-img hidden" alt="">
+    <input id="vi-q" placeholder="¿Algo en especial que quieras saber? (opcional)">
+    <div id="vi-out" class="card answer hidden"></div>
+  </section>
+
+  <!-- MI NEGOCIO -->
+  <section id="v-biz" class="view">
+    <h2>Mi negocio 💖</h2>
+    <div class="toolbar" id="biz-tabs"><button data-b="poster" class="on">🖼️ Póster</button><button data-b="collage">🧩 Collage</button><button data-b="texts">✍️ Textos</button><button data-b="ideas">💡 Ideas</button></div>
+
+    <div class="bizp" data-b="poster">
+      <div class="steps" id="po-steps"><span class="on">1 Foto</span><span>2 Diseño</span><span>3 Textos</span><span>4 Guardar</span></div>
+      <div class="pstep" data-s="1">
+        <label class="upload big" id="po-upload"><input type="file" accept="image/*" id="po-file" hidden>📷 Toca aquí y elige la foto de tu producto</label>
+        <p class="hint center" id="po-status"></p>
+        <div class="row"><button id="po-cut" class="big hidden">🪄 Quitar el fondo de la foto</button></div>
+        <label class="chk hidden" id="po-usecut-l"><input type="checkbox" id="po-usecut" checked> Usar la foto sin fondo</label>
+      </div>
+      <div class="pstep hidden" data-s="2">
+        <p class="hint">Elige el diseño que más te guste:</p>
+        <div class="chips" id="po-tpl"></div>
+        <div class="chips" id="po-fmt"><button data-f="sq" class="on">Publicación (cuadrado)</button><button data-f="st">Historia (alto)</button><button data-f="wa">WhatsApp</button></div>
+      </div>
+      <div class="stage poster"><canvas id="po-canvas"></canvas></div>
+      <div class="pstep hidden" data-s="3">
+        <button id="po-ai" class="big">✨ Que Viernes me sugiera los textos</button>
+        <div class="form">
+        <label>Nombre grande <input id="po-title" value="Collar"></label>
+        <label>Segunda línea <input id="po-sub" value="estilo chicle"></label>
+        <label>Frase <input id="po-pill" value="Colorido • Divertido • Único"></label>
+        <label>Precio <input id="po-price" value="₡7.000" inputmode="numeric"></label>
+        <label>Cualidades (una por renglón)<textarea id="po-feat" rows="4">Diseño atrevido
+Toque de corazón
+Fácil de combinar
+Ideal para regalar</textarea></label>
+        <label>Tu Instagram o nombre de tienda <input id="po-brand" placeholder="@tutienda"></label>
+        <details><summary>Más opciones (foto y detalles)</summary>
+        <label>Tamaño de la foto <input type="range" id="po-scale" min="50" max="160" value="100"></label>
+        <label>Mover foto a los lados <input type="range" id="po-dx" min="-30" max="30" value="0"></label>
+        <label>Mover foto arriba/abajo <input type="range" id="po-dy" min="-30" max="30" value="0"></label>
+        <p class="hint">Círculos de acercamiento: toca la foto pequeña donde quieras el detalle (alterna 1 y 2).</p>
+        <canvas id="po-pick" class="pick"></canvas>
+        <label>Texto del círculo 1 <input id="po-d1" value="Cierre con extensión"></label>
+        <label>Texto del círculo 2 <input id="po-d2" value="Detalle de las cuentas"></label>
+        </details></div>
+      </div>
+      <div class="pstep hidden" data-s="4">
+        <button id="po-save" class="pri big">💾 Guardar en mis fotos / Compartir</button>
+        <button id="po-again" class="big">🖼️ Hacer otro póster</button>
+      </div>
+      <div class="row navrow"><button id="po-back">◀ Atrás</button><button id="po-next" class="pri">Siguiente ▶</button></div>
+    </div>
+
+    <div class="bizp hidden" data-b="collage">
+      <label class="upload"><input type="file" accept="image/*" multiple id="co-files" hidden>📷 Elegir 2 a 6 fotos</label>
+      <div class="chips"><button data-c="1" class="on">Cuadrado</button><button data-c="1.7778">Historia</button></div>
+      <label>Título <input id="co-title" placeholder="Nueva colección 💕"></label>
+      <div class="stage"><canvas id="co-canvas"></canvas></div>
+      <button id="co-save" class="pri">⬇️ Guardar / Compartir</button>
+    </div>
+
+    <div class="bizp hidden" data-b="texts">
+      <p class="hint">Descripción, texto para redes y hashtags. Puedes adjuntar la foto.</p>
+      <label class="upload"><input type="file" accept="image/*" id="tx-file" hidden>📷 Foto (opcional)</label>
+      <input id="tx-in" placeholder="Ej.: pulsera de cuarzo rosa, ajustable, ₡5.000">
+      <div class="chips" id="tx-kind"><button data-k="ig" class="on">Instagram</button><button data-k="fb">Facebook</button><button data-k="wa">Catálogo WhatsApp</button></div>
+      <button id="tx-go" class="pri">✍️ Escribir</button>
+      <div id="tx-out" class="card answer hidden"></div>
+    </div>
+
+    <div class="bizp hidden" data-b="ideas">
+      <p class="hint">Nuevos diseños y combinaciones de colores (solo texto, no gasta imágenes).</p>
+      <input id="id-in" placeholder="Ej.: pulseras para el Día de la Madre, tonos pastel">
+      <button id="id-go" class="pri">💡 Darme ideas</button>
+      <div id="id-out" class="card answer hidden"></div>
+    </div>
+  </section>
+
+  <!-- ESTADO (oculto; se abre con #estado o tocando 5 veces el logo) -->
+  <section id="v-set" class="view">
+    <h2>Estado de Viernes</h2>
+    <div class="card" id="status-box"></div>
+    <button id="status-share" class="pri big">📤 Enviar estado a Freddy</button>
+    <button id="wipe">Borrar conversación</button>
+  </section>
+  <section id="v-nokey" class="view">
+    <div class="card center"><div class="bigemoji">💜</div><h2>¡Hola, Wendy!</h2><p>Para que yo pueda conversar y escribir, Freddy tiene que prepararme.<br><br>Pídele a Freddy tu <b>enlace de Viernes</b> y ábrelo en este teléfono.</p>
+    <p class="hint">Mientras tanto, los pósteres, el collage y el editor de fotos ya funcionan.</p></div>
+  </section>
+</main>
+
+<nav class="tabs">
+  <button data-v="v-chat" class="on">💬<span>Chat</span></button>
+  <button data-v="v-search">🔎<span>Buscar</span></button>
+  <button data-v="v-vision">👁️<span>Visión</span></button>
+  <button data-v="v-photo">📷<span>Fotos</span></button>
+  <button data-v="v-biz">💖<span>Mi negocio</span></button>
+</nav>
+<div id="toast" class="toast hidden"></div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
