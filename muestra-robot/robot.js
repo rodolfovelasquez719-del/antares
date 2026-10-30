@@ -756,6 +756,14 @@ function construirDoc(bloques, test, id, basico) {
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${HARNESS_CSS}</style></head><body>${HARNESS_HTML}<script>${harnessScript(bloques, test, id)}<\/script></body></html>`;
 }
 
+// v1.29: cada prueba usa un iframe NUEVO. Cambiar srcdoc en el mismo iframe agrega entradas al historial,
+// y entonces «atrás» (gesto de iOS / botón de Android) no cerraba el tutorial dentro de la app.
+function ponerDoc(html) {
+  const viejo = $("marco"), nuevo = viejo.cloneNode(false);
+  nuevo.removeAttribute("srcdoc"); nuevo.srcdoc = html;
+  viejo.replaceWith(nuevo);
+}
+
 function correr(conTest) {
   const it = cur();
   const previos = it.basico ? [] : codigoHasta(it.k);
@@ -768,11 +776,11 @@ function correr(conTest) {
       if (!(e instanceof SyntaxError)) continue;
       const donde = k < i ? ` <b>(en su código de la lección ${k + 1}; vaya a esa lección y corríjalo)</b>` : "";
       feedback("mal", `🤖 ¡Uy! El código no se pudo leer${donde}.<br>${amable(e.message) || amable("SyntaxError")}<br><small style="color:var(--dim)">Mensaje técnico: ${esc(e.message)}</small>`);
-      $("marco").srcdoc = construirDoc(bloques.slice(0, k), "", id, it.basico);
+      ponerDoc(construirDoc(bloques.slice(0, k), "", id, it.basico));
       return;
     }
   }
-  $("marco").srcdoc = construirDoc(bloques, conTest ? it.l.test.toString() : "", id, it.basico);
+  ponerDoc(construirDoc(bloques, conTest ? it.l.test.toString() : "", id, it.basico));
   if (conTest) {
     feedback("info", "Revisando su código…");
     clearTimeout(correr.t);

@@ -112,6 +112,11 @@ function renderLanding() {
           <span class="gc-text"><strong>🧠 INTELIGENCIAS</strong><small>Antares reparte su pregunta: Ruta (trabajo y rutas), Guardián (la compu), Hogar, Tutor y Taller.</small></span>
           <svg class="gc-go" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button></li>` : ""}
+      ${g === "ocio" || g === "personal" ? `<li><button type="button" class="group-card intel-card" data-aprende="1">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8.5h10v9H7zM12 5v3.5M9.5 12h.01M14.5 12h.01M10 15h4"/><path d="M3.5 13l-1.5 1.5L3.5 16M20.5 13l1.5 1.5-1.5 1.5"/></g></svg>
+          <span class="gc-text"><strong>🤖 APRENDE A PROGRAMAR</strong><small>Desde cero hasta programar un robot en el laberinto, paso a paso.</small></span>
+          <svg class="gc-go" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button></li>` : ""}
       ${GROUPS[g].map(([id]) => { const [name, desc, icon] = CARD[id]; const c = cardCount(id);
         return `<li><button type="button" class="group-card" data-tab="${id}" data-open="${id}">
           <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${icon}</g></svg>
@@ -132,6 +137,7 @@ function renderLanding() {
     </ul>`;
   root.dataset.tab = `landing-${g}`;
   (root.closest(".settings-scroll") || root).scrollTop = 0;
+  root.querySelectorAll("[data-aprende]").forEach((b) => b.addEventListener("click", () => window.dispatchEvent(new Event("antares:aprende"))));
   root.querySelectorAll("[data-intel]").forEach((b) => b.addEventListener("click", () => window.dispatchEvent(new Event("antares:intel"))));
   root.querySelectorAll("[data-micompu]").forEach((b) => b.addEventListener("click", () => window.dispatchEvent(new Event("antares:micompu"))));
   root.querySelectorAll("[data-ojo]").forEach((b) => b.addEventListener("click", () => window.dispatchEvent(new Event("antares:ojo"))));

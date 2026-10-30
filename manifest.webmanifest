@@ -67,6 +67,19 @@
   ],
   "shortcuts": [
     {
+      "name": "Aprende a programar",
+      "short_name": "Programar",
+      "description": "Tutorial desde cero: robot en el laberinto",
+      "url": "./?panel=aprende",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
       "name": "Rutas y distancias",
       "short_name": "Rutas",
       "description": "Ordenar paradas y calcular kilómetros",

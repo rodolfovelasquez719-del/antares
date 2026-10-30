@@ -1,6 +1,6 @@
 // Antares Web - Service worker: abre rápido y sin conexión, y recibe las versiones nuevas.
 // Las llamadas a Gemini, Open-Meteo y otros dominios NO se interceptan ni se guardan.
-const VERSION = "antares-v1.28.0";
+const VERSION = "antares-v1.29.0";
 const SHELL = [
   "./",
   "./index.html",
@@ -40,9 +40,16 @@ const SHELL = [
   "./js/micompu.js",
   "./js/escaner.js",
   "./js/inteligencias.js",
+  "./js/aprende.js",
+  "./aprende/",
+  "./aprende/index.html",
+  "./aprende/robot.js",
+  "./aprende/modulo0.js",
+  "./aprende/extras.js",
+  "./aprende/v2.js",
   "./js/intel-panel.js",
   "./js/personas.mjs",
-  "./vendor/jsqr/jsQR.js?v=1.28.0",
+  "./vendor/jsqr/jsQR.js?v=1.29.0",
   "./js/desktop.js",
   "./js/avatar3d.js",
   "./assets/avatar-antares.jpg",
@@ -156,6 +163,8 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.includes("/muestra-avatar-vivo/")) return;
   if (url.pathname.includes("/muestra-avatar-3d/")) return;
   if (url.pathname.includes("/muestra-ojo/")) return;
+  // v1.29: Aprende a programar funciona sin internet. Se guarda con su propia dirección (no como la página principal).
+  if (url.pathname.includes("/aprende/")) { event.respondWith(networkFirst(req, false, event)); return; }
   if (url.pathname.includes("/inteligencias/")) return; // v1.26: la página del panel va siempre a la red (sus módulos en js/ sí se guardan)
   if (url.pathname.includes("/mi-compu/")) return; // v1.25: Mi compu siempre de la red (datos en vivo de la PC)
   if (url.pathname.includes("/ojo-cr/")) return; // v1.24: Ojo CR siempre de la red (sus datos son en vivo)

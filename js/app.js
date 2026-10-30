@@ -33,6 +33,7 @@ import { OJO_ENABLED, OJO_CR_ENABLED, openOjo, closeOjo, isOjoOpen } from "./ojo
 import * as PC from "./pc.js";
 import { openMiCompu, closeMiCompu, isMiCompuOpen } from "./micompu.js";
 import { openIntel, closeIntel, isIntelOpen } from "./inteligencias.js";
+import { openAprende, closeAprende, isAprendeOpen } from "./aprende.js"; // v1.29: tutorial Aprende a programar
 import { iniciarResumenCR } from "./ojocr-resumen.js";
 import * as Av3 from "./avatar3d.js";
 import * as Desk from "./desktop.js";
@@ -41,7 +42,7 @@ import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.28.0";
+const APP_VERSION = "1.29.0";
 // v1.25.1: emparejar con el QR de la compu (#pc-token=…). Se lee y se borra del enlace de inmediato (no queda en el historial).
 let pcEmparejar = null, pcEmparejando = false;
 try {
@@ -217,7 +218,7 @@ const BRAZOS_PULPO = [
   { id: "rutas", n: "Rutas", d: "Planear viajes y entregas con Ruta (Inteligencias).", abrir: () => showPanel("inteligencias") },
   { id: "salud", n: "Salud de ANTARES", d: "Temperatura, disco, memoria y cerebro local de la PC (Mi compu).", abrir: () => (PC.PC_ENABLED ? openMiCompu() : showPanel("inteligencias")) },
   { id: "noticias", n: "Noticias", d: "Resumen del día: clima, tipo de cambio y titulares.", abrir: () => showPanel("noticias") },
-  { id: "estudio", n: "Estudio", d: "Trivia y repasos para estudiar a su ritmo.", abrir: () => showPanel("trivia") },
+  { id: "estudio", n: "Estudio", d: "Aprende a programar: de cero hasta un robot en el laberinto (v1.29).", abrir: () => showPanel("aprende") },
   { id: "recordatorios", n: "Recordatorios", d: "Sus citas, pagos y tareas con aviso.", abrir: () => showPanel("recordatorios") },
   { id: "juegos", n: "Juegos", d: "Damas contra Antares y más.", abrir: () => showPanel("damas") },
   { id: "vision", n: "Visión", d: "La cámara: lee textos y describe lo que ve.", abrir: () => document.getElementById("vision-btn")?.click() },
@@ -1972,6 +1973,7 @@ function enterPanelView() {
 function showPanel(name) {
   if (!isUnlocked()) return;
   // v1.26: la sección Rutas se reemplazó por el Panel de inteligencias (Ruta sigue sabiendo de rutas por chat)
+  if (name === "aprende" || name === "programar") { if (panelOpen) { hidePanelNow(); setTimeout(() => openAprende(), 400); } else openAprende(); return; } // v1.29
   if (name === "inteligencias" || name === "rutas") { if (panelOpen) { hidePanelNow(); setTimeout(() => openIntel(), 400); } else openIntel(); return; } // espera el «atrás» del historial del panel
   if (!enterPanelView()) return;
   openPanel(name);
@@ -2975,6 +2977,7 @@ function lockApp(reason = "manual") {
   try { if (isOjoOpen()) closeOjo(); } catch { /* */ }
   try { if (isMiCompuOpen()) closeMiCompu(); } catch { /* */ }
   try { if (isIntelOpen()) closeIntel(); } catch { /* */ }
+  try { if (isAprendeOpen()) closeAprende(); } catch { /* */ }
   if (!els.settingsView.hidden) {
     snapshot = null;
     if (historyPushed) { historyPushed = false; history.back(); }
@@ -3185,6 +3188,7 @@ async function init() {
     // v1.24: tarjeta «Alertas en rutas» y aviso de sismo en Inicio (abren Ojo CR)
     if (OJO_ENABLED && OJO_CR_ENABLED) { try { iniciarResumenCR(document.getElementById("cr-home"), (h) => openOjo("cr", h)); } catch (e) { console.warn(e); } }
     window.__ojoOn = OJO_ENABLED;
+    window.addEventListener("antares:aprende", () => showPanel("aprende")); // v1.29
     // v1.25: Mi compu (salud, buscador, noticias de la PC ANTARES) y cerebro doble
     if (PC.PC_ENABLED) {
       PC.initPC(() => (isUnlocked() ? config : null));
