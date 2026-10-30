@@ -42,7 +42,7 @@ import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.29.0";
+const APP_VERSION = "1.30.0";
 // v1.25.1: emparejar con el QR de la compu (#pc-token=…). Se lee y se borra del enlace de inmediato (no queda en el historial).
 let pcEmparejar = null, pcEmparejando = false;
 try {
@@ -215,7 +215,7 @@ function ensure3D() {
 // ---------- v1.28: Antares Pulpo en Inicio: 8 brazos = accesos reales; estados reales cuando se puede ----------
 let pulpoI = null, saludAlertas = [];
 const BRAZOS_PULPO = [
-  { id: "rutas", n: "Rutas", d: "Planear viajes y entregas con Ruta (Inteligencias).", abrir: () => showPanel("inteligencias") },
+  { id: "viernes", n: "Viernes", d: "La asistente de Wendy: abrirla, prepararla y ver su versión. (Rutas sigue en Trabajo › Inteligencias.)", abrir: () => showPanel("viernes") }, // v1.30: reemplaza el brazo Rutas
   { id: "salud", n: "Salud de ANTARES", d: "Temperatura, disco, memoria y cerebro local de la PC (Mi compu).", abrir: () => (PC.PC_ENABLED ? openMiCompu() : showPanel("inteligencias")) },
   { id: "noticias", n: "Noticias", d: "Resumen del día: clima, tipo de cambio y titulares.", abrir: () => showPanel("noticias") },
   { id: "estudio", n: "Estudio", d: "Aprende a programar: de cero hasta un robot en el laberinto (v1.29).", abrir: () => showPanel("aprende") },
@@ -1973,6 +1973,7 @@ function enterPanelView() {
 function showPanel(name) {
   if (!isUnlocked()) return;
   // v1.26: la sección Rutas se reemplazó por el Panel de inteligencias (Ruta sigue sabiendo de rutas por chat)
+  if (name === "viernes") { window.__viernesOpen = true; showGroup("personal"); return; } // v1.30: Viernes de Wendy
   if (name === "aprende" || name === "programar") { if (panelOpen) { hidePanelNow(); setTimeout(() => openAprende(), 400); } else openAprende(); return; } // v1.29
   if (name === "inteligencias" || name === "rutas") { if (panelOpen) { hidePanelNow(); setTimeout(() => openIntel(), 400); } else openIntel(); return; } // espera el «atrás» del historial del panel
   if (!enterPanelView()) return;

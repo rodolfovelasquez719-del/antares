@@ -67,6 +67,13 @@
   ],
   "shortcuts": [
     {
+      "name": "Viernes (Wendy)",
+      "short_name": "Viernes",
+      "description": "Abrir y administrar la asistente de Wendy",
+      "url": "./?panel=viernes",
+      "icons": [{ "src": "viernes/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
       "name": "Aprende a programar",
       "short_name": "Programar",
       "description": "Tutorial desde cero: robot en el laberinto",

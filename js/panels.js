@@ -117,6 +117,16 @@ function renderLanding() {
           <span class="gc-text"><strong>🤖 APRENDE A PROGRAMAR</strong><small>Desde cero hasta programar un robot en el laberinto, paso a paso.</small></span>
           <svg class="gc-go" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button></li>` : ""}
+      ${g === "personal" ? `<li><button type="button" class="group-card intel-card viernes-card" data-viernes="1" aria-expanded="${window.__viernesOpen ? "true" : "false"}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 8.5l3.5 8 3.5-8"/></g></svg>
+          <span class="gc-text"><strong>💜 VIERNES · asistente de Wendy</strong><small>Abrir la app de Wendy, prepararla (enlace/QR) y ver su versión.</small></span>
+          <svg class="gc-go" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="viernes-box" id="viernes-box" ${window.__viernesOpen ? "" : "hidden"}>
+          <a class="btn primary" href="./viernes/" target="_blank" rel="noopener">Abrir Viernes</a>
+          <a class="btn" href="./muestra-admin-viernes/" target="_blank" rel="noopener">Administrar Viernes</a>
+          <p class="viernes-note">Viernes es una app aparte, con su propia memoria (no comparte nada con Antares). Desde «Administrar» se crea el enlace o QR que la deja lista en el teléfono de Wendy; la key nunca se guarda en el código. Versión publicada: <b id="viernes-ver">…</b></p>
+        </div></li>` : ""}
       ${GROUPS[g].map(([id]) => { const [name, desc, icon] = CARD[id]; const c = cardCount(id);
         return `<li><button type="button" class="group-card" data-tab="${id}" data-open="${id}">
           <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${icon}</g></svg>
@@ -137,6 +147,8 @@ function renderLanding() {
     </ul>`;
   root.dataset.tab = `landing-${g}`;
   (root.closest(".settings-scroll") || root).scrollTop = 0;
+  root.querySelectorAll("[data-viernes]").forEach((b) => b.addEventListener("click", () => { const box = root.querySelector("#viernes-box"); window.__viernesOpen = box.hidden; box.hidden = !box.hidden; b.setAttribute("aria-expanded", String(!box.hidden)); verViernes(); }));
+  if (window.__viernesOpen) verViernes();
   root.querySelectorAll("[data-aprende]").forEach((b) => b.addEventListener("click", () => window.dispatchEvent(new Event("antares:aprende"))));
   root.querySelectorAll("[data-intel]").forEach((b) => b.addEventListener("click", () => window.dispatchEvent(new Event("antares:intel"))));
   root.querySelectorAll("[data-micompu]").forEach((b) => b.addEventListener("click", () => window.dispatchEvent(new Event("antares:micompu"))));
@@ -146,6 +158,7 @@ function renderLanding() {
   }));
 }
 
+function verViernes() { const el = root && root.querySelector("#viernes-ver"); if (!el) return; fetch("./viernes/version.json", { cache: "no-store" }).then((r) => r.json()).then((j) => { el.textContent = j.version; }).catch(() => { el.textContent = "sin conexión"; }); }
 function tabBtn(id, label) {
   return `<button type="button" class="panel-tab${tab === id ? " on" : ""}" role="tab" aria-selected="${tab === id}" data-tab="${id}">${label}</button>`;
 }
