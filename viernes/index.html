@@ -103,7 +103,7 @@
   <!-- MI NEGOCIO -->
   <section id="v-biz" class="view">
     <h2>Mi negocio 💖</h2>
-    <div class="toolbar" id="biz-tabs"><button data-b="poster" class="on">🖼️ Póster</button><button data-b="collage">🧩 Collage</button><button data-b="texts">✍️ Textos</button><button data-b="ideas">💡 Ideas</button></div>
+    <div class="toolbar" id="biz-tabs"><button data-b="poster" class="on">🖼️ Póster</button><button data-b="collage">🧩 Collage</button><button data-b="texts">✍️ Textos</button><button data-b="ideas">💡 Ideas</button><button data-b="precios">💰 Precios</button></div>
 
     <div class="bizp" data-b="poster">
       <div class="steps" id="po-steps"><span class="on">1 Foto</span><span>2 Diseño</span><span>3 Textos</span><span>4 Guardar</span></div>
@@ -163,6 +163,24 @@ Ideal para regalar</textarea></label>
       <div class="chips" id="tx-kind"><button data-k="ig" class="on">Instagram</button><button data-k="fb">Facebook</button><button data-k="wa">Catálogo WhatsApp</button></div>
       <button id="tx-go" class="pri">✍️ Escribir</button>
       <div id="tx-out" class="card answer hidden"></div>
+    </div>
+
+    <div class="bizp hidden" data-b="precios">
+      <h3>💰 ¿Cuánto cobrar?</h3>
+      <div class="card calc">
+        <label>Lo que gastaste en materiales (₡) <input id="pc-mat" type="number" inputmode="numeric" value="1500"></label>
+        <label>Minutos que duraste haciéndola <input id="pc-min" type="number" inputmode="numeric" value="30"></label>
+        <label>Empaque (bolsita, tarjeta, cajita) (₡) <input id="pc-emp" type="number" inputmode="numeric" value="300"></label>
+        <label>Ganancia extra <select id="pc-mar"><option value="20">Poquita (20%)</option><option value="40" selected>Normal (40%)</option><option value="60">Buena (60%)</option></select></label>
+        <details><summary>Valor de tu hora</summary><label>₡ por hora <input id="pc-hora" type="number" inputmode="numeric" value="2500"></label></details>
+        <div class="pc-res"><span>Precio sugerido</span><b id="pc-out">₡0</b><small id="pc-det"></small></div>
+      </div>
+      <h3>📊 Precios en Costa Rica (aprox.)</h3>
+      <p class="hint">Rangos que vi en tiendas ticas en línea (octubre 2026). Son aproximados: cada tienda cobra distinto.</p>
+      <div id="pc-ranges"></div>
+      <h3>🌟 Ideas que se venden</h3>
+      <div id="pc-ideas"></div>
+      <button id="pc-ask" class="big">💡 Pedirle más ideas a Viernes</button>
     </div>
 
     <div class="bizp hidden" data-b="ideas">

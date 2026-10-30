@@ -2,7 +2,8 @@
 import { ask, testKey, PERSONA } from "./gemini.js";
 import { initEditor } from "./editor.js";
 import { initPoster, initCollage } from "./poster.js";
-export const VERSION = "0.1.0";
+import { initPrecios } from "./precios.js";
+export const VERSION = "0.2.0";
 const $ = (id) => document.getElementById(id);
 const CFG = "viernes.config.v1", CHAT = "viernes.chat.v1";
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
@@ -160,6 +161,7 @@ await readSetup();
 $("hello").textContent = `Tu asistente, ${config.name || "Wendy"} ✨`;
 renderChat();
 initEditor(); initPoster(); initCollage();
+initPrecios(() => { document.querySelector('#biz-tabs [data-b="ideas"]').click(); $("id-go").click(); });
 if (location.hash === "#estado") { renderStatus(); show("v-set"); }
 addEventListener("hashchange", async () => { if (/setup=/.test(location.hash)) { await readSetup(); $("hello").textContent = `Tu asistente, ${config.name || "Wendy"} ✨`; renderChat(); show("v-chat"); } else if (location.hash === "#estado") { renderStatus(); show("v-set"); } });
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(() => {});
