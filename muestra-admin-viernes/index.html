@@ -10,7 +10,7 @@ button{font:inherit;padding:11px 14px;border-radius:10px;border:1px solid #2c3d5
 #qr{background:#fff;padding:12px;border-radius:12px;display:block;margin:10px auto;max-width:100%}
 </style></head><body>
 <h1>🪐 Antares · Administrar Viernes <small class="hint">(muestra)</small></h1>
-<p class="hint">Desde aquí preparas la app <b>Viernes</b> de Wendy. Ella no ve ninguna configuración: solo escanea el código o abre el enlace una vez.</p>
+<p class="hint">Desde aquí usted prepara la app <b>Viernes</b> de Wendy. Ella no ve ninguna configuración: solo escanea el código o abre el enlace una vez.</p>
 
 <div class="card"><h2>1. Key de Gemini</h2>
 <p class="hint">Se usa solo para crear el enlace. No se guarda en ningún servidor ni en GitHub. Recomendado: crear una key aparte para Wendy en <a style="color:#f9a8d4" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>, así su uso no gasta la cuota de Antares.</p>
@@ -21,6 +21,8 @@ button{font:inherit;padding:11px 14px;border-radius:10px;border:1px solid #2c3d5
 <div class="card"><h2>2. Preferencias</h2>
 <label>Nombre <input id="n" value="Wendy"></label>
 <label>Trato <select id="t"><option value="tu">Tú (cercano)</option><option value="usted">Usted</option></select></label>
+<label>WhatsApp de la tienda (se pone solo en los pósteres) <input id="w" inputmode="tel" placeholder="8888-8888"></label>
+<label>Instagram o nombre de la tienda <input id="b" placeholder="@tienda"></label>
 <label>Indicaciones extra para Viernes (opcional) <textarea id="x" rows="3" placeholder="Ej.: su tienda se llama Pulseras Wendy, Instagram @…"></textarea></label></div>
 
 <div class="card"><h2>3. Enlace y código QR</h2>
@@ -28,11 +30,11 @@ button{font:inherit;padding:11px 14px;border-radius:10px;border:1px solid #2c3d5
 <canvas id="qr" hidden></canvas>
 <p class="hint" id="howto" hidden>En el Android de Wendy: abrir la <b>cámara</b> (o Google Lens) → apuntar a este código → tocar el enlace → se abre Viernes en Chrome y queda lista ("¡Listo! Viernes quedó preparada 💜"). Luego en Chrome: menú ⋮ → <b>Agregar a pantalla principal / Instalar app</b>.</p>
 <div class="row" id="acts" hidden><button id="copy">Copiar enlace</button><button id="share">Compartir…</button></div>
-<p class="hint" id="warn" hidden>⚠️ El enlace contiene la key (en la parte "#", que no se envía a GitHub). Preferí el QR en pantalla; si lo mandás por WhatsApp, borrá el mensaje después. Viernes borra la key de la barra de direcciones al abrirse.</p></div>
+<p class="hint" id="warn" hidden>⚠️ El enlace contiene la key (en la parte "#", que no se envía a GitHub). Es preferible mostrar el QR en pantalla; si lo envía por WhatsApp, borre el mensaje después. Viernes borra la key de la barra de direcciones al abrirse.</p></div>
 
 <div class="card"><h2>4. Estado de Viernes</h2>
 <p>Versión publicada: <b id="ver">…</b></p>
-<p class="hint">Para ver el estado en el teléfono de Wendy: en Viernes, tocar 5 veces el círculo "V" de arriba → «Enviar estado a Freddy» (manda versión, si está configurada e instalada; nunca la key). También podés abrir <a style="color:#f9a8d4" href="../viernes/#estado" target="_blank">Viernes → estado</a> en este equipo.</p>
+<p class="hint">Para ver el estado en el teléfono de Wendy: en Viernes, tocar 5 veces el círculo "V" de arriba → «Enviar estado a Freddy» (manda versión, si está configurada e instalada; nunca la key). También puede abrir <a style="color:#f9a8d4" href="../viernes/#estado" target="_blank">Viernes → estado</a> en este equipo.</p>
 <a href="../viernes/" target="_blank"><button>Abrir Viernes</button></a></div>
 <script src="qrcode.js"></script>
 <script>
@@ -43,7 +45,7 @@ $("useAntares").onclick=()=>{try{const c=JSON.parse(localStorage.getItem("antare
 $("test").onclick=async()=>{const k=$("k").value.replace(/\s+/g,"");if(!k)return;$("kst").textContent="Probando…";try{const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=5",{headers:{"x-goog-api-key":k}});$("kst").innerHTML=r.ok?'<span class="ok">✅ Key válida</span>':'<span class="bad">❌ Google rechazó la key ('+r.status+')</span>';}catch{$("kst").innerHTML='<span class="bad">Sin conexión</span>';}};
 let link="";
 $("gen").onclick=()=>{const k=$("k").value.replace(/\s+/g,"");if(!k){$("kst").innerHTML='<span class="bad">Falta la key</span>';return;}
- const p={v:1,k,n:$("n").value.trim()||"Wendy",t:$("t").value,x:$("x").value.trim().slice(0,400)};
+ const p={v:1,k,n:$("n").value.trim()||"Wendy",t:$("t").value,x:$("x").value.trim().slice(0,400),w:$("w").value.trim().slice(0,20),b:$("b").value.trim().slice(0,40)};
  const b64=btoa(unescape(encodeURIComponent(JSON.stringify(p)))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
  link=url+"#setup="+b64;
  const q=qrcode(0,"M");q.addData(link);q.make();const n=q.getModuleCount(),s=Math.floor(320/(n+8)),c=$("qr");c.width=c.height=s*(n+8);const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,c.width,c.height);x.fillStyle="#000";

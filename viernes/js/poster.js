@@ -2,6 +2,10 @@
 import { toast, askViernes, hasKey } from "./app.js";
 import { removeBackground } from "./bgremove.js";
 import { shareCanvas } from "./editor.js";
+import { loadCanvas, busy } from "./img.js";
+const BIZ = "viernes.biz.v1";
+const bizLoad = () => { try { return JSON.parse(localStorage.getItem(BIZ)) || {}; } catch { return {}; } };
+const bizSave = () => { try { localStorage.setItem(BIZ, JSON.stringify({ wa: $("po-wa").value, brand: $("po-brand").value, tpl, fmt })); } catch { /* */ } };
 const $ = (id) => document.getElementById(id);
 const FMT = { sq: [1080, 1080], st: [1080, 1920], wa: [800, 800] };
 let photo = null, cut = null, tpl = 0, fmt = "sq", step = 1, focus = [{ u: 0.25, v: 0.2 }, { u: 0.55, v: 0.8 }], pickIdx = 0;
@@ -42,7 +46,7 @@ function drawProduct(x, box, opts = {}) {
   x.drawImage(im, box.x + (box.w - w) / 2 + dx, box.y + (box.h - h) / 2 + dy, w, h); x.restore();
 }
 function detail(x, cx, cy, r, i, ring, label, lblBg, lblFg, lblFont) {
-  const im = photo; x.save();
+  const im = ($("po-detcut") && $("po-detcut").checked && cut) || photo; x.save();
   x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fillStyle = "#fff"; x.fill(); x.clip();
   if (im) { const f = focus[i], z = Math.min(im.width, im.height) * 0.28; x.drawImage(im, f.u * im.width - z / 2, f.v * im.height - z / 2, z, z, cx - r, cy - r, r * 2, r * 2); }
   x.restore(); x.lineWidth = r * 0.07; x.strokeStyle = ring; x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.stroke();
@@ -73,7 +77,7 @@ const TPL = [
     const f = feats().slice(0, st ? 4 : 3);
     f.forEach((t, i) => { const cx = st ? W * (0.14 + i * 0.24) : 680 * u, cy = st ? 1420 * u : (425 + i * 168) * u, r = 42 * u;
       x.fillStyle = "rgba(255,255,255,.75)"; x.beginPath(); x.arc(cx, cy, r, 0, 7); x.fill(); ICONS[i % 4](x, cx, cy, r * 0.6, "#a8577a");
-      x.fillStyle = "#6b3a4c"; x.font = `italic 500 ${24 * u}px "Playfair Display"`; x.textAlign = "center"; wrap(x, t, 150 * u).forEach((l, j) => x.fillText(l, cx, cy + r + 26 * u + j * 26 * u)); });
+      x.fillStyle = "#6b3a4c"; x.font = `italic 500 ${24 * u}px "Playfair Display"`; x.textAlign = "center"; wrap(x, t, 150 * u).slice(0, 2).forEach((l, j) => x.fillText(l, cx, cy + r + 26 * u + j * 26 * u)); });
     if (!st) { detail(x, 920 * u, 260 * u, 120 * u, 0, "#fff", val("po-d1"), "rgba(255,255,255,.9)", "#7a3d55", "Quicksand"); detail(x, 920 * u, 610 * u, 110 * u, 1, "#fff", val("po-d2"), "rgba(255,255,255,.9)", "#7a3d55", "Quicksand"); }
     else { detail(x, W * 0.25, 1660 * u, 110 * u, 0, "#fff", "", "", "", ""); detail(x, W * 0.75, 1660 * u, 110 * u, 1, "#fff", "", "", "", ""); }
     // precio (nube)
@@ -208,16 +212,16 @@ const NEW_TPL = [
     for (const [a, b2] of [[0.85, 0.12], [0.1, 0.5], [0.9, 0.6]]) sparkle(x, W * a, H * b2, 30 * u, "#c084fc"); brand(x, W, H, P.ink); } },
   { name: "🗂️ Catálogo (varios)", draw(x, W, H) { const u = W / 1080, S = st(W, H), im = imgs2(), cap = lines(); base(x, W, H, "#fff5fa", "#f3e8ff", "#fde7f3", 8);
     T(x, val("po-title") || "Catálogo", W / 2, 130 * u, '"Great Vibes"', 120 * u, P.deep, W * 0.85); T(x, val("po-sub"), W / 2, 190 * u, "Quicksand", 40 * u, P.ink, W * 0.85);
-    const n = (im.length || 4) > 4 ? 6 : 4, cols = 2, rows = Math.ceil(n / cols), top = 230 * u, bot = S ? 160 * u : 90 * u, g = 30 * u;
-    const cw = (W - g * 3) / 2, ch = (H - top - bot - g * (rows + 1)) / rows;
-    for (let i = 0; i < n; i++) { const bx = g + (i % 2) * (cw + g), by = top + g + Math.floor(i / 2) * (ch + g);
-      frame(x, im[i % Math.max(1, im.length)] || null, { x: bx, y: by, w: cw, h: ch - 60 * u });
+    const n = im.length ? Math.min(6, im.length) : 4, cols = n === 1 ? 1 : 2, rows = Math.ceil(n / cols), top = 230 * u, bot = S ? 160 * u : 90 * u, g = 30 * u;
+    const cw0 = (W - g * (cols + 1)) / cols, ch = (H - top - bot - g * (rows + 1)) / rows;
+    for (let i = 0; i < n; i++) { const last = n % 2 === 1 && i === n - 1 && cols === 2, cw = last ? W - g * 2 : cw0, bx = last ? g : g + (i % cols) * (cw0 + g), by = top + g + Math.floor(i / cols) * (ch + g);
+      frame(x, im[i] || null, { x: bx, y: by, w: cw, h: ch - 60 * u });
       pill(x, bx + cw / 2, by + ch - 28 * u, cap[i] || `Modelo ${i + 1}`, "Fredoka", 26 * u, ["#fbcfe8", "#e9d5ff", "#ccfbf1", "#fef3c7"][i % 4], P.ink, 0.7, cw); }
     pill(x, W / 2, H - (S ? 90 : 45) * u, "Pedidos: " + (val("po-wa") || "WhatsApp"), "Fredoka", 30 * u, P.deep, "#fff"); } },
   { name: "🔤 Personalizada con nombre", draw(x, W, H) { const u = W / 1080, S = st(W, H); base(x, W, H, "#fdf4ff", "#fce7f3", "#ede9fe", 6);
     T(x, "Personalizada", W / 2, (S ? 190 : 140) * u, '"Great Vibes"', 130 * u, P.purple, W * 0.85); T(x, "con tu nombre 💖", W / 2, (S ? 260 : 200) * u, "Fredoka", 50 * u, P.deep, W * 0.85);
     const b = S ? { x: 150 * u, y: 330 * u, w: 780 * u, h: 900 * u } : { x: 260 * u, y: 240 * u, w: 560 * u, h: 500 * u }; frame(x, src(), b, "circle");
-    const name = (val("po-name") || "WENDY").toUpperCase().slice(0, 10), r = Math.min(52 * u, (W * 0.85) / name.length / 2.1), y = S ? 1350 * u : 820 * u, cols = ["#f9a8d4", "#c4b5fd", "#99f6e4", "#fde68a", "#fbcfe8"];
+    const name = (val("po-name") || "WENDY").trim().split(/\s+/)[0].toUpperCase().slice(0, 10), r = Math.min(52 * u, (W * 0.85) / name.length / 2.1), y = S ? 1350 * u : 820 * u, cols = ["#f9a8d4", "#c4b5fd", "#99f6e4", "#fde68a", "#fbcfe8"];
     x.strokeStyle = "#d8b4fe"; x.lineWidth = 4 * u; x.beginPath(); x.moveTo(W * 0.06, y); x.lineTo(W * 0.94, y); x.stroke();
     [...name].forEach((ch, i) => { const cx = W / 2 + (i - (name.length - 1) / 2) * r * 2.15; x.fillStyle = "#fff"; x.beginPath(); x.roundRect(cx - r, y - r, r * 2, r * 2, r * 0.35); x.fill(); x.strokeStyle = cols[i % 5]; x.lineWidth = 5 * u; x.stroke();
       x.fillStyle = P.ink; x.font = `700 ${r * 1.2}px Fredoka`; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText(ch, cx, y + r * 0.08); });
@@ -287,25 +291,33 @@ function goStep(n) {
 export async function initPoster() {
   try { await Promise.all(['700 40px Fredoka', '40px "Great Vibes"', '600 40px "Playfair Display"', 'italic 500 40px "Playfair Display"', '600 40px Quicksand', '500 40px Fredoka', '500 40px Quicksand'].map((f) => document.fonts.load(f))); } catch { /* */ }
   $("po-tpl").innerHTML = TPL.map((t, i) => `<button data-i="${i}" class="thumb ${i === tpl ? "on" : ""}"><canvas width="160" height="160"></canvas><span>${t.name}</span></button>`).join("");
-  $("po-tpl").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; tpl = +b.dataset.i; $("po-tpl").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); drawPoster(); $("po-canvas").scrollIntoView({ behavior: "smooth", block: "center" }); };
-  $("po-fmt").onclick = (e) => { const f = e.target.dataset.f; if (!f) return; fmt = f; $("po-fmt").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b === e.target)); drawPoster(); thumbs(); };
-  $("po-extra").onchange = async (e) => { extras = []; for (const f of [...e.target.files].slice(0, 5)) { const bmp = await createImageBitmap(f); const s = Math.min(1, 1200 / Math.max(bmp.width, bmp.height)); const c = document.createElement("canvas"); c.width = bmp.width * s; c.height = bmp.height * s; c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height); extras.push(c); } toast(`${extras.length} foto(s) extra lista(s) 📷`); drawPoster(); };
-  $("po-file").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; const bmp = await createImageBitmap(f); const s = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
-    photo = document.createElement("canvas"); photo.width = bmp.width * s; photo.height = bmp.height * s; photo.getContext("2d").drawImage(bmp, 0, 0, photo.width, photo.height); cut = null;
+  $("po-tpl").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; tpl = +b.dataset.i; bizSave(); $("po-tpl").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); drawPoster(); $("po-canvas").scrollIntoView({ behavior: "smooth", block: "center" }); };
+  $("po-fmt").onclick = (e) => { const f = e.target.dataset.f; if (!f) return; fmt = f; bizSave(); $("po-fmt").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b === e.target)); drawPoster(); thumbs(); };
+  $("po-extra").onchange = async (e) => { extras = []; for (const f of [...e.target.files].slice(0, 5)) { const c = await loadCanvas(f, 1200); if (c) extras.push(c); } if (extras.length) { toast(`${extras.length} foto(s) extra lista(s) 📷`); $("po-extra-l").lastChild.textContent = ` ✅ ${extras.length} foto(s) extra (toca para cambiarlas)`; } drawPoster(); e.target.value = ""; };
+  $("po-file").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; const c = await loadCanvas(f, 1600); e.target.value = ""; if (!c) return;
+    photo = c; cut = null; $("po-usecut-l").classList.add("hidden"); $("po-detcut-l").classList.add("hidden"); $("po-upload").lastChild.textContent = " ✅ Foto lista (toca para cambiarla)";
+
     $("po-cut").classList.remove("hidden"); $("po-status").textContent = "¡Foto lista! Si quieres, quítale el fondo, o toca «Siguiente»."; drawPick(); drawPoster(); };
-  $("po-cut").onclick = async () => { if (!photo) return; $("po-cut").disabled = true; const r = await removeBackground(photo, (t) => $("po-status").textContent = t); cut = r.canvas; $("po-cut").disabled = false; $("po-usecut-l").classList.remove("hidden"); $("po-usecut").checked = true; drawPoster(); };
-  ["po-title", "po-sub", "po-pill", "po-price", "po-old", "po-name", "po-quote", "po-client", "po-wa", "po-feat", "po-brand", "po-d1", "po-d2", "po-scale", "po-dx", "po-dy", "po-usecut"].forEach((id) => $(id).addEventListener("input", drawPoster));
+  $("po-cut").onclick = busy($("po-cut"), async () => { if (!photo) return; $("po-cut").disabled = true; const r = await removeBackground(photo, (t) => $("po-status").textContent = t); cut = r.canvas; $("po-detcut-l").classList.remove("hidden"); $("po-cut").disabled = false; $("po-usecut-l").classList.remove("hidden"); $("po-usecut").checked = true; drawPoster(); });
+  ["po-title", "po-sub", "po-pill", "po-price", "po-old", "po-name", "po-quote", "po-client", "po-wa", "po-feat", "po-brand", "po-d1", "po-d2", "po-scale", "po-dx", "po-dy", "po-usecut", "po-detcut"].forEach((id) => $(id).addEventListener("input", drawPoster));
   $("po-pick").onclick = (e) => { const r = e.target.getBoundingClientRect(); focus[pickIdx] = { u: (e.clientX - r.left) / r.width, v: (e.clientY - r.top) / r.height }; pickIdx = 1 - pickIdx; drawPick(); drawPoster(); };
-  $("po-next").onclick = () => goStep(step + 1); $("po-back").onclick = () => goStep(step - 1); $("po-again").onclick = () => goStep(1);
-  $("po-save").onclick = () => shareCanvas($("po-canvas"), "viernes-poster");
-  $("po-ai").onclick = async () => {
+  $("po-next").onclick = () => { if (step === 1 && !photo) toast("Puedes seguir, pero primero elige la foto de tu producto 📷"); goStep(step + 1); }; $("po-back").onclick = () => goStep(step - 1); $("po-again").onclick = () => goStep(1);
+  $("po-save").onclick = busy($("po-save"), async () => { drawPoster(); bizSave(); await shareCanvas($("po-canvas"), "viernes-poster"); });
+  const bz = bizLoad(), cfg = (() => { try { return JSON.parse(localStorage.getItem("viernes.config.v1")) || {}; } catch { return {}; } })();
+  $("po-wa").value = bz.wa || cfg.wa || ""; $("po-brand").value = bz.brand || cfg.brand || "";
+  if (bz.tpl != null && TPL[bz.tpl]) tpl = bz.tpl; if (bz.fmt && FMT[bz.fmt]) fmt = bz.fmt;
+  $("po-tpl").querySelectorAll("button").forEach((b) => b.classList.toggle("on", +b.dataset.i === tpl)); $("po-fmt").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.f === fmt));
+  ["po-wa", "po-brand"].forEach((id) => $(id).addEventListener("change", bizSave));
+  $("po-ai").onclick = busy($("po-ai"), async () => {
     if (!hasKey()) return toast("Para sugerencias, Freddy tiene que preparar Viernes 💜");
     $("po-ai").textContent = "✨ Pensando…";
     const r = await askViernes([{ role: "user", text: `Para un póster de venta de este producto hecho a mano: "${val("po-title")} ${val("po-sub")}" (${val("po-price")}). Responde SOLO JSON: {"title":"1-2 palabras","sub":"máx 5 palabras","pill":"3 palabras separadas por •","feats":["4 cualidades de máx 4 palabras"],"d1":"máx 4 palabras","d2":"máx 4 palabras"}` }], { json: true });
     $("po-ai").textContent = "✨ Que Viernes me sugiera los textos";
-    try { const j = JSON.parse(r.text.replace(/```json|```/g, "")); $("po-title").value = j.title || val("po-title"); $("po-sub").value = j.sub || ""; $("po-pill").value = j.pill || ""; $("po-feat").value = (j.feats || []).join("\n"); $("po-d1").value = j.d1 || ""; $("po-d2").value = j.d2 || ""; drawPoster(); toast("¡Textos listos! ✨"); }
+    try { const j = JSON.parse(r.text.replace(/```json|```/g, "")); const setv = (id, v) => { const e = $(id); if (v != null) e.value = String(v).slice(0, e.maxLength > 0 ? e.maxLength : 200); };
+      setv("po-title", j.title); setv("po-sub", j.sub); setv("po-pill", j.pill); setv("po-feat", (j.feats || []).map((t) => String(t).slice(0, 40)).join("\n")); setv("po-d1", j.d1); setv("po-d2", j.d2); drawPoster(); toast("¡Textos listos! ✨"); }
     catch { toast(r.ok ? "No entendí la sugerencia, intenta otra vez" : r.text); }
-  };
+  });
+
   goStep(1);
 }
 // ---------- collage ----------
@@ -324,7 +336,7 @@ function drawCollage() {
     x.restore(); }
 }
 export function initCollage() {
-  $("co-files").onchange = async (e) => { imgs = await Promise.all([...e.target.files].slice(0, 6).map((f) => createImageBitmap(f))); drawCollage(); };
+  $("co-files").onchange = async (e) => { const out = []; for (const f of [...e.target.files].slice(0, 6)) { const c = await loadCanvas(f, 1200); if (c) out.push(c); } if (out.length) imgs = out; e.target.value = ""; drawCollage(); if (e.target.files && out.length < 2) toast("Elige de 2 a 6 fotos 🧩"); };
   document.querySelector('[data-b="collage"] .chips').onclick = (e) => { const r = +e.target.dataset.c; if (!r) return; coR = r; e.currentTarget.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b === e.target)); drawCollage(); };
   $("co-title").oninput = drawCollage; $("co-save").onclick = () => shareCanvas($("co-canvas"), "viernes-collage");
   drawCollage();

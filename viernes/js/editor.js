@@ -2,6 +2,7 @@
 import { toast, apiKey, hasKey } from "./app.js";
 import { removeBackground } from "./bgremove.js";
 import { aiEdit } from "./aiedit.js";
+import { loadCanvas, busy } from "./img.js";
 const $ = (id) => document.getElementById(id);
 let base = null, undo = [], over = [], cut = null; // base: canvas actual; over: textos/stickers
 let adj = { b: 100, c: 100, s: 100, w: 0 };
@@ -24,10 +25,15 @@ function render(preview = true) {
   if (adj.w) { x.drawImage(base, 0, 0); x.filter = "none"; x.globalCompositeOperation = "soft-light"; x.fillStyle = adj.w > 0 ? `rgba(255,150,60,${adj.w / 100})` : `rgba(80,140,255,${-adj.w / 100})`; x.fillRect(0, 0, c.width, c.height); x.globalCompositeOperation = "source-over"; }
   else { x.drawImage(base, 0, 0); x.filter = "none"; }
   for (const o of over) drawOver(x, o);
+  c.style.touchAction = over.length ? "none" : "pan-y";
 }
 function drawOver(x, o) {
   x.save(); x.translate(o.x, o.y); x.textAlign = "center"; x.textBaseline = "middle";
-  x.font = `700 ${o.size}px "${o.font}", sans-serif`;
+  let fs = o.size; x.font = `700 ${fs}px "${o.font}", sans-serif`;
+  const maxW = x.canvas.width * 0.92 - (o.kind === "price" ? o.size : 0);
+  while (fs > 12 && x.measureText(o.text).width > maxW) { fs -= 2; x.font = `700 ${fs}px "${o.font}", sans-serif`; }
+  o = { ...o, size: fs };
+  { const W = x.canvas.width, hw = (x.measureText(o.text).width + (o.kind === "price" ? fs : 0)) / 2 + 4; const nx = Math.min(W - hw, Math.max(hw, o.x)); if (nx !== o.x) x.translate(nx - o.x, 0); }
   if (o.kind === "price") {
     const w = x.measureText(o.text).width + o.size; x.fillStyle = "#ff5fa8"; x.beginPath(); x.roundRect(-w / 2, -o.size * 0.75, w, o.size * 1.5, o.size * 0.75); x.fill();
     x.fillStyle = "#fff"; x.fillText(o.text, 0, 0);
@@ -40,8 +46,7 @@ function drawOver(x, o) {
 }
 function bake() { render(true); base = clone(cv()); over = []; adj = { b: 100, c: 100, s: 100, w: 0 }; ["a-b", "a-c", "a-s"].forEach((i) => $(i).value = 100); $("a-w").value = 0; }
 async function loadFile(f) {
-  const bmp = await createImageBitmap(f); const s = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
-  base = mk(Math.round(bmp.width * s), Math.round(bmp.height * s)); base.getContext("2d").drawImage(bmp, 0, 0, base.width, base.height);
+  const c = await loadCanvas(f, 2000); $("ph-file").value = ""; if (!c) return; base = c;
   undo = []; over = []; cut = null; $("ph-upload").classList.add("hidden"); $("ph-editor").classList.remove("hidden"); render();
 }
 export function initEditor() {
@@ -67,11 +72,11 @@ export function initEditor() {
   $("flip").onclick = () => { push(); const n = mk(base.width, base.height), x = n.getContext("2d"); x.scale(-1, 1); x.drawImage(base, -base.width, 0); base = n; render(); };
   // Fondo
   const bl = $("bg-list"); bl.innerHTML = BGS.map((b, i) => `<button data-i="${i}" style="background:${b[0] === "lin" ? `linear-gradient(135deg,${b[1]},${b[2]})` : b[0]}"></button>`).join("") + '<button data-i="-1" title="Transparente">∅</button>';
-  $("bg-remove").onclick = async () => { push(); $("bg-remove").disabled = true; const r = await removeBackground(base, (t) => $("bg-status").textContent = t); cut = r.canvas; base = clone(cut); $("bg-remove").disabled = false; render(); };
-  bl.onclick = (e) => { const i = e.target.dataset.i; if (i == null) return; if (!cut) return toast("Primero toca «Quitar fondo»"); push();
+  $("bg-remove").onclick = busy($("bg-remove"), async () => { push(); const r = await removeBackground(base, (t) => $("bg-status").textContent = t); cut = r.canvas; base = clone(cut); render(); });
+  bl.onclick = (e) => { const i = e.target.dataset.i; if (i == null) return; if (!cut) return toast("Primero toca «🪄 Quitar fondo» y luego elige el color"); push();
     const n = mk(cut.width, cut.height), x = n.getContext("2d"); if (+i >= 0) { paintBg(x, n.width, n.height, BGS[+i]); x.shadowColor = "rgba(0,0,0,.18)"; x.shadowBlur = 30; x.shadowOffsetY = 12; } x.drawImage(cut, 0, 0); base = n; render(); };
-  $("bg-blur").onclick = async () => { push(); const r = await removeBackground(base, (t) => $("bg-status").textContent = t);
-    const n = mk(base.width, base.height), x = n.getContext("2d"); x.filter = `blur(${Math.round(base.width / 80)}px)`; x.drawImage(base, 0, 0); x.filter = "none"; x.drawImage(r.canvas, 0, 0); base = n; render(); };
+  $("bg-blur").onclick = busy($("bg-blur"), async () => { push(); const r = await removeBackground(base, (t) => $("bg-status").textContent = t);
+    const n = mk(base.width, base.height), x = n.getContext("2d"); x.filter = `blur(${Math.round(base.width / 80)}px)`; x.drawImage(base, 0, 0); x.filter = "none"; x.drawImage(r.canvas, 0, 0); base = n; render(); });
   // Texto y stickers
   $("stickers").innerHTML = ["💖", "✨", "🌸", "🎀", "💎", "⭐", "🦋", "🌷", "🛍️", "🔥", "NUEVO", "OFERTA", "HECHO A MANO"].map((s) => `<button>${s}</button>`).join("");
   const add = (o) => { over.push({ x: base.width / 2, y: base.height / 2, size: Math.round(base.width / 12), font: "Fredoka", color: "#ffffff", kind: "text", ...o }); render(); };
@@ -86,14 +91,15 @@ export function initEditor() {
   c.onpointermove = (e) => { if (!drag) return; Object.assign(drag, pt(e)); render(); };
   c.onpointerup = () => drag = null;
   // IA (limitada)
-  $("ai-go").onclick = async () => { if (!hasKey()) return toast("La edición con IA necesita que Freddy prepare Viernes."); const ins = $("ai-in").value.trim(); if (!ins) return toast("Escribe qué cambiar");
+  $("ai-go").onclick = busy($("ai-go"), async () => { if (!hasKey()) return toast("La edición con IA necesita que Freddy prepare Viernes."); const ins = $("ai-in").value.trim(); if (!ins) return toast("Escribe qué cambiar");
     bake(); const blob = await new Promise((r) => base.toBlob(r, "image/jpeg", 0.9)); $("ai-status").textContent = "Editando con IA…";
     const r = await aiEdit(apiKey(), blob, ins, { onStatus: () => {} });
-    if (!r.ok) { $("ai-status").textContent = r.title + ": " + r.text; return; }
-    push(); const bmp = await createImageBitmap(r.blob); base = mk(bmp.width, bmp.height); base.getContext("2d").drawImage(bmp, 0, 0); render(); $("ai-status").textContent = "¡Listo! ✨"; };
+    if (!r.ok) { $("ai-status").textContent = r.kind === "stopped" ? "" : (r.kind === "safety" || r.kind === "no_image") ? r.text :
+      "La edición con IA no está disponible ahora mismo 😔 (Google la limita). Usa Luz, Filtros, Fondo y Texto: esas son ilimitadas 💜"; console.info("aiEdit:", r.kind); return; }
+    push(); const bmp = await createImageBitmap(r.blob); base = mk(bmp.width, bmp.height); base.getContext("2d").drawImage(bmp, 0, 0); render(); $("ai-status").textContent = "¡Listo! ✨"; });
   $("ph-undo").onclick = () => { if (undo.length) { base = undo.pop(); render(); } };
   $("ph-new").onclick = () => { $("ph-editor").classList.add("hidden"); $("ph-upload").classList.remove("hidden"); $("ph-file").value = ""; };
-  $("ph-save").onclick = () => { render(); shareCanvas(cv(), "viernes-foto"); };
+  $("ph-save").onclick = busy($("ph-save"), async () => { render(); await shareCanvas(cv(), "viernes-foto"); });
 }
 export async function shareCanvas(c, name) {
   const blob = await new Promise((r) => c.toBlob(r, "image/png"));

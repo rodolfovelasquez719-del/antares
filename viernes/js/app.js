@@ -3,7 +3,8 @@ import { ask, testKey, PERSONA } from "./gemini.js";
 import { initEditor } from "./editor.js";
 import { initPoster, initCollage } from "./poster.js";
 import { initPrecios } from "./precios.js";
-export const VERSION = "0.3.0";
+import { loadCanvas, busy } from "./img.js";
+export const VERSION = "0.4.0";
 const $ = (id) => document.getElementById(id);
 const CFG = "viernes.config.v1", CHAT = "viernes.chat.v1";
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
@@ -20,11 +21,11 @@ export const askViernes = (history, opts = {}) => ask(apiKey(), history, { syste
 async function readSetup() {
   const m = location.hash.match(/setup=([A-Za-z0-9_-]+)/);
   if (!m) return;
-  history.replaceState(null, "", location.pathname + location.search); // borra la key de la barra y del historial
+  history.replaceState({ v: "v-chat" }, "", location.pathname + location.search); // borra la key de la barra y del historial
   try {
     const json = JSON.parse(decodeURIComponent(escape(atob(m[1].replace(/-/g, "+").replace(/_/g, "/")))));
     if (json.v !== 1) throw 0;
-    config = { ...config, key: (json.k || config.key || "").replace(/\s+/g, ""), name: json.n || "Wendy", trato: json.t || "tu", extra: json.x || "", setupAt: new Date().toISOString() };
+    config = { ...config, key: (json.k || config.key || "").replace(/\s+/g, ""), name: json.n || "Wendy", trato: json.t || "tu", extra: json.x || "", wa: json.w || config.wa || "", brand: json.b || config.brand || "", setupAt: new Date().toISOString() };
     save(CFG, config);
     const ok = config.key ? await testKey(config.key) : false;
     toast(ok ? "¡Listo! Viernes quedó preparada 💜" : "Recibí el enlace, pero la conexión no respondió. Avísale a Freddy.", 4000);
@@ -32,12 +33,14 @@ async function readSetup() {
 }
 
 // ---- Navegación ----
-function show(v) {
+function show(v, push = true) {
+  if (push && history.state?.v !== v) history.pushState({ v }, "", location.pathname);
   document.querySelectorAll(".view").forEach((s) => s.classList.toggle("active", s.id === v));
   document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.v === v));
   window.scrollTo(0, 0);
 }
 document.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => show(!hasKey() && (b.dataset.v === "v-chat" || b.dataset.v === "v-search" || b.dataset.v === "v-vision") ? "v-nokey" : b.dataset.v));
+addEventListener("popstate", (e) => show(e.state?.v || "v-chat", false));
 let taps = 0; document.querySelector(".orb").onclick = () => { if (++taps >= 5) { taps = 0; renderStatus(); show("v-set"); } setTimeout(() => taps = 0, 2000); };
 
 // ---- Chat ----
@@ -56,13 +59,15 @@ function renderChat() {
 async function send(text) {
   if (!text.trim()) return;
   if (!hasKey()) return show("v-nokey");
+  if (!navigator.onLine) return toast("Estás sin internet. Revisa el wifi o los datos 📶");
   chat.push({ role: "user", text }); bubble("user", text);
   const t = bubble("v", "Pensando"); t.classList.add("typing");
-  const r = await askViernes(chat.slice(-12), { search: /\b(hoy|precio|dónde|donde|horario|noticia|clima|tendencia|cuánto|cuanto|abre)\b/i.test(text) });
+  const r = await askViernes(chat.slice(-12).filter((m, i, a) => i > 0 || m.role === "user"), { search: /\b(hoy|precio|dónde|donde|horario|noticia|clima|tendencia|cuánto|cuanto|abre)\b/i.test(text) });
   t.classList.remove("typing"); t.textContent = r.text;
-  if (r.ok) { chat.push({ role: "model", text: r.text }); save(CHAT, chat.slice(-60)); }
+  if (r.ok) { chat.push({ role: "model", text: r.text }); save(CHAT, chat.slice(-60)); } else chat.pop();
 }
-$("chat-form").onsubmit = (e) => { e.preventDefault(); const v = $("chat-in").value; $("chat-in").value = ""; send(v); };
+let sending = false;
+$("chat-form").onsubmit = async (e) => { e.preventDefault(); if (sending) return; const v = $("chat-in").value; $("chat-in").value = ""; sending = true; try { await send(v); } finally { sending = false; } };
 // Voz (Chrome Android)
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 $("mic").onclick = () => {
@@ -76,8 +81,11 @@ $("mic").onclick = () => {
 
 // ---- Buscar (con Google Search de Gemini) ----
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+let searching = false;
 async function search(q) {
-  if (!q.trim()) return; if (!hasKey()) return show("v-nokey");
+  if (!q.trim() || searching) return; if (!hasKey()) return show("v-nokey");
+  if (!navigator.onLine) return toast("Estás sin internet. Revisa el wifi o los datos 📶");
+  searching = true; setTimeout(() => searching = false, 1500);
   const o = $("search-out"); o.classList.remove("hidden"); o.innerHTML = '<span class="typing">Buscando</span>';
   const r = await askViernes([{ role: "user", text: q }], { search: true });
   o.innerHTML = esc(r.text) + (r.sources && r.sources.length ? "<hr><b>Fuentes:</b><br>" + r.sources.map((s) => `• <a href="${esc(s.uri)}" target="_blank" rel="noopener">${esc(s.title || "fuente")}</a>`).join("<br>") : "");
@@ -92,36 +100,40 @@ $("biz-tabs").onclick = (e) => { const b = e.target.closest("button"); if (!b) r
 const chipPick = (id) => { const el = $(id); el.onclick = (e) => { if (e.target.tagName === "BUTTON") el.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === e.target)); }; return () => (el.querySelector(".on") || {}).dataset; };
 const kind = chipPick("tx-kind");
 let txImg = null;
-$("tx-file").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; txImg = await shrink(f); toast("Foto lista 📷"); };
+$("tx-file").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; txImg = await shrink(f); if (txImg) { toast("Foto lista 📷"); e.target.closest("label").firstChild.nextSibling && (e.target.parentElement.lastChild.textContent = " ✅ Foto lista (toca para cambiarla)"); } };
 export async function shrink(file, max = 1024) {
-  const bmp = await createImageBitmap(file); const s = Math.min(1, max / Math.max(bmp.width, bmp.height));
-  const c = document.createElement("canvas"); c.width = bmp.width * s; c.height = bmp.height * s; c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  const c = await loadCanvas(file, max); if (!c) return null;
   return { type: "image/jpeg", data: c.toDataURL("image/jpeg", 0.85).split(",")[1] };
 }
 const KIND = { ig: "una publicación de Instagram (texto atractivo con emojis, llamado a la acción para escribir por DM, y 15 hashtags en español relevantes para Costa Rica)",
   fb: "una publicación de Facebook (cálida, con precio, cómo pedir por WhatsApp o Messenger, y 5 hashtags)",
   wa: "la ficha del Catálogo de WhatsApp Business: nombre corto (máx 60 caracteres), descripción breve (máx 300 caracteres) y precio" };
-$("tx-go").onclick = async () => {
+$("tx-go").onclick = busy($("tx-go"), async () => {
   if (!hasKey()) return show("v-nokey");
   const o = $("tx-out"); o.classList.remove("hidden"); o.innerHTML = '<span class="typing">Escribiendo</span>';
   const r = await askViernes([{ role: "user", text: `Escribe ${KIND[kind().k]} para este producto hecho a mano por Wendy: ${$("tx-in").value || "(mira la foto)"}. Además da 2 opciones de título corto para póster. Solo el texto listo para copiar.` }], { image: txImg });
   o.innerHTML = esc(r.text) + (r.ok ? '<br><button class="pri big" id="tx-copy">📋 Copiar texto</button>' : "");
   if (r.ok) $("tx-copy").onclick = () => navigator.clipboard.writeText(r.text).then(() => toast("Copiado ✅"));
-};
-$("id-go").onclick = async () => {
+});
+$("id-go").onclick = busy($("id-go"), async () => {
   if (!hasKey()) return show("v-nokey");
   const o = $("id-out"); o.classList.remove("hidden"); o.innerHTML = '<span class="typing">Imaginando</span>';
   const r = await askViernes([{ role: "user", text: `Dame 6 ideas de nuevos diseños de pulseras, collares o accesorios hechos a mano para vender en Costa Rica${$("id-in").value ? " sobre: " + $("id-in").value : ""}. Para cada una: nombre bonito, materiales, combinación de colores (nombres de colores), público ideal y precio sugerido en colones. Formato corto con emojis.` }], { search: true });
   o.innerHTML = esc(r.text);
-};
+});
 
 // ---- Visión ----
 const BABY = () => { const b = new Date(2025, 9, 15), m = Math.max(0, Math.round((Date.now() - b) / 2.63e9)); return m; };
+let looking = false;
 async function vision(file) {
   if (!hasKey()) return show("v-nokey");
+  if (looking) return; if (!navigator.onLine) return toast("Estás sin internet. Revisa el wifi o los datos 📶");
+  const img = await shrink(file, 1024); if (!img) return;
+  looking = true; try { await visionRun(file, img); } finally { looking = false; $("vi-file").value = ""; $("vi-file2").value = ""; }
+}
+async function visionRun(file, img) {
   $("vi-img").src = URL.createObjectURL(file); $("vi-img").classList.remove("hidden");
   const o = $("vi-out"); o.classList.remove("hidden"); o.innerHTML = '<span class="typing">Mirando la foto</span>';
-  const img = await shrink(file, 1024);
   const q = `Mira esta foto. ${$("vi-q").value ? "Pregunta de Wendy: " + $("vi-q").value + ". " : ""}Explícale a Wendy en español sencillo, con estas secciones cortas y emojis:
 🔎 Qué es (marca/modelo si se ve)
 🎯 Para qué sirve
@@ -158,11 +170,15 @@ $("wipe").onclick = () => { if (confirm("¿Borrar la conversación?")) { chat = 
 
 // ---- Inicio ----
 await readSetup();
+if (!history.state) history.replaceState({ v: "v-chat" }, "", location.pathname + location.search + (location.hash === "#estado" ? "#estado" : ""));
 $("hello").textContent = `Tu asistente, ${config.name || "Wendy"} ✨`;
 renderChat();
 initEditor(); initPoster(); initCollage();
 initPrecios(() => { document.querySelector('#biz-tabs [data-b="ideas"]').click(); $("id-go").click(); });
 if (location.hash === "#estado") { renderStatus(); show("v-set"); }
-addEventListener("hashchange", async () => { if (/setup=/.test(location.hash)) { await readSetup(); $("hello").textContent = `Tu asistente, ${config.name || "Wendy"} ✨`; renderChat(); show("v-chat"); } else if (location.hash === "#estado") { renderStatus(); show("v-set"); } });
+addEventListener("hashchange", async () => { if (/setup=/.test(location.hash)) { await readSetup();
+if (!history.state) history.replaceState({ v: "v-chat" }, "", location.pathname + location.search + (location.hash === "#estado" ? "#estado" : "")); $("hello").textContent = `Tu asistente, ${config.name || "Wendy"} ✨`; renderChat(); show("v-chat"); } else if (location.hash === "#estado") { renderStatus(); show("v-set"); } });
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(() => {});
+const net = () => { document.body.classList.toggle("offline", !navigator.onLine); };
+addEventListener("online", () => { net(); toast("Volvió el internet ✅"); }); addEventListener("offline", () => { net(); toast("Sin internet: pósteres, fotos y precios siguen funcionando 💜", 4000); }); net();
 window.__viernesReady = true;

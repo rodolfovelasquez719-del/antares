@@ -113,6 +113,7 @@
         <div class="row"><button id="po-cut" class="big hidden">🪄 Quitar el fondo de la foto</button></div>
         <label class="upload" id="po-extra-l"><input type="file" accept="image/*" multiple id="po-extra" hidden>➕ Más fotos (para combo, catálogo o mamá e hija)</label>
         <label class="chk hidden" id="po-usecut-l"><input type="checkbox" id="po-usecut" checked> Usar la foto sin fondo</label>
+        <label class="chk hidden" id="po-detcut-l"><input type="checkbox" id="po-detcut"> Círculos de detalle también sin fondo</label>
       </div>
       <div class="pstep hidden" data-s="2">
         <p class="hint">Elige el diseño que más te guste:</p>
@@ -123,18 +124,18 @@
       <div class="pstep hidden" data-s="3">
         <button id="po-ai" class="big">✨ Que Viernes me sugiera los textos</button>
         <div class="form">
-        <label>Nombre grande <input id="po-title" value="Collar"></label>
-        <label>Segunda línea <input id="po-sub" value="estilo chicle"></label>
-        <label>Frase <input id="po-pill" value="Colorido • Divertido • Único"></label>
-        <label>Precio <input id="po-price" value="₡7.000" inputmode="numeric"></label>
+        <label>Nombre grande (corto se ve mejor) <input id="po-title" value="Collar" maxlength="28"></label>
+        <label>Segunda línea <input id="po-sub" value="estilo chicle" maxlength="40"></label>
+        <label>Frase <input id="po-pill" maxlength="48" value="Colorido • Divertido • Único"></label>
+        <label>Precio <input id="po-price" value="₡7.000" maxlength="14"></label>
         <label>Cualidades (una por renglón)<textarea id="po-feat" rows="4">Diseño atrevido
 Toque de corazón
 Fácil de combinar
 Ideal para regalar</textarea></label>
         <details open><summary>Textos para plantillas especiales</summary>
-        <label>Precio antes (Oferta) <input id="po-old" value="₡9.000"></label>
-        <label>Nombre (Personalizada) <input id="po-name" value="Sofía"></label>
-        <label>Comentario de la clienta (Testimonio) <textarea id="po-quote" rows="2">¡Me encantó! Super bonita, bien hecha y llegó rapidísimo 💕</textarea></label>
+        <label>Precio antes (Oferta) <input id="po-old" maxlength="14" value="₡9.000"></label>
+        <label>Nombre (Personalizada) <input id="po-name" maxlength="12" value="Sofía"></label>
+        <label>Comentario de la clienta (Testimonio) <textarea id="po-quote" rows="2" maxlength="180">¡Me encantó! Super bonita, bien hecha y llegó rapidísimo 💕</textarea></label>
         <label>Nombre de la clienta <input id="po-client" value="María F."></label>
         <label>Tu WhatsApp (Pedidos y Catálogo) <input id="po-wa" inputmode="tel" placeholder="8888-8888"></label>
         </details>

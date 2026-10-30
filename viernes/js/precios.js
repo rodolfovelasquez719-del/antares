@@ -29,7 +29,7 @@ export function initPrecios(onAsk) {
   $("pc-ranges").innerHTML = '<div class="card" style="padding:0">' + RANGES.map(([t, r, s]) => `<div class="rg"><div>${t}<small>Visto en: ${s}</small></div><b>${r}</b></div>`).join("") + "</div>";
   $("pc-ideas").innerHTML = IDEAS.map(([t, d]) => `<div class="idea"><b>${t}</b><span>${d}</span></div>`).join("");
   const calc = () => {
-    const mat = +$("pc-mat").value || 0, min = +$("pc-min").value || 0, emp = +$("pc-emp").value || 0, hora = +$("pc-hora").value || 0, mar = +$("pc-mar").value;
+    const num = (id) => Math.max(0, Math.min(1e7, +$(id).value || 0)), mat = num("pc-mat"), min = num("pc-min"), emp = num("pc-emp"), hora = num("pc-hora"), mar = +$("pc-mar").value;
     const costo = mat + emp + (min / 60) * hora, precio = Math.max(500, Math.ceil(costo * (1 + mar / 100) / 500) * 500);
     $("pc-out").textContent = fmt(precio);
     $("pc-det").textContent = `Costo ${fmt(costo)} · te quedan ${fmt(precio - mat - emp)} por tu trabajo y ganancia`;
