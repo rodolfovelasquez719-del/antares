@@ -676,7 +676,7 @@ function correr(conTest) {
     try { new Function(bloques[k]); } catch (e) {
       if (!(e instanceof SyntaxError)) continue;
       const donde = k < i ? ` <b>(en su código de la lección ${k + 1}; vaya a esa lección y corríjalo)</b>` : "";
-      feedback("mal", `🤖 ¡Uy! Hay un error de escritura${donde}.<br>${amable(e.message) || amable("SyntaxError")}<br><small style="color:var(--dim)">Mensaje técnico: ${esc(e.message)}</small>`);
+      feedback("mal", `🤖 ¡Uy! El código no se pudo leer${donde}.<br>${amable(e.message) || amable("SyntaxError")}<br><small style="color:var(--dim)">Mensaje técnico: ${esc(e.message)}</small>`);
       $("marco").srcdoc = construirDoc(bloques.slice(0, k), "", id);
       return;
     }
