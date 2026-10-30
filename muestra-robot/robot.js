@@ -575,16 +575,28 @@ let pasos = 0;`,
 // ---------- Estado ----------
 // Lista completa: Módulo 0 (claves "b0".."b9") + lecciones del robot (claves 0..14, igual que antes: el progreso viejo se conserva).
 const M0 = window.ROBOT_M0 || [], EX = window.ROBOT_EXTRAS || [];
-const TODO = M0.map((l, k) => ({ l, k, basico: true, clave: "b" + k, num: "0." + (k + 1) }))
-  .concat(L.map((l, k) => ({ l: Object.assign({}, l, EX[k] || {}), k, basico: false, clave: String(k), num: String(k + 1) })));
+// v2: cada lección tiene una clave fija (id), así insertar lecciones nuevas no mueve el progreso guardado.
+const REP = window.ROBOT_REPASOS || {}, RUTA = window.ROBOT_RUTA;
+const TODO = M0.map((l, k) => ({ l, k, basico: true, tipo: l.quiz ? "quiz" : "basico", modulo: 0, clave: l.id || "b" + k, num: "0." + (k + 1) }));
+L.forEach((l, k) => {
+  TODO.push({ l: Object.assign({}, l, EX[k] || {}), k, basico: false, tipo: "robot", modulo: 1, clave: String(k), num: "1." + (k + 1) });
+  for (const id in REP) if (REP[id].despues === k) TODO.push({ l: REP[id].l, k, basico: false, tipo: "quiz", modulo: 1, clave: id, num: "R" });
+});
+if (RUTA) TODO.push({ l: RUTA, k: 0, basico: false, tipo: "info", modulo: 2, clave: "ruta", num: "🗺️" });
 let est = { codigos: {}, hechas: {}, actual: 0 };
 try { Object.assign(est, JSON.parse(localStorage.getItem(CLAVE) || "{}")); } catch {}
 const guardar = () => { try { localStorage.setItem(CLAVE, JSON.stringify(est)); $("guardado").textContent = "guardado ✓"; } catch {} };
 if (!(est.actual >= 0 && est.actual < L.length)) est.actual = 0;
-if (!(est.pos >= 0 && est.pos < TODO.length)) {
-  // Progreso anterior a esta versión: si ya había avanzado en el robot, sigue ahí; si no, empieza desde cero.
-  const habia = Object.keys(est.hechas).some((k) => /^\d+$/.test(k)) || Object.keys(est.codigos).some((k) => /^\d+$/.test(k) && est.codigos[k]);
-  est.pos = habia ? M0.length + est.actual : 0;
+{
+  // Compatibilidad: v2 guarda la clave de la lección (posClave). v1.5 guardaba la posición con 10 lecciones de Módulo 0; v1, solo "actual".
+  let clave = est.posClave;
+  if (!clave && est.pos >= 0) clave = est.pos < 10 ? "b" + est.pos : String(est.pos - 10);
+  if (!clave) {
+    const habia = Object.keys(est.hechas).some((k) => /^\d+$/.test(k)) || Object.keys(est.codigos).some((k) => /^\d+$/.test(k) && est.codigos[k]);
+    clave = habia ? String(est.actual) : TODO[0].clave;
+  }
+  const i = TODO.findIndex((it) => it.clave === clave);
+  est.pos = i >= 0 ? i : 0;
 }
 const cur = () => TODO[est.pos];
 
@@ -594,9 +606,9 @@ function codigoHasta(i) { return L.slice(0, i).map((_, k) => est.codigos[k] || "
 function pintarLista() {
   const ul = $("lista"); ul.innerHTML = "";
   TODO.forEach((it, i) => {
-    if (i === 0 || i === M0.length) {
+    if (i === 0 || TODO[i - 1].modulo !== it.modulo) {
       const h = document.createElement("li"); h.className = "modulo";
-      h.textContent = i === 0 ? "MÓDULO 0 · DESDE CERO" : "MÓDULO 1 · ROBOT EN EL LABERINTO"; ul.appendChild(h);
+      h.textContent = ["MÓDULO 0 · DESDE CERO", "MÓDULO 1 · ROBOT EN EL LABERINTO", "SIGUIENTES PASOS"][it.modulo]; ul.appendChild(h);
     }
     const li = document.createElement("li"), b = document.createElement("button");
     const hecha = !!est.hechas[it.clave];
@@ -624,32 +636,49 @@ function htmlQuiz(q) {
     `<label><input type="radio" name="q${n}" value="${k}"> ${o}</label>`).join("")}<div class="qfb"></div></fieldset>`).join("")}</div>`;
 }
 
+function htmlResumen(l, abierto) {
+  if (!l.resumen) return "";
+  return `<details class="resumen"${abierto ? " open" : ""}><summary>🧠 Lo que aprendió</summary><ul>${l.resumen.map((r) => `<li>${esc(r)}</li>`).join("")}</ul></details>`;
+}
+
+// Repaso espaciado: una pregunta de una lección ya completada (cambia según la lección).
+function htmlRepasoRapido(i) {
+  const pool = [];
+  TODO.slice(0, i).forEach((it) => { if (it.l.quiz && est.hechas[it.clave]) it.l.quiz.forEach((q) => pool.push(q)); });
+  if (!pool.length) return "";
+  const q = pool[(i * 7 + new Date().getDate()) % pool.length];
+  return `<details class="repaso"><summary>🔁 Repaso rápido (de lecciones anteriores)</summary><p>${q.p}</p><ol type="a">${q.o.map((o) => `<li>${o}</li>`).join("")}</ol><details><summary>Ver respuesta</summary><p>✓ <b>${q.o[q.r]}</b> — ${q.x}</p></details></details>`;
+}
+
 function abrir(i) {
   est.pos = i; const it = cur(), l = it.l;
-  if (!it.basico) est.actual = it.k;
+  est.posClave = it.clave;
+  if (it.tipo === "robot") est.actual = it.k;
   guardar();
-  const total = it.basico ? M0.length : L.length;
-  $("titulo").textContent = `${it.basico ? "MÓDULO 0 · LECCIÓN " + (it.k + 1) : "LECCIÓN " + (it.k + 1)} DE ${total} · ${l.t}`;
+  const delMod = TODO.filter((x) => x.modulo === it.modulo), n = delMod.indexOf(it) + 1;
+  $("titulo").textContent = it.tipo === "info" ? l.t : `MÓDULO ${it.modulo} · ${n} DE ${delMod.length} · ${l.t}`;
   $("concepto").textContent = l.c;
-  $("explicacion").innerHTML = l.e + htmlPartes(l) + (l.quiz ? htmlQuiz(l.quiz) : "") +
-    `<div class="tarea"><b>✍️ AHORA USTED</b><br>${l.tarea}</div>` +
-    (l.reto ? `<div class="reto"><b>🚀 RETO (hágalo solo, sin solución)</b><br>${l.reto}<br><small>Escríbalo debajo de su código y pulse Probar para verlo funcionar.</small></div>` : "");
-  const esQuiz = !!l.quiz;
-  ["editor", "pista", "verSol"].forEach((id) => { $(id).hidden = esQuiz && id !== "pista"; });
+  $("explicacion").innerHTML = htmlRepasoRapido(i) + l.e + htmlPartes(l) + (l.quiz ? htmlQuiz(l.quiz) : "") +
+    `<div class="tarea"><b>${l.quiz || l.info ? "✔️ QUÉ HACER" : "✍️ AHORA USTED"}</b><br>${l.tarea}</div>` +
+    (l.reto ? `<div class="reto"><b>🚀 RETO (hágalo solo, sin solución)</b><br>${l.reto}<br><small>Escríbalo debajo de su código y pulse Probar para verlo funcionar.</small></div>` : "") +
+    htmlResumen(l, false);
+  const esQuiz = !!(l.quiz || l.info);
+  ["editor", "pista", "verSol"].forEach((id) => { $(id).hidden = esQuiz && !(id === "pista" && l.pista); });
   $("edlabel").parentElement.hidden = esQuiz;
-  $("probar").textContent = esQuiz ? "✔ REVISAR RESPUESTAS" : "▶ PROBAR";
+  $("probar").textContent = l.info ? "✔ MARCAR COMO LEÍDO" : esQuiz ? "✔ REVISAR RESPUESTAS" : "▶ PROBAR";
   $("marco").hidden = esQuiz;
   $("marco").className = it.basico ? "basico" : "";
   ed.value = est.codigos[it.clave] || "";
   $("guardado").textContent = "";
   $("solucion").className = "sol"; $("solucion").innerHTML = "";
-  $("descargar").hidden = it.basico || it.k !== L.length - 1;
+  $("descargar").hidden = !(it.tipo === "robot" && it.k === L.length - 1);
   $("ant").disabled = i === 0; $("sig").disabled = i === TODO.length - 1;
   feedback(est.hechas[it.clave] ? "ok" : "", est.hechas[it.clave] ? "✓ Ya completó esta lección. Puede volver a probarla o hacer el reto." : "");
-  $("todo").parentElement.parentElement.hidden = it.basico;
+  $("todo").parentElement.parentElement.hidden = it.tipo !== "robot";
   $("todo").textContent = codigoHasta(it.basico ? 0 : it.k).filter((c) => c.trim()).join("\n\n") || "(todavía nada)";
   pintarLista();
   if (!esQuiz) correr(false);
+  if (est.hechas[it.clave] && esQuiz) feedback("ok", "✓ Ya completó esta parte.");
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -663,7 +692,7 @@ function revisarQuiz() {
   });
   if (bien === q.length) {
     est.hechas[cur().clave] = true; guardar(); pintarLista();
-    feedback("ok", `✅ ¡${bien} de ${q.length}! Terminó el Módulo 0. Ya tiene las bases para programar el robot.<br><button class="btn prim" style="margin-top:8px" onclick="document.getElementById('sig').click()">Empezar el robot →</button>`);
+    feedback("ok", `✅ ¡${bien} de ${q.length}! ${cur().l.fin || ""}${botonSig()}`);
   } else feedback("mal", `Lleva ${bien} de ${q.length}. Lea las explicaciones en rojo y vuelva a intentarlo.`);
 }
 
@@ -755,6 +784,7 @@ window.addEventListener("message", (ev) => {
   const m = ev.data;
   if (!m || m.__robot !== corrida || ev.source !== $("marco").contentWindow) return;
   const it = cur(), i = it.basico ? 0 : it.k;
+  if (it.tipo !== "basico" && it.tipo !== "robot") return;
   if (m.tipo === "error") {
     const donde = m.bloque >= 0 && m.bloque < i ? ` <b>(el error está en su código de la lección ${m.bloque + 1}; vaya a esa lección y corríjalo)</b>` :
       m.bloque === i && m.linea ? ` <b>(cerca de la línea ${m.linea})</b>` : "";
@@ -764,7 +794,7 @@ window.addEventListener("message", (ev) => {
     if (m.ok) {
       est.hechas[it.clave] = true; guardar(); pintarLista();
       const reto = it.l.reto ? `<br>🚀 Ahora intente el <b>reto</b> de arriba, usted solo.` : "";
-      feedback("ok", `✅ ${m.msg}${reto}${est.pos < TODO.length - 1 ? `<br><button class="btn prim" style="margin-top:8px" onclick="document.getElementById('sig').click()">Siguiente lección →</button>` : ""}`);
+      feedback("ok", `✅ ${m.msg}${reto}${htmlResumen(it.l, true)}${botonSig()}`);
     } else feedback("mal", `🤔 Casi. ${m.msg}`);
   }
 });
@@ -774,7 +804,10 @@ ed.addEventListener("input", () => { est.codigos[cur().clave] = ed.value; $("gua
 ed.addEventListener("keydown", (e) => {
   if (e.key === "Tab") { e.preventDefault(); const s = ed.selectionStart; ed.setRangeText("  ", s, ed.selectionEnd, "end"); ed.dispatchEvent(new Event("input")); }
 });
-$("probar").onclick = () => { if (cur().l.quiz) return revisarQuiz(); est.codigos[cur().clave] = ed.value; guardar(); correr(true); };
+function botonSig() { return est.pos < TODO.length - 1 ? `<br><button class="btn prim" style="margin-top:8px" onclick="document.getElementById('sig').click()">Siguiente lección →</button>` : ""; }
+$("probar").onclick = () => {
+  if (cur().l.info) { est.hechas[cur().clave] = true; guardar(); pintarLista(); return feedback("ok", `✅ ${cur().l.fin}${htmlResumen(cur().l, true)}`); }
+  if (cur().l.quiz) return revisarQuiz(); est.codigos[cur().clave] = ed.value; guardar(); correr(true); };
 $("pista").onclick = () => feedback("info", "💡 " + cur().l.pista);
 $("verSol").onclick = () => {
   const s = $("solucion");
@@ -784,7 +817,7 @@ $("verSol").onclick = () => {
 };
 $("ant").onclick = () => est.pos > 0 && abrir(est.pos - 1);
 $("sig").onclick = () => est.pos < TODO.length - 1 && abrir(est.pos + 1);
-$("reiniciarTodo").onclick = () => { if (confirm("¿Borrar todo su código y progreso de este tutorial?")) { est = { codigos: {}, hechas: {}, actual: 0, pos: 0 }; guardar(); abrir(0); } };
+$("reiniciarTodo").onclick = () => { if (confirm("¿Borrar todo su código y progreso de este tutorial?")) { est = { codigos: {}, hechas: {}, actual: 0, pos: 0, posClave: TODO[0].clave }; guardar(); abrir(0); } };
 $("descargar").onclick = () => {
   const codigo = codigoHasta(L.length).filter((c) => c.trim()).join("\n\n");
   const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mi robot en el laberinto</title><style>${HARNESS_CSS}</style></head><body>${HARNESS_HTML}<script>\n${codigo.replace(/<\/script/gi, "<\\/script")}\n<\/script></body></html>`;
@@ -795,6 +828,16 @@ $("descargar").onclick = () => {
 };
 
 // Para las pruebas automáticas (no se usa en la app): window.__robotTutorial
+// Glosario
+(function () {
+  const g = window.ROBOT_GLOSARIO || [], cont = $("glosarioLista");
+  const pintar = (f) => { const t = (f || "").toLowerCase(); cont.innerHTML = g.filter(([a, b]) => !t || (a + " " + b).toLowerCase().includes(t)).map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join("") || "<dd>Sin resultados.</dd>"; };
+  $("btnGlosario").onclick = () => { $("glosario").hidden = false; pintar(""); $("glosarioBuscar").value = ""; };
+  $("cerrarGlosario").onclick = () => { $("glosario").hidden = true; };
+  $("glosarioBuscar").oninput = (e) => pintar(e.target.value);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("glosario").hidden = true; });
+})();
+
 window.__robotTutorial = { L, M0, TODO, est: () => est, abrir };
 abrir(est.pos);
 })();
