@@ -311,7 +311,7 @@ export async function initPoster() {
   $("po-ai").onclick = busy($("po-ai"), async () => {
     if (!hasKey()) return toast("Para sugerencias, Freddy tiene que preparar Viernes 💜");
     $("po-ai").textContent = "✨ Pensando…";
-    const r = await askViernes([{ role: "user", text: `Para un póster de venta de este producto hecho a mano: "${val("po-title")} ${val("po-sub")}" (${val("po-price")}). Responde SOLO JSON: {"title":"1-2 palabras","sub":"máx 5 palabras","pill":"3 palabras separadas por •","feats":["4 cualidades de máx 4 palabras"],"d1":"máx 4 palabras","d2":"máx 4 palabras"}` }], { json: true });
+    const r = await askViernes([{ role: "user", text: `Para un póster de venta de este producto hecho a mano: "${val("po-title")} ${val("po-sub")}" (${val("po-price")}). Responde SOLO JSON: {"title":"1-2 palabras","sub":"máx 5 palabras","pill":"3 palabras separadas por •","feats":["4 cualidades de máx 4 palabras"],"d1":"máx 4 palabras","d2":"máx 4 palabras"}` }], { json: true, system: "Eres redactora de pósteres de venta para una tienda tica de bisutería hecha a mano. Responde solo el JSON pedido, en español, sin saludos. El title es el tipo de producto (ej. Collar, Pulsera, Set) y el sub su estilo o nombre." });
     $("po-ai").textContent = "✨ Que Viernes me sugiera los textos";
     try { const j = JSON.parse(r.text.replace(/```json|```/g, "")); const setv = (id, v) => { const e = $(id); if (v != null) e.value = String(v).slice(0, e.maxLength > 0 ? e.maxLength : 200); };
       setv("po-title", j.title); setv("po-sub", j.sub); setv("po-pill", j.pill); setv("po-feat", (j.feats || []).map((t) => String(t).slice(0, 40)).join("\n")); setv("po-d1", j.d1); setv("po-d2", j.d2); drawPoster(); toast("¡Textos listos! ✨"); }

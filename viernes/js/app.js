@@ -4,7 +4,7 @@ import { initEditor } from "./editor.js";
 import { initPoster, initCollage } from "./poster.js";
 import { initPrecios } from "./precios.js";
 import { loadCanvas, busy } from "./img.js";
-export const VERSION = "0.4.1";
+export const VERSION = "0.4.2";
 const $ = (id) => document.getElementById(id);
 const CFG = "viernes.config.v1", CHAT = "viernes.chat.v1";
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
@@ -47,7 +47,7 @@ let taps = 0; document.querySelector(".orb").onclick = () => { if (++taps >= 5) 
 let chat = load(CHAT, []);
 const log = $("chat-log");
 function bubble(role, text, extra = "") {
-  const d = document.createElement("div"); d.className = "msg " + (role === "user" ? "me" : "v"); d.textContent = text;
+  const d = document.createElement("div"); d.className = "msg " + (role === "user" ? "me" : "v"); if (role === "user") d.textContent = text; else d.innerHTML = md(text);
   if (extra) d.insertAdjacentHTML("beforeend", extra);
   log.appendChild(d); d.scrollIntoView({ block: "end" }); return d;
 }
@@ -63,7 +63,7 @@ async function send(text) {
   chat.push({ role: "user", text }); bubble("user", text);
   const t = bubble("v", "Pensando"); t.classList.add("typing");
   const r = await askViernes(chat.slice(-12).filter((m, i, a) => i > 0 || m.role === "user"), { search: /\b(hoy|precio|dónde|donde|horario|noticia|clima|tendencia|cuánto|cuanto|abre)\b/i.test(text) });
-  t.classList.remove("typing"); t.textContent = r.text;
+  t.classList.remove("typing"); t.innerHTML = md(r.text);
   if (r.ok) { chat.push({ role: "model", text: r.text }); save(CHAT, chat.slice(-60)); } else chat.pop();
 }
 let sending = false;
@@ -80,6 +80,8 @@ $("mic").onclick = () => {
 };
 
 // ---- Buscar (con Google Search de Gemini) ----
+export const plain = (t) => String(t).replace(/\*\*(.+?)\*\*/g, "$1").replace(/^\s*[*-]\s+/gm, "• ").replace(/^#+\s*/gm, "").replace(/^\*{3,}$/gm, "");
+const md = (t) => esc(plain(String(t).replace(/\*\*(.+?)\*\*/g, "\u0001$1\u0002"))).replace(/\u0001/g, "<b>").replace(/\u0002/g, "</b>");
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 let searching = false;
 async function search(q) {
@@ -88,7 +90,7 @@ async function search(q) {
   searching = true; setTimeout(() => searching = false, 1500);
   const o = $("search-out"); o.classList.remove("hidden"); o.innerHTML = '<span class="typing">Buscando</span>';
   const r = await askViernes([{ role: "user", text: q }], { search: true });
-  o.innerHTML = esc(r.text) + (r.sources && r.sources.length ? "<hr><b>Fuentes:</b><br>" + r.sources.map((s) => `• <a href="${esc(s.uri)}" target="_blank" rel="noopener">${esc(s.title || "fuente")}</a>`).join("<br>") : "");
+  o.innerHTML = md(r.text) + (r.sources && r.sources.length ? "<hr><b>Fuentes:</b><br>" + r.sources.map((s) => `• <a href="${esc(s.uri)}" target="_blank" rel="noopener">${esc(s.title || "fuente")}</a>`).join("<br>") : "");
 }
 $("search-form").onsubmit = (e) => { e.preventDefault(); search($("search-in").value); };
 $("search-chips").onclick = (e) => { if (e.target.tagName === "BUTTON") { $("search-in").value = e.target.textContent; search(e.target.textContent); } };
@@ -112,14 +114,14 @@ $("tx-go").onclick = busy($("tx-go"), async () => {
   if (!hasKey()) return show("v-nokey");
   const o = $("tx-out"); o.classList.remove("hidden"); o.innerHTML = '<span class="typing">Escribiendo</span>';
   const r = await askViernes([{ role: "user", text: `Escribe ${KIND[kind().k]} para este producto hecho a mano por Wendy: ${$("tx-in").value || "(mira la foto)"}. Además da 2 opciones de título corto para póster. Solo el texto listo para copiar.` }], { image: txImg });
-  o.innerHTML = esc(r.text) + (r.ok ? '<br><button class="pri big" id="tx-copy">📋 Copiar texto</button>' : "");
-  if (r.ok) $("tx-copy").onclick = () => navigator.clipboard.writeText(r.text).then(() => toast("Copiado ✅"));
+  o.innerHTML = md(r.text) + (r.ok ? '<br><button class="pri big" id="tx-copy">📋 Copiar texto</button>' : "");
+  if (r.ok) $("tx-copy").onclick = () => navigator.clipboard.writeText(plain(r.text)).then(() => toast("Copiado ✅"));
 });
 $("id-go").onclick = busy($("id-go"), async () => {
   if (!hasKey()) return show("v-nokey");
   const o = $("id-out"); o.classList.remove("hidden"); o.innerHTML = '<span class="typing">Imaginando</span>';
   const r = await askViernes([{ role: "user", text: `Dame 6 ideas de nuevos diseños de pulseras, collares o accesorios hechos a mano para vender en Costa Rica${$("id-in").value ? " sobre: " + $("id-in").value : ""}. Para cada una: nombre bonito, materiales, combinación de colores (nombres de colores), público ideal y precio sugerido en colones. Formato corto con emojis.` }], { search: true });
-  o.innerHTML = esc(r.text);
+  o.innerHTML = md(r.text);
 });
 
 // ---- Visión ----
@@ -152,7 +154,7 @@ Al final, en una línea aparte, escribe exactamente: BUSCAR: <nombre corto del p
     ["Maxi Palí", `https://www.google.com/search?q=${enc(term + " Maxi Palí Costa Rica")}`],
     ["Automercado", `https://www.google.com/search?q=${enc(term + " site:automercado.cr")}`],
     ["Amazon (traer por Aeropost)", `https://www.amazon.com/s?k=${t}`]] : [];
-  o.innerHTML = esc(text) + (r.ok ? '<p class="hint">💡 Los precios son aproximados; confírmalos en la tienda.</p>' : "") +
+  o.innerHTML = md(text) + (r.ok ? '<p class="hint">💡 Los precios son aproximados; confírmalos en la tienda.</p>' : "") +
     (r.sources && r.sources.length ? "<b>Fuentes:</b><br>" + r.sources.map((s) => `• <a href="${esc(s.uri)}" target="_blank" rel="noopener">${esc(s.title || "fuente")}</a>`).join("<br>") : "") +
     (stores.length ? `<div class="links"><b>Buscar «${esc(term)}» en:</b>` + stores.map(([n, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(n)} ›</a>`).join("") + "</div>" : "");
 }
