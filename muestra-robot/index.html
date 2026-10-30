@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#020805"><meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="icon" href="../icons/icon-192.png"><link rel="apple-touch-icon" href="../icons/icon-192.png">
+<title>Antares · Aprende a programar: Robot en el laberinto (muestra)</title>
+<style>
+@font-face{font-family:Orbitron;src:url(../fonts/orbitron-latin.woff2) format("woff2");font-weight:400 900;font-display:swap}
+@font-face{font-family:Rajdhani;src:url(../fonts/rajdhani-600-latin.woff2) format("woff2");font-weight:500 700;font-display:swap}
+:root{--bg:#020805;--panel:#03100a;--borde:#1d5a3c;--txt:#e3fff1;--dim:#8fbfa6;--verde:#00ff9c;--rojo:#ff2d4a;--hud:Orbitron,system-ui,sans-serif;--ui:Rajdhani,system-ui,sans-serif;--mono:ui-monospace,Menlo,Consolas,"Roboto Mono",monospace}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--ui);font-size:17px;-webkit-text-size-adjust:100%;touch-action:manipulation}
+body{min-height:100vh;background:radial-gradient(600px 400px at 50% 0,rgba(0,255,156,.09),transparent 70%),
+ linear-gradient(rgba(0,255,156,.03) 1px,transparent 1px) 0 0/100% 28px,linear-gradient(90deg,rgba(0,255,156,.03) 1px,transparent 1px) 0 0/28px 100%,var(--bg);
+ padding:calc(env(safe-area-inset-top) + 10px) 12px calc(env(safe-area-inset-bottom) + 30px)}
+header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;max-width:1100px;margin:0 auto 10px}
+.volver{font:600 13px var(--ui);color:var(--dim);text-decoration:none;border:1px solid var(--borde);border-radius:10px;padding:6px 10px;background:#03100acc}
+h1{margin:0;flex:1;font:700 16px var(--hud);letter-spacing:2px;text-shadow:0 0 10px rgba(0,255,156,.55)}
+.muestra{font:700 9px var(--hud);letter-spacing:2px;color:var(--rojo)}
+.barra{max-width:1100px;margin:0 auto 10px;height:6px;border-radius:4px;background:#0a2216;overflow:hidden}
+.barra i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--verde),#7dffd0);box-shadow:0 0 10px var(--verde);transition:width .4s}
+.layout{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:250px minmax(0,1fr);gap:12px}.layout>*{min-width:0}
+@media(max-width:820px){.layout{grid-template-columns:minmax(0,1fr)}}
+.panel{background:linear-gradient(180deg,#041a10cc,#020c07cc);border:1px solid var(--borde);border-radius:14px;padding:12px;box-shadow:inset 0 0 22px rgba(0,255,156,.05)}
+#lista{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+@media(max-width:820px){#lista{flex-direction:row;overflow-x:auto;padding-bottom:6px;scroll-snap-type:x mandatory}#lista li{flex:none;scroll-snap-align:start}}
+#lista button{width:100%;text-align:left;display:flex;gap:8px;align-items:center;background:#020c07;color:var(--txt);border:1px solid #123b28;border-radius:10px;padding:8px 10px;font:600 15px var(--ui);cursor:pointer}
+#lista button .n{font:700 11px var(--hud);color:var(--dim);min-width:22px}
+#lista button .ck{margin-left:auto;color:var(--verde);font-weight:700}
+#lista button.act{border-color:var(--verde);box-shadow:0 0 10px rgba(0,255,156,.35)}
+#lista button.hecha .n{color:var(--verde)}
+.tit{font:700 15px var(--hud);letter-spacing:1px;color:var(--verde);margin:0 0 4px}
+.concepto{font:700 10px var(--hud);letter-spacing:2px;color:var(--rojo);margin:0 0 8px}
+.exp{line-height:1.45}
+.exp code,.sol code{font-family:var(--mono);font-size:14px;background:#06261a;border:1px solid #11402a;border-radius:5px;padding:0 4px;color:#b9ffe0}
+.exp pre,.sol pre{font-family:var(--mono);font-size:13.5px;background:#010805;border:1px solid #11402a;border-radius:10px;padding:10px;overflow-x:auto;color:#b9ffe0;white-space:pre}
+.tarea{border-left:3px solid var(--rojo);padding:6px 10px;background:#1a050a66;border-radius:0 10px 10px 0;margin:10px 0}
+.tarea b{color:#ff8c9c;font-family:var(--hud);font-size:11px;letter-spacing:1px}
+.edhead{display:flex;justify-content:space-between;align-items:center;margin:10px 0 4px;font:700 11px var(--hud);letter-spacing:1px;color:var(--dim)}
+textarea#editor{width:100%;min-height:230px;resize:vertical;background:#010604;color:#c8ffe6;border:1px solid var(--borde);border-radius:12px;padding:10px;
+ font:15px/1.5 var(--mono);caret-color:var(--verde);tab-size:2;outline:none}
+textarea#editor:focus{border-color:var(--verde);box-shadow:0 0 12px rgba(0,255,156,.3)}
+.botones{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.btn{font:700 13px var(--hud);letter-spacing:1px;padding:11px 14px;border-radius:12px;border:1px solid var(--borde);background:#03140c;color:var(--txt);cursor:pointer;min-height:44px}
+.btn.prim{background:linear-gradient(180deg,#00ff9c,#00c47a);color:#00160c;border-color:var(--verde);box-shadow:0 0 14px rgba(0,255,156,.45)}
+.btn.rojo{border-color:#6b1a27;color:#ff8c9c}
+.btn:active{transform:scale(.97)}
+#feedback{margin-top:10px;padding:10px 12px;border-radius:12px;display:none;line-height:1.4}
+#feedback.ok{display:block;background:#00ff9c18;border:1px solid var(--verde)}
+#feedback.mal{display:block;background:#ff2d4a18;border:1px solid var(--rojo)}
+#feedback.info{display:block;background:#0a2216;border:1px solid var(--borde)}
+.sol{display:none;margin-top:10px}
+.sol.ver{display:block}
+.vista{display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:12px}
+#marco{width:min(100%,340px);aspect-ratio:340/525;border:1px solid var(--borde);border-radius:14px;background:#000;box-shadow:0 0 18px rgba(0,255,156,.18)}
+details{margin-top:10px}summary{cursor:pointer;color:var(--dim);font-weight:700}
+.nav{display:flex;justify-content:space-between;margin-top:12px;gap:8px}
+</style></head>
+<body>
+<header>
+  <a class="volver" href="../">← Antares</a>
+  <h1>APRENDE A PROGRAMAR · ROBOT EN EL LABERINTO</h1>
+  <span class="muestra">MUESTRA</span>
+</header>
+<div class="barra"><i id="progreso"></i></div>
+<div class="layout">
+  <nav class="panel"><ul id="lista"></ul>
+    <div class="botones"><button class="btn rojo" id="reiniciarTodo">Borrar progreso</button></div></nav>
+  <main class="panel">
+    <p class="tit" id="titulo"></p>
+    <p class="concepto" id="concepto"></p>
+    <div class="exp" id="explicacion"></div>
+    <div class="edhead"><span id="edlabel">SU CÓDIGO DE ESTA LECCIÓN</span><span id="guardado"></span></div>
+    <textarea id="editor" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" placeholder="Escriba aquí su código…"></textarea>
+    <div class="botones">
+      <button class="btn prim" id="probar">▶ PROBAR</button>
+      <button class="btn" id="pista">💡 PISTA</button>
+      <button class="btn" id="verSol">VER SOLUCIÓN</button>
+      <button class="btn" id="descargar" hidden>⬇ DESCARGAR JUEGO</button>
+    </div>
+    <div id="feedback"></div>
+    <div class="sol" id="solucion"></div>
+    <div class="vista"><iframe id="marco" sandbox="allow-scripts" title="Vista previa del juego"></iframe></div>
+    <details><summary>Ver todo su programa hasta ahora</summary><div class="sol ver"><pre id="todo"></pre></div></details>
+    <div class="nav"><button class="btn" id="ant">← Anterior</button><button class="btn" id="sig">Siguiente →</button></div>
+  </main>
+</div>
+<script src="robot.js"></script>
+</body></html>
