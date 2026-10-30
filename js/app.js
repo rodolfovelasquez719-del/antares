@@ -25,7 +25,7 @@ import * as Tools from "./tools.js";
 import * as Photo from "./photo.js";
 import * as Code from "./code.js";
 import * as Sheet from "./sheet.js";
-import * as Brain from "./brain.js";
+import * as Brain from "./pulpo.js"; // v1.28: el pulpo holográfico reemplaza al cerebro (mismo contrato: setMode, word, setSpeaking…)
 import * as Hud from "./hud.js";
 import { mountAvatar, mountAvatarVideo, setAvatarState } from "./avatar.js";
 import { openVision, closeVision } from "./vision.js";
@@ -41,7 +41,7 @@ import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.27.0";
+const APP_VERSION = "1.28.0";
 // v1.25.1: emparejar con el QR de la compu (#pc-token=…). Se lee y se borra del enlace de inmediato (no queda en el historial).
 let pcEmparejar = null, pcEmparejando = false;
 try {
@@ -209,6 +209,74 @@ function ensure3D() {
   } });
   clearInterval(av3Vis);
   av3Vis = setInterval(() => { if (!av3Mounted) { clearInterval(av3Vis); return; } Av3.setVisible(!!(wrap && wrap.offsetParent && wrap.offsetWidth > 40 && els.settingsView.hidden)); }, 800);
+}
+
+// ---------- v1.28: Antares Pulpo en Inicio: 8 brazos = accesos reales; estados reales cuando se puede ----------
+let pulpoI = null, saludAlertas = [];
+const BRAZOS_PULPO = [
+  { id: "rutas", n: "Rutas", d: "Planear viajes y entregas con Ruta (Inteligencias).", abrir: () => showPanel("inteligencias") },
+  { id: "salud", n: "Salud de ANTARES", d: "Temperatura, disco, memoria y cerebro local de la PC (Mi compu).", abrir: () => (PC.PC_ENABLED ? openMiCompu() : showPanel("inteligencias")) },
+  { id: "noticias", n: "Noticias", d: "Resumen del día: clima, tipo de cambio y titulares.", abrir: () => showPanel("noticias") },
+  { id: "estudio", n: "Estudio", d: "Trivia y repasos para estudiar a su ritmo.", abrir: () => showPanel("trivia") },
+  { id: "recordatorios", n: "Recordatorios", d: "Sus citas, pagos y tareas con aviso.", abrir: () => showPanel("recordatorios") },
+  { id: "juegos", n: "Juegos", d: "Damas contra Antares y más.", abrir: () => showPanel("damas") },
+  { id: "vision", n: "Visión", d: "La cámara: lee textos y describe lo que ve.", abrir: () => document.getElementById("vision-btn")?.click() },
+  { id: "memoria", n: "Memoria", d: "Lo que Antares recuerda de usted (en Ajustes).", abrir: () => openSettings({ scrollTo: "facts-list" }) },
+];
+const EST_PULPO = { idle: "en reposo", pensando: "con novedades", alerta: "¡requiere su atención!" };
+function hojaPulpo(d) {
+  const h = document.getElementById("pulpo-hoja"); if (!h) { d.abrir(); return; }
+  const b = pulpoI?.brazos.find((x) => x.id === d.id), e = b ? b.e : "idle";
+  h.querySelector(".ph-t").textContent = d.n;
+  h.querySelector(".ph-e").textContent = "Estado: " + EST_PULPO[e] + (b && b.el && b.el.title ? " · " + b.el.title : "");
+  h.querySelector(".ph-d").textContent = d.d;
+  h.classList.toggle("alerta", e === "alerta");
+  h.querySelector(".ph-abrir").hidden = false; h.querySelector(".ph-abrir").onclick = () => { cerrarHojaPulpo(); setTimeout(() => d.abrir(), 120); };
+  h.hidden = false; requestAnimationFrame(() => h.classList.add("ver"));
+  h.querySelector(".ph-abrir").focus({ preventScroll: true });
+}
+function cerrarHojaPulpo() { const h = document.getElementById("pulpo-hoja"); if (!h || h.hidden) return; h.classList.remove("ver"); setTimeout(() => { h.hidden = true; }, 260); }
+function montarPulpoInicio() {
+  const wrap = document.querySelector("#stage .reactor-wrap"); if (!wrap) return;
+  wrap.querySelector("svg.reactor")?.remove(); wrap.querySelectorAll(".ripple").forEach((r) => r.remove());
+  wrap.removeAttribute("aria-hidden");
+  const esc = document.createElement("div"); esc.className = "pulpo-escena"; wrap.appendChild(esc);
+  pulpoI = Brain.montar(esc, { brazos: BRAZOS_PULPO.map((d) => ({ ...d, abrir: () => hojaPulpo(d) })) });
+  // con poco espacio (conversación, teclado, chat) no caben las etiquetas: al tocar el pulpo se abre la lista de brazos
+  const ajustar = () => esc.classList.toggle("sin-etiquetas", esc.clientWidth < 300 || esc.clientHeight < 240);
+  if ("ResizeObserver" in window) new ResizeObserver(ajustar).observe(esc); ajustar();
+  wrap.addEventListener("click", (e) => { if (conv.on || e.target.closest(".pulpo-brazo") || !esc.classList.contains("sin-etiquetas")) return; listaPulpo(); });
+  const h = document.getElementById("pulpo-hoja");
+  h?.querySelector(".ph-cerrar").addEventListener("click", cerrarHojaPulpo);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") cerrarHojaPulpo(); });
+  addEventListener("online", estadosPulpo); addEventListener("offline", estadosPulpo);
+  estadosPulpo(); setInterval(estadosPulpo, 60 * 1000);
+}
+function listaPulpo() {
+  const h = document.getElementById("pulpo-hoja"); if (!h) return;
+  h.querySelector(".ph-t").textContent = "Brazos de Antares"; h.querySelector(".ph-e").textContent = "Toque uno para abrirlo.";
+  const d = h.querySelector(".ph-d"); d.textContent = "";
+  const ul = document.createElement("div"); ul.className = "ph-lista";
+  for (const x of BRAZOS_PULPO) { const b = pulpoI?.brazos.find((y) => y.id === x.id); const k = document.createElement("button"); k.type = "button"; k.className = "pulpo-brazo"; k.dataset.e = b ? b.e : "idle"; k.textContent = x.n; k.onclick = () => { cerrarHojaPulpo(); setTimeout(() => x.abrir(), 120); }; ul.appendChild(k); }
+  d.appendChild(ul); h.classList.remove("alerta");
+  h.querySelector(".ph-abrir").hidden = true;
+  h.hidden = false; requestAnimationFrame(() => h.classList.add("ver"));
+}
+function estadosPulpo() {
+  if (!pulpoI) return;
+  const en = navigator.onLine, st = PC.estadoPC();
+  Brain.setCorazones({ gem: en && config.geminiApiKey ? "ok" : "off", pc: PC.PC_ENABLED && PC.tieneClave() && st.on ? "ok" : "off", off: "ok" });
+  const S = (id, e, txt) => Brain.setBrazo(pulpoI, id, e, txt);
+  // Salud de ANTARES: alertas reales de la PC
+  const al = saludAlertas || [];
+  S("salud", al.length ? "alerta" : st.on ? "pensando" : "idle", al.length ? al[0].texto || "Alerta de la compu" : st.on ? "PC en línea" : "");
+  // Recordatorios: vencidos = alerta; en la próxima hora = con novedades
+  if (isUnlocked()) {
+    try { const v = Reminders.due(), u = Reminders.upcoming().filter((r) => r.at - Date.now() < 3600e3);
+      S("recordatorios", v.length ? "alerta" : u.length ? "pensando" : "idle", v.length ? v[0].title : u.length ? u[0].title : ""); } catch { /* */ }
+  }
+  // Noticias: resumen reciente (menos de 1 h) = con novedades
+  try { const d = Digest.readCache(); S("noticias", d && (d.news || []).length ? "pensando" : "idle", d ? "Resumen nuevo" : ""); } catch { /* */ }
 }
 function refreshBrainCounts() {
   if (!isUnlocked()) { Brain.setCounts(null); Hud.setHudCounts(null); return; }
@@ -3131,7 +3199,7 @@ async function init() {
     } else { const pb = document.getElementById("pc-btn"); if (pb) pb.hidden = true; }
     document.getElementById("vision-btn").addEventListener("click", () => openVision({ getKey: () => config.geminiApiKey || "", model: GEM_MODELS[0], speak: (t) => { try { voice.speak(t); } catch { /* */ } } }));
   } catch (e) { console.warn("Antares: presencia/visión", e); }
-  try { Brain.mountBrain(document.querySelector("#stage .reactor-wrap")); } catch (e) { console.warn("Antares: cerebro 3D", e); }
+  try { montarPulpoInicio(); } catch (e) { console.warn("Antares: pulpo", e); }
   try { initDesk(); } catch (e) { console.warn("Antares: escritorio", e); }
   setupServiceWorker();
   await loadMetaSafe();
@@ -3274,6 +3342,7 @@ async function vigiaSalud() {
     const j = await PC.saludPC(); if (!j) return;
     const al = j.alertas || [];
     document.querySelectorAll(".pc-btn, [data-desk=micompu], [data-micompu]").forEach((b) => b.classList.toggle("pc-alerta", al.length > 0));
+    saludAlertas = al; estadosPulpo();
     if ("Notification" in window && Notification.permission === "granted") {
       for (const a of al) { const k = a.clave + "|" + a.inicio; if (alertasVistas.has(k)) continue; alertasVistas.add(k);
         try { const reg = await navigator.serviceWorker?.getRegistration(); const titulo = "Antares · " + (a.nivel === "alerta" ? "ALERTA de la compu" : "Aviso de la compu");
@@ -3282,7 +3351,7 @@ async function vigiaSalud() {
   } catch { /* compu apagada: sin aviso */ }
 }
 function iniciarVigiaPC() {
-  PC.onEstadoPC(pintarPC);
+  PC.onEstadoPC(pintarPC); PC.onEstadoPC(() => estadosPulpo());
   const ciclo = () => { if (isUnlocked() && !document.hidden) PC.revisarPC(true).then(vigiaSalud); };
   setTimeout(ciclo, 4000); setInterval(ciclo, 5 * 60 * 1000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) setTimeout(ciclo, 800); });
