@@ -111,11 +111,12 @@
         <label class="upload big" id="po-upload"><input type="file" accept="image/*" id="po-file" hidden>📷 Toca aquí y elige la foto de tu producto</label>
         <p class="hint center" id="po-status"></p>
         <div class="row"><button id="po-cut" class="big hidden">🪄 Quitar el fondo de la foto</button></div>
+        <label class="upload" id="po-extra-l"><input type="file" accept="image/*" multiple id="po-extra" hidden>➕ Más fotos (para combo, catálogo o mamá e hija)</label>
         <label class="chk hidden" id="po-usecut-l"><input type="checkbox" id="po-usecut" checked> Usar la foto sin fondo</label>
       </div>
       <div class="pstep hidden" data-s="2">
         <p class="hint">Elige el diseño que más te guste:</p>
-        <div class="chips" id="po-tpl"></div>
+        <div class="tplgrid" id="po-tpl"></div>
         <div class="chips" id="po-fmt"><button data-f="sq" class="on">Publicación (cuadrado)</button><button data-f="st">Historia (alto)</button><button data-f="wa">WhatsApp</button></div>
       </div>
       <div class="stage poster"><canvas id="po-canvas"></canvas></div>
@@ -130,6 +131,13 @@
 Toque de corazón
 Fácil de combinar
 Ideal para regalar</textarea></label>
+        <details open><summary>Textos para plantillas especiales</summary>
+        <label>Precio antes (Oferta) <input id="po-old" value="₡9.000"></label>
+        <label>Nombre (Personalizada) <input id="po-name" value="Sofía"></label>
+        <label>Comentario de la clienta (Testimonio) <textarea id="po-quote" rows="2">¡Me encantó! Super bonita, bien hecha y llegó rapidísimo 💕</textarea></label>
+        <label>Nombre de la clienta <input id="po-client" value="María F."></label>
+        <label>Tu WhatsApp (Pedidos y Catálogo) <input id="po-wa" inputmode="tel" placeholder="8888-8888"></label>
+        </details>
         <label>Tu Instagram o nombre de tienda <input id="po-brand" placeholder="@tutienda"></label>
         <details><summary>Más opciones (foto y detalles)</summary>
         <label>Tamaño de la foto <input type="range" id="po-scale" min="50" max="160" value="100"></label>

@@ -3,7 +3,7 @@ import { ask, testKey, PERSONA } from "./gemini.js";
 import { initEditor } from "./editor.js";
 import { initPoster, initCollage } from "./poster.js";
 import { initPrecios } from "./precios.js";
-export const VERSION = "0.2.0";
+export const VERSION = "0.3.0";
 const $ = (id) => document.getElementById(id);
 const CFG = "viernes.config.v1", CHAT = "viernes.chat.v1";
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };

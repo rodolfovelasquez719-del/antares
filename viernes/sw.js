@@ -1,5 +1,5 @@
 // Viernes - service worker propio (alcance /viernes/). No intercepta llamadas a Gemini.
-const VERSION = "viernes-v0.2.0";
+const VERSION = "viernes-v0.3.0";
 const SHELL = ["./", "./index.html", "./styles.css", "./manifest.webmanifest", "./js/app.js", "./js/editor.js", "./js/gemini.js", "./js/aiedit.js", "./js/poster.js", "./js/precios.js", "./js/bgremove.js", "./icons/icon-192.png", "./icons/icon-512.png"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k.startsWith("viernes-") && k !== VERSION).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
