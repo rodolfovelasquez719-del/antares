@@ -573,46 +573,98 @@ let pasos = 0;`,
 ];
 
 // ---------- Estado ----------
+// Lista completa: Módulo 0 (claves "b0".."b9") + lecciones del robot (claves 0..14, igual que antes: el progreso viejo se conserva).
+const M0 = window.ROBOT_M0 || [], EX = window.ROBOT_EXTRAS || [];
+const TODO = M0.map((l, k) => ({ l, k, basico: true, clave: "b" + k, num: "0." + (k + 1) }))
+  .concat(L.map((l, k) => ({ l: Object.assign({}, l, EX[k] || {}), k, basico: false, clave: String(k), num: String(k + 1) })));
 let est = { codigos: {}, hechas: {}, actual: 0 };
 try { Object.assign(est, JSON.parse(localStorage.getItem(CLAVE) || "{}")); } catch {}
 const guardar = () => { try { localStorage.setItem(CLAVE, JSON.stringify(est)); $("guardado").textContent = "guardado ✓"; } catch {} };
 if (!(est.actual >= 0 && est.actual < L.length)) est.actual = 0;
+if (!(est.pos >= 0 && est.pos < TODO.length)) {
+  // Progreso anterior a esta versión: si ya había avanzado en el robot, sigue ahí; si no, empieza desde cero.
+  const habia = Object.keys(est.hechas).some((k) => /^\d+$/.test(k)) || Object.keys(est.codigos).some((k) => /^\d+$/.test(k) && est.codigos[k]);
+  est.pos = habia ? M0.length + est.actual : 0;
+}
+const cur = () => TODO[est.pos];
 
 const ed = $("editor");
 function codigoHasta(i) { return L.slice(0, i).map((_, k) => est.codigos[k] || ""); }
 
 function pintarLista() {
   const ul = $("lista"); ul.innerHTML = "";
-  L.forEach((l, i) => {
+  TODO.forEach((it, i) => {
+    if (i === 0 || i === M0.length) {
+      const h = document.createElement("li"); h.className = "modulo";
+      h.textContent = i === 0 ? "MÓDULO 0 · DESDE CERO" : "MÓDULO 1 · ROBOT EN EL LABERINTO"; ul.appendChild(h);
+    }
     const li = document.createElement("li"), b = document.createElement("button");
-    b.className = (i === est.actual ? "act " : "") + (est.hechas[i] ? "hecha" : "");
-    b.innerHTML = `<span class="n">${String(i + 1).padStart(2, "0")}</span><span>${esc(l.t)}</span><span class="ck">${est.hechas[i] ? "✓" : ""}</span>`;
+    const hecha = !!est.hechas[it.clave];
+    b.className = (i === est.pos ? "act " : "") + (hecha ? "hecha" : "");
+    b.innerHTML = `<span class="n">${it.num}</span><span>${esc(it.l.t)}</span><span class="ck">${hecha ? "✓" : ""}</span>`;
     b.onclick = () => abrir(i);
     li.appendChild(b); ul.appendChild(li);
   });
-  const n = Object.keys(est.hechas).filter((k) => est.hechas[k]).length;
-  $("progreso").style.width = (100 * n / L.length) + "%";
-  const act = ul.children[est.actual]; if (act && act.scrollIntoView && window.innerWidth <= 820) act.scrollIntoView({ block: "nearest", inline: "center" });
+  const n = TODO.filter((it) => est.hechas[it.clave]).length;
+  $("progreso").style.width = (100 * n / TODO.length) + "%";
+  const act = ul.querySelector("button.act"); if (act && act.scrollIntoView && window.innerWidth <= 820) act.scrollIntoView({ block: "nearest", inline: "center" });
 }
 
 function feedback(clase, html) { const f = $("feedback"); f.className = clase; f.innerHTML = html; }
 
+function htmlPartes(l) {
+  let h = "";
+  if (l.nota) h += `<div class="nota">📘 ${l.nota}</div>`;
+  if (l.partes && l.partes.length) h += `<details class="partes" open><summary>🔍 ¿Qué hace cada parte?</summary><table>${l.partes.map(([c, x]) => `<tr><td><code>${esc(c)}</code></td><td>${x}</td></tr>`).join("")}</table></details>`;
+  return h;
+}
+
+function htmlQuiz(q) {
+  return `<div id="quiz">${q.map((p, n) => `<fieldset class="preg"><legend>${n + 1}. ${p.p}</legend>${p.o.map((o, k) =>
+    `<label><input type="radio" name="q${n}" value="${k}"> ${o}</label>`).join("")}<div class="qfb"></div></fieldset>`).join("")}</div>`;
+}
+
 function abrir(i) {
-  est.actual = i; guardar();
-  const l = L[i];
-  $("titulo").textContent = `LECCIÓN ${i + 1} DE ${L.length} · ${l.t}`;
+  est.pos = i; const it = cur(), l = it.l;
+  if (!it.basico) est.actual = it.k;
+  guardar();
+  const total = it.basico ? M0.length : L.length;
+  $("titulo").textContent = `${it.basico ? "MÓDULO 0 · LECCIÓN " + (it.k + 1) : "LECCIÓN " + (it.k + 1)} DE ${total} · ${l.t}`;
   $("concepto").textContent = l.c;
-  $("explicacion").innerHTML = l.e + `<div class="tarea"><b>SU TAREA</b><br>${l.tarea}</div>`;
-  ed.value = est.codigos[i] || "";
+  $("explicacion").innerHTML = l.e + htmlPartes(l) + (l.quiz ? htmlQuiz(l.quiz) : "") +
+    `<div class="tarea"><b>✍️ AHORA USTED</b><br>${l.tarea}</div>` +
+    (l.reto ? `<div class="reto"><b>🚀 RETO (hágalo solo, sin solución)</b><br>${l.reto}<br><small>Escríbalo debajo de su código y pulse Probar para verlo funcionar.</small></div>` : "");
+  const esQuiz = !!l.quiz;
+  ["editor", "pista", "verSol"].forEach((id) => { $(id).hidden = esQuiz && id !== "pista"; });
+  $("edlabel").parentElement.hidden = esQuiz;
+  $("probar").textContent = esQuiz ? "✔ REVISAR RESPUESTAS" : "▶ PROBAR";
+  $("marco").hidden = esQuiz;
+  $("marco").className = it.basico ? "basico" : "";
+  ed.value = est.codigos[it.clave] || "";
   $("guardado").textContent = "";
   $("solucion").className = "sol"; $("solucion").innerHTML = "";
-  $("descargar").hidden = i !== L.length - 1;
-  $("ant").disabled = i === 0; $("sig").disabled = i === L.length - 1;
-  feedback(est.hechas[i] ? "ok" : "", est.hechas[i] ? "✓ Ya completó esta lección. Puede volver a probarla." : "");
-  $("todo").textContent = codigoHasta(i).filter((c) => c.trim()).join("\n\n") || "(todavía nada)";
+  $("descargar").hidden = it.basico || it.k !== L.length - 1;
+  $("ant").disabled = i === 0; $("sig").disabled = i === TODO.length - 1;
+  feedback(est.hechas[it.clave] ? "ok" : "", est.hechas[it.clave] ? "✓ Ya completó esta lección. Puede volver a probarla o hacer el reto." : "");
+  $("todo").parentElement.parentElement.hidden = it.basico;
+  $("todo").textContent = codigoHasta(it.basico ? 0 : it.k).filter((c) => c.trim()).join("\n\n") || "(todavía nada)";
   pintarLista();
-  correr(false);
+  if (!esQuiz) correr(false);
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function revisarQuiz() {
+  const q = cur().l.quiz; let bien = 0;
+  q.forEach((p, n) => {
+    const sel = document.querySelector(`input[name=q${n}]:checked`), fb = document.querySelectorAll("#quiz .qfb")[n];
+    if (!sel) { fb.className = "qfb mal"; fb.textContent = "Elija una respuesta."; return; }
+    if (+sel.value === p.r) { bien++; fb.className = "qfb ok"; fb.textContent = "✓ Correcto. " + p.x.replace(/<[^>]+>/g, ""); }
+    else { fb.className = "qfb mal"; fb.textContent = "✗ No exactamente. " + p.x.replace(/<[^>]+>/g, ""); }
+  });
+  if (bien === q.length) {
+    est.hechas[cur().clave] = true; guardar(); pintarLista();
+    feedback("ok", `✅ ¡${bien} de ${q.length}! Terminó el Módulo 0. Ya tiene las bases para programar el robot.<br><button class="btn prim" style="margin-top:8px" onclick="document.getElementById('sig').click()">Empezar el robot →</button>`);
+  } else feedback("mal", `Lleva ${bien} de ${q.length}. Lea las explicaciones en rojo y vuelva a intentarlo.`);
 }
 
 // ---------- Errores amables ----------
@@ -647,7 +699,10 @@ function harnessScript(bloques, test, id) {
   return `(function(){
 const D=${j};
 const enviar=(m)=>{m.__robot=D.id;parent.postMessage(m,"*");};
-window.__b=-1;window.__err=false;
+window.__b=-1;window.__err=false;window.__salida=[];window.__tipos=[];window.__src=D.bloques[D.bloques.length-1]||"";
+window.mostrar=function(){const a=Array.prototype.slice.call(arguments);const t=a.map(function(v){return typeof v==="string"?v:(v&&typeof v==="object"?JSON.stringify(v):String(v));}).join(" ");
+window.__salida.push(t);window.__tipos.push(a.length===1?typeof a[0]:"string");const s=document.getElementById("salida")||document.getElementById("mensaje");if(s){const d=document.createElement("div");d.textContent=t;if(a.length===1&&typeof a[0]!=="string")d.className="n";s.appendChild(d);}};
+console.log=window.mostrar;
 window.onerror=function(msg,src,line){window.__err=true;enviar({tipo:"error",msg:String(msg),linea:line,bloque:window.__b});return true;};
 window.addEventListener("unhandledrejection",function(e){window.__err=true;enviar({tipo:"error",msg:String(e.reason&&e.reason.message||e.reason),bloque:window.__b});});
 window.__existe=function(n){try{return (0,eval)("typeof "+n)!=="undefined";}catch(e){return false;}};
@@ -663,13 +718,20 @@ catch(e){enviar({tipo:"error",msg:String(e&&e.message||e),bloque:-2});}})();
 })();`;
 }
 
-function construirDoc(bloques, test, id) {
+const BASICO_CSS = `html,body{margin:0;background:#000;color:#e3fff1;font-family:system-ui,sans-serif}
+#salida{font:15px/1.5 ui-monospace,Menlo,monospace;padding:12px;min-height:100%;white-space:pre-wrap;word-break:break-word}
+#salida:before{content:"PANEL DE SALIDA";display:block;font:700 10px system-ui;letter-spacing:2px;color:#8fbfa6;margin-bottom:6px}
+#salida div{border-bottom:1px solid #0f2a1c;padding:3px 0}#salida div:before{content:"› ";color:#00ff9c}#salida .n{color:#ffd400}`;
+function construirDoc(bloques, test, id, basico) {
+  if (basico) return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${BASICO_CSS}</style></head><body><div id="salida"></div><script>${harnessScript(bloques, test, id)}<\/script></body></html>`;
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${HARNESS_CSS}</style></head><body>${HARNESS_HTML}<script>${harnessScript(bloques, test, id)}<\/script></body></html>`;
 }
 
 function correr(conTest) {
-  const i = est.actual;
-  const bloques = codigoHasta(i).concat(ed.value);
+  const it = cur();
+  const previos = it.basico ? [] : codigoHasta(it.k);
+  const bloques = previos.concat(ed.value);
+  const i = previos.length;
   const id = ++corrida;
   // Revisión de sintaxis aquí afuera: el iframe aislado solo dice "SyntaxError" sin detalles.
   for (let k = 0; k < bloques.length; k++) {
@@ -677,11 +739,11 @@ function correr(conTest) {
       if (!(e instanceof SyntaxError)) continue;
       const donde = k < i ? ` <b>(en su código de la lección ${k + 1}; vaya a esa lección y corríjalo)</b>` : "";
       feedback("mal", `🤖 ¡Uy! El código no se pudo leer${donde}.<br>${amable(e.message) || amable("SyntaxError")}<br><small style="color:var(--dim)">Mensaje técnico: ${esc(e.message)}</small>`);
-      $("marco").srcdoc = construirDoc(bloques.slice(0, k), "", id);
+      $("marco").srcdoc = construirDoc(bloques.slice(0, k), "", id, it.basico);
       return;
     }
   }
-  $("marco").srcdoc = construirDoc(bloques, conTest ? L[i].test.toString() : "", id);
+  $("marco").srcdoc = construirDoc(bloques, conTest ? it.l.test.toString() : "", id, it.basico);
   if (conTest) {
     feedback("info", "Revisando su código…");
     clearTimeout(correr.t);
@@ -692,41 +754,39 @@ function correr(conTest) {
 window.addEventListener("message", (ev) => {
   const m = ev.data;
   if (!m || m.__robot !== corrida || ev.source !== $("marco").contentWindow) return;
-  const i = est.actual;
+  const it = cur(), i = it.basico ? 0 : it.k;
   if (m.tipo === "error") {
-    if ($("feedback").className !== "info" && m.bloque === -1) return;
     const donde = m.bloque >= 0 && m.bloque < i ? ` <b>(el error está en su código de la lección ${m.bloque + 1}; vaya a esa lección y corríjalo)</b>` :
       m.bloque === i && m.linea ? ` <b>(cerca de la línea ${m.linea})</b>` : "";
     const a = amable(m.msg);
     feedback("mal", `🤖 ¡Uy! Algo falló${donde}.<br>${a || ""}<br><small style="color:var(--dim)">Mensaje técnico: ${esc(m.msg)}</small>`);
   } else if (m.tipo === "test") {
     if (m.ok) {
-      const nueva = !est.hechas[i];
-      est.hechas[i] = true; guardar(); pintarLista();
-      feedback("ok", `✅ ${m.msg}${i < L.length - 1 ? `<br><button class="btn prim" style="margin-top:8px" onclick="document.getElementById('sig').click()">Siguiente lección →</button>` : ""}`);
-      if (nueva) $("marco").scrollIntoView({ behavior: "smooth", block: "nearest" });
+      est.hechas[it.clave] = true; guardar(); pintarLista();
+      const reto = it.l.reto ? `<br>🚀 Ahora intente el <b>reto</b> de arriba, usted solo.` : "";
+      feedback("ok", `✅ ${m.msg}${reto}${est.pos < TODO.length - 1 ? `<br><button class="btn prim" style="margin-top:8px" onclick="document.getElementById('sig').click()">Siguiente lección →</button>` : ""}`);
     } else feedback("mal", `🤔 Casi. ${m.msg}`);
   }
 });
 
 // ---------- Botones ----------
-ed.addEventListener("input", () => { est.codigos[est.actual] = ed.value; $("guardado").textContent = "…"; clearTimeout(ed.t); ed.t = setTimeout(guardar, 400); });
+ed.addEventListener("input", () => { est.codigos[cur().clave] = ed.value; $("guardado").textContent = "…"; clearTimeout(ed.t); ed.t = setTimeout(guardar, 400); });
 ed.addEventListener("keydown", (e) => {
   if (e.key === "Tab") { e.preventDefault(); const s = ed.selectionStart; ed.setRangeText("  ", s, ed.selectionEnd, "end"); ed.dispatchEvent(new Event("input")); }
 });
-$("probar").onclick = () => { est.codigos[est.actual] = ed.value; guardar(); correr(true); };
-$("pista").onclick = () => feedback("info", "💡 " + L[est.actual].pista);
+$("probar").onclick = () => { if (cur().l.quiz) return revisarQuiz(); est.codigos[cur().clave] = ed.value; guardar(); correr(true); };
+$("pista").onclick = () => feedback("info", "💡 " + cur().l.pista);
 $("verSol").onclick = () => {
   const s = $("solucion");
   if (s.classList.contains("ver")) { s.className = "sol"; return; }
   s.className = "sol ver";
-  s.innerHTML = `<p style="margin:0 0 6px;color:var(--dim)">Esta es una solución posible. Le recomiendo <b>escribirla usted</b> (no copiar y pegar): así se aprende.</p><pre>${esc(L[est.actual].sol)}</pre>`;
+  s.innerHTML = `<p style="margin:0 0 6px;color:var(--dim)">Esta es una solución posible de la tarea “Ahora usted” (el reto no tiene solución: es para usted). Le recomiendo <b>escribirla usted</b>, no copiar y pegar: así se aprende.</p><pre>${esc(cur().l.sol)}</pre>`;
 };
-$("ant").onclick = () => est.actual > 0 && abrir(est.actual - 1);
-$("sig").onclick = () => est.actual < L.length - 1 && abrir(est.actual + 1);
-$("reiniciarTodo").onclick = () => { if (confirm("¿Borrar todo su código y progreso de este tutorial?")) { est = { codigos: {}, hechas: {}, actual: 0 }; guardar(); abrir(0); } };
+$("ant").onclick = () => est.pos > 0 && abrir(est.pos - 1);
+$("sig").onclick = () => est.pos < TODO.length - 1 && abrir(est.pos + 1);
+$("reiniciarTodo").onclick = () => { if (confirm("¿Borrar todo su código y progreso de este tutorial?")) { est = { codigos: {}, hechas: {}, actual: 0, pos: 0 }; guardar(); abrir(0); } };
 $("descargar").onclick = () => {
-  const codigo = codigoHasta(L.length).concat(ed.value).filter((c) => c.trim()).join("\n\n");
+  const codigo = codigoHasta(L.length).filter((c) => c.trim()).join("\n\n");
   const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mi robot en el laberinto</title><style>${HARNESS_CSS}</style></head><body>${HARNESS_HTML}<script>\n${codigo.replace(/<\/script/gi, "<\\/script")}\n<\/script></body></html>`;
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
@@ -735,6 +795,6 @@ $("descargar").onclick = () => {
 };
 
 // Para las pruebas automáticas (no se usa en la app): window.__robotTutorial
-window.__robotTutorial = { L, est: () => est };
-abrir(est.actual);
+window.__robotTutorial = { L, M0, TODO, est: () => est, abrir };
+abrir(est.pos);
 })();

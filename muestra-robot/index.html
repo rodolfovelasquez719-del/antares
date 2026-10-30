@@ -56,6 +56,25 @@ textarea#editor:focus{border-color:var(--verde);box-shadow:0 0 12px rgba(0,255,1
 #marco{width:min(100%,340px);aspect-ratio:340/525;border:1px solid var(--borde);border-radius:14px;background:#000;box-shadow:0 0 18px rgba(0,255,156,.18)}
 details{margin-top:10px}summary{cursor:pointer;color:var(--dim);font-weight:700}
 .nav{display:flex;justify-content:space-between;margin-top:12px;gap:8px}
+#marco.basico{aspect-ratio:auto;height:230px;width:100%}
+#marco[hidden]{display:none}
+#lista li.modulo{font:700 10px var(--hud);letter-spacing:2px;color:var(--rojo);padding:8px 4px 2px}
+@media(max-width:820px){#lista li.modulo{writing-mode:vertical-rl;transform:rotate(180deg);padding:4px 2px;font-size:8px;align-self:center}}
+.nota{background:#06261a88;border:1px solid #11402a;border-radius:10px;padding:8px 10px;margin:10px 0}
+.partes{margin:10px 0;border:1px solid var(--borde);border-radius:12px;padding:6px 10px;background:#010805aa}
+.partes summary{color:var(--verde);font:700 12px var(--hud);letter-spacing:1px;padding:4px 0}
+.partes table{border-collapse:collapse;width:100%;margin-top:6px}
+.partes td{vertical-align:top;padding:6px 4px;border-top:1px solid #0f2a1c;line-height:1.35}
+.partes td:first-child{width:38%;word-break:break-word}
+@media(max-width:520px){.partes tr{display:block;border-top:1px solid #0f2a1c;padding:4px 0}.partes td{display:block;border:0;width:auto!important;padding:2px 0}}
+.reto{border-left:3px solid var(--verde);padding:6px 10px;background:#00ff9c12;border-radius:0 10px 10px 0;margin:10px 0}
+.reto b{color:var(--verde);font-family:var(--hud);font-size:11px;letter-spacing:1px}.reto small{color:var(--dim)}
+.preg{border:1px solid var(--borde);border-radius:12px;margin:10px 0;padding:8px 10px}
+.preg legend{padding:0 4px;font-weight:700}
+.preg label{display:flex;gap:8px;align-items:center;padding:8px 4px;min-height:40px}
+.preg input{width:20px;height:20px;accent-color:var(--verde)}
+.qfb.ok{color:var(--verde)}.qfb.mal{color:#ff8c9c}
+[hidden]{display:none!important}
 </style></head>
 <body>
 <header>
@@ -86,5 +105,7 @@ details{margin-top:10px}summary{cursor:pointer;color:var(--dim);font-weight:700}
     <div class="nav"><button class="btn" id="ant">← Anterior</button><button class="btn" id="sig">Siguiente →</button></div>
   </main>
 </div>
+<script src="modulo0.js"></script>
+<script src="extras.js"></script>
 <script src="robot.js"></script>
 </body></html>
