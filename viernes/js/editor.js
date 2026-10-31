@@ -1,7 +1,7 @@
 // Viernes - editor de fotos local (ilimitado) + edición con IA opcional (limitada).
-import { toast, apiKey, hasKey } from "./app.js";
+import { toast, apiKeys, hasKey } from "./app.js";
 import { removeBackground } from "./bgremove.js";
-import { aiEdit } from "./aiedit.js";
+import { aiEdit, resetPhotoSession } from "./aiedit.js";
 import { loadCanvas, busy } from "./img.js";
 const $ = (id) => document.getElementById(id);
 let base = null, undo = [], over = [], cut = null; // base: canvas actual; over: textos/stickers
@@ -93,7 +93,7 @@ export function initEditor() {
   // IA (limitada)
   $("ai-go").onclick = busy($("ai-go"), async () => { if (!hasKey()) return toast("La edición con IA necesita que Freddy prepare Viernes."); const ins = $("ai-in").value.trim(); if (!ins) return toast("Escribe qué cambiar");
     bake(); const blob = await new Promise((r) => base.toBlob(r, "image/jpeg", 0.9)); $("ai-status").textContent = "Editando con IA…";
-    const r = await aiEdit(apiKey(), blob, ins, { onStatus: () => {} });
+    let r = null; for (const k of apiKeys()) { resetPhotoSession(); r = await aiEdit(k, blob, ins, { onStatus: () => {} }); if (r.ok || r.kind === "safety" || r.kind === "stopped") break; }
     if (!r.ok) { $("ai-status").textContent = r.kind === "stopped" ? "" : (r.kind === "safety" || r.kind === "no_image") ? r.text :
       "La edición con IA no está disponible ahora mismo 😔 (Google la limita). Usa Luz, Filtros, Fondo y Texto: esas son ilimitadas 💜"; console.info("aiEdit:", r.kind); return; }
     push(); const bmp = await createImageBitmap(r.blob); base = mk(bmp.width, bmp.height); base.getContext("2d").drawImage(bmp, 0, 0); render(); $("ai-status").textContent = "¡Listo! ✨"; });

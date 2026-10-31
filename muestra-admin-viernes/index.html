@@ -12,11 +12,15 @@ button{font:inherit;padding:11px 14px;border-radius:10px;border:1px solid #2c3d5
 <h1>🪐 Antares · Administrar Viernes <small class="hint">(muestra)</small></h1>
 <p class="hint">Desde aquí usted prepara la app <b>Viernes</b> de Wendy. Ella no ve ninguna configuración: solo escanea el código o abre el enlace una vez.</p>
 
-<div class="card"><h2>1. Key de Gemini</h2>
+<div class="card"><h2>1. Keys de Gemini (1 o 2)</h2>
 <p class="hint">Se usa solo para crear el enlace. No se guarda en ningún servidor ni en GitHub. Recomendado: crear una key aparte para Wendy en <a style="color:#f9a8d4" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>, así su uso no gasta la cuota de Antares.</p>
-<input id="k" type="password" autocomplete="off" placeholder="AIza… o AQ.…">
-<div class="row"><button id="useAntares">Usar la key de Antares de este equipo</button><button id="test">Probar key</button></div>
-<p id="kst" class="hint"></p></div>
+<label>Key principal <input id="k" type="password" autocomplete="off" placeholder="AIza… o AQ.…"></label>
+<div class="row"><button id="useAntares">Usar la key de Antares de este equipo</button><button id="test">Probar key 1</button></div>
+<p id="kst" class="hint"></p>
+<label>Key de respaldo (opcional) <input id="k2" type="password" autocomplete="off" placeholder="AIza… o AQ.…"></label>
+<div class="row"><button id="test2">Probar key 2</button></div>
+<p id="kst2" class="hint"></p>
+<p class="hint">Con dos keys, si una se queda sin cuota o falla, Viernes usa la otra sin que Wendy lo note.</p></div>
 
 <div class="card"><h2>2. Preferencias</h2>
 <label>Nombre <input id="n" value="Wendy"></label>
@@ -42,10 +46,11 @@ const $=(i)=>document.getElementById(i);
 const url=new URL("../viernes/",location.href).href;
 fetch("../viernes/version.json",{cache:"no-store"}).then(r=>r.json()).then(j=>$("ver").textContent=j.version+" ("+j.fecha+")").catch(()=>$("ver").textContent="no disponible");
 $("useAntares").onclick=()=>{try{const c=JSON.parse(localStorage.getItem("antares.config.v1")||"{}");if(c.geminiApiKey){$("k").value=c.geminiApiKey;$("kst").textContent="Key de Antares cargada (oculta).";}else $("kst").textContent="Antares no tiene una key sin bloquear en este equipo (puede estar protegida con el candado). Pégala a mano.";}catch{$("kst").textContent="No se pudo leer.";}};
-$("test").onclick=async()=>{const k=$("k").value.replace(/\s+/g,"");if(!k)return;$("kst").textContent="Probando…";try{const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=5",{headers:{"x-goog-api-key":k}});$("kst").innerHTML=r.ok?'<span class="ok">✅ Key válida</span>':'<span class="bad">❌ Google rechazó la key ('+r.status+')</span>';}catch{$("kst").innerHTML='<span class="bad">Sin conexión</span>';}};
+const probar=async(inp,out)=>{const k=$(inp).value.replace(/\s+/g,"");if(!k){$(out).textContent="Vacía";return;}$(out).textContent="Probando…";try{const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",{method:"POST",headers:{"x-goog-api-key":k,"Content-Type":"application/json"},body:JSON.stringify({contents:[{role:"user",parts:[{text:"ok"}]}],generationConfig:{maxOutputTokens:5}})});$(out).innerHTML=r.ok?'<span class="ok">✅ Funciona</span>':r.status===429?'<span class="bad">⚠️ Válida pero sin cuota ahora (429)</span>':'<span class="bad">❌ Google la rechazó ('+r.status+')</span>';}catch{$(out).innerHTML='<span class="bad">Sin conexión</span>';}};
+$("test").onclick=()=>probar("k","kst");$("test2").onclick=()=>probar("k2","kst2");
 let link="";
 $("gen").onclick=()=>{const k=$("k").value.replace(/\s+/g,"");if(!k){$("kst").innerHTML='<span class="bad">Falta la key</span>';return;}
- const p={v:1,k,n:$("n").value.trim()||"Wendy",t:$("t").value,x:$("x").value.trim().slice(0,400),w:$("w").value.trim().slice(0,20),b:$("b").value.trim().slice(0,40)};
+ const k2=$("k2").value.replace(/\s+/g,"");const p={v:1,k,...(k2&&k2!==k?{k2}:{}),n:$("n").value.trim()||"Wendy",t:$("t").value,x:$("x").value.trim().slice(0,400),w:$("w").value.trim().slice(0,20),b:$("b").value.trim().slice(0,40)};
  const b64=btoa(unescape(encodeURIComponent(JSON.stringify(p)))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
  link=url+"#setup="+b64;
  const q=qrcode(0,"M");q.addData(link);q.make();const n=q.getModuleCount(),s=Math.floor(320/(n+8)),c=$("qr");c.width=c.height=s*(n+8);const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,c.width,c.height);x.fillStyle="#000";

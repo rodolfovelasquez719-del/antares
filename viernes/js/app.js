@@ -4,18 +4,25 @@ import { initEditor } from "./editor.js";
 import { initPoster, initCollage } from "./poster.js";
 import { initPrecios } from "./precios.js";
 import { loadCanvas, busy } from "./img.js";
-export const VERSION = "0.4.2";
+export const VERSION = "0.5.0";
 const $ = (id) => document.getElementById(id);
 const CFG = "viernes.config.v1", CHAT = "viernes.chat.v1";
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* */ } };
-export let config = load(CFG, {});
+// Configuración robusta: copia de respaldo y almacenamiento persistente (el navegador no la borra solo)
+const CFG_BAK = "viernes.config.bak";
+export let config = (() => { const a = load(CFG, null), b = load(CFG_BAK, null); return (a && (a.keys || a.key)) ? a : (b && (b.keys || b.key)) ? b : (a || b || {}); })();
+if (config.key && !config.keys) config.keys = [config.key];
+const saveCfg = () => { save(CFG, config); save(CFG_BAK, config); };
+try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch { /* */ }
 export const toast = (t, ms = 2600) => { const e = $("toast"); e.textContent = t; e.classList.remove("hidden"); clearTimeout(toast.t); toast.t = setTimeout(() => e.classList.add("hidden"), ms); };
-export const hasKey = () => !!config.key;
-export const apiKey = () => config.key || "";
+export const hasKey = () => !!(config.keys && config.keys.length);
+export const apiKey = () => (config.keys || [])[0] || "";
+export const apiKeys = () => (config.keys || []).slice();
 const persona = () => PERSONA.replace("tratas a Wendy de 'tú' con cariño", config.trato === "usted" ? "tratas a Wendy de 'usted' con mucho cariño" : "tratas a Wendy de 'tú' con cariño") +
   (config.extra ? "\nIndicaciones de Freddy: " + config.extra : "");
-export const askViernes = (history, opts = {}) => ask(apiKey(), history, { system: persona(), ...opts });
+const hoy = () => "\nHoy es " + new Date().toLocaleString("es-CR", { timeZone: "America/Costa_Rica", weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "numeric", minute: "2-digit" }) + " (hora de Costa Rica). Si no tienes datos actualizados de algo (precios, noticias, horarios), dilo con sencillez.";
+export const askViernes = (history, opts = {}) => ask(apiKeys(), history, { ...opts, system: (opts.system || persona()) + hoy() });
 
 // ---- Configuración por enlace de Freddy: #setup=<base64url(JSON)> ----
 async function readSetup() {
@@ -25,9 +32,10 @@ async function readSetup() {
   try {
     const json = JSON.parse(decodeURIComponent(escape(atob(m[1].replace(/-/g, "+").replace(/_/g, "/")))));
     if (json.v !== 1) throw 0;
-    config = { ...config, key: (json.k || config.key || "").replace(/\s+/g, ""), name: json.n || "Wendy", trato: json.t || "tu", extra: json.x || "", wa: json.w || config.wa || "", brand: json.b || config.brand || "", setupAt: new Date().toISOString() };
-    save(CFG, config);
-    const ok = config.key ? await testKey(config.key) : false;
+    config = { ...config, keys: [json.k, json.k2].map((k) => String(k || "").replace(/\s+/g, "")).filter(Boolean), name: json.n || "Wendy", trato: json.t || "tu", extra: json.x || "", wa: json.w || config.wa || "", brand: json.b || config.brand || "", setupAt: new Date().toISOString() };
+    if (!config.keys.length) throw 0; delete config.key;
+    saveCfg();
+    let ok = false; for (const k of config.keys) if (await testKey(k)) { ok = true; break; }
     toast(ok ? "¡Listo! Viernes quedó preparada 💜" : "Recibí el enlace, pero la conexión no respondió. Avísale a Freddy.", 4000);
   } catch { toast("Ese enlace no sirvió. Pídele a Freddy uno nuevo."); }
 }
@@ -163,7 +171,7 @@ $("vi-file2").onchange = (e) => e.target.files[0] && vision(e.target.files[0]);
 
 // ---- Estado (para Freddy) ----
 function renderStatus() {
-  const s = { app: "Viernes", version: VERSION, configurada: hasKey() ? "sí" : "no", preparada: config.setupAt ? new Date(config.setupAt).toLocaleString("es-CR") : "—",
+  const s = { app: "Viernes", version: VERSION, configurada: hasKey() ? `sí (${config.keys.length} llave${config.keys.length > 1 ? "s" : ""})` : "no", preparada: config.setupAt ? new Date(config.setupAt).toLocaleString("es-CR") : "—",
     instalada: matchMedia("(display-mode: standalone)").matches ? "sí" : "no", mensajes: chat.length, navegador: navigator.userAgent.match(/(Chrome|Firefox|Safari)\/[\d.]+/)?.[0] || "?" };
   $("status-box").innerHTML = Object.entries(s).map(([k, v]) => `<b>${k}:</b> ${esc(v)}`).join("<br>");
   $("status-share").onclick = () => { const t = "Estado de Viernes\n" + Object.entries(s).map(([k, v]) => `${k}: ${v}`).join("\n"); navigator.share ? navigator.share({ text: t }) : navigator.clipboard.writeText(t).then(() => toast("Copiado")); };
