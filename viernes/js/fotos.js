@@ -65,10 +65,10 @@ function limpiar(){const W=mask.width,H=mask.height,k=Math.min(1,320/Math.max(W,
 // Busca el punto más interno del recorte, crece una zona de color parecido (mate) y la borra si es grande.
 function lab(r,g,b){const f=c=>{c/=255;return c>.04045?Math.pow((c+.055)/1.055,2.4):c/12.92};r=f(r);g=f(g);b=f(b);
  let x=(r*.4124+g*.3576+b*.1805)/.95047,y=r*.2126+g*.7152+b*.0722,z=(r*.0193+g*.1192+b*.9505)/1.08883;const h=t=>t>.008856?Math.cbrt(t):7.787*t+16/116;x=h(x);y=h(y);z=h(z);return[116*y-16,500*(x-y),200*(y-z)]}
-function zonaLow(){const W=mask.width,H=mask.height,k=Math.min(1,560/Math.max(W,H)),w=Math.max(1,Math.round(W*k)),h=Math.max(1,Math.round(H*k));
+function zonaLow(th=110){const W=mask.width,H=mask.height,k=Math.min(1,560/Math.max(W,H)),w=Math.max(1,Math.round(W*k)),h=Math.max(1,Math.round(H*k));
  const c1=document.createElement('canvas');c1.width=w;c1.height=h;const g1=c1.getContext('2d');g1.filter='blur(1.2px)';g1.drawImage(orig,0,0,w,h);const px=g1.getImageData(0,0,w,h).data;
  const c2=document.createElement('canvas');c2.width=w;c2.height=h;const g2=c2.getContext('2d');g2.drawImage(mask,0,0,w,h);const al=g2.getImageData(0,0,w,h).data;
- const L=new Float32Array(w*h*3),fg=new Uint8Array(w*h);for(let i=0;i<w*h;i++){const v=lab(px[i*4],px[i*4+1],px[i*4+2]);L[i*3]=v[0];L[i*3+1]=v[1];L[i*3+2]=v[2];fg[i]=al[i*4+3]>110?1:0}
+ const L=new Float32Array(w*h*3),fg=new Uint8Array(w*h);for(let i=0;i<w*h;i++){const v=lab(px[i*4],px[i*4+1],px[i*4+2]);L[i*3]=v[0];L[i*3+1]=v[1];L[i*3+2]=v[2];fg[i]=al[i*4+3]>th?1:0}
  return{W,H,w,h,k,L,fg}}
 function crecer(Z,seed,tol){const{w,h,L,fg}=Z;const reg=new Uint8Array(w*h);const st=[seed];reg[seed]=1;let n=0,m=[L[seed*3],L[seed*3+1],L[seed*3+2]],cnt=1;
  while(st.length){const j=st.pop();n++;const x=j%w,y=j/w|0;for(const q of [x>0?j-1:-1,x<w-1?j+1:-1,y>0?j-w:-1,y<h-1?j+w:-1]){if(q<0||reg[q]||!fg[q])continue;
@@ -96,7 +96,8 @@ function quitarSuperficie(minFrac=.15,forzar=false){const Z=zonaLow();const{w,h,
   borrarZona(Z,reg);for(let i=0;i<w*h;i++)if(reg[i])fg[i]=0;quitadas++}
  return quitadas}
 // tocar para quitar una zona del mismo color
-function quitarZonaEn(mx,my){const Z=zonaLow();const x=Math.round(mx*Z.k),y=Math.round(my*Z.k);if(x<0||y<0||x>=Z.w||y>=Z.h)return;const i=y*Z.w+x;if(!Z.fg[i])return;
+function quitarZonaEn(mx,my){const Z=zonaLow(16);const x=Math.round(mx*Z.k),y=Math.round(my*Z.k);if(x<0||y<0||x>=Z.w||y>=Z.h)return;let i=y*Z.w+x;
+ if(!Z.fg[i]){let bd=1e9,bi=-1;for(let dy=-8;dy<=8;dy++)for(let dx=-8;dx<=8;dx++){const X=x+dx,Y=y+dy;if(X>=0&&Y>=0&&X<Z.w&&Y<Z.h&&Z.fg[Y*Z.w+X]&&dx*dx+dy*dy<bd){bd=dx*dx+dy*dy;bi=Y*Z.w+X}}if(bi<0){msg('Tocá encima de lo que querés quitar');return}i=bi}
  const{reg}=crecer(Z,i,14);borrarZona(Z,reg)}
 async function procesar(file,auto){$('elegir').disabled=true;$('editor').style.display='none';cv.style.display='none';
  try{const L=await cargarLib();
@@ -202,15 +203,15 @@ const cap=t=>t.charAt(0).toUpperCase()+t.slice(1);
 const TIPOS=['collar','pulsera','brazalete','aretes','arete','tobillera','anillo','cadena','gargantilla','choker','llavero','set','juego'];
 const ICON=[[/cierre|broche|langosta/,'🔗'],[/cuenta|bola|chicle|perla/,'⭐'],[/material|calidad|resist|acero|plata|oro|dorad/,'🌿'],[/color|pastel|vibrant/,'🌸'],[/ocasion|regal|todo/,'💛'],[/mano|artesan/,'🤲'],[/ajust|extens|tama/,'📏'],[/piedra|cristal|brill/,'💎'],[/coraz|amor/,'❤️']];
 const icono=(t,i)=>{const n=norm(t);for(const [r,e] of ICON)if(r.test(n))return e;return['⭐','🌿','🌸','💛','💎','✨'][i%6]};
-function precioDe(t){const n=norm(t);let m=n.match(/(?:₡|c\/|precio|cuesta|vale|a)\s*([\d.,]+)\s*(mil)?/)||n.match(/([\d.,]+)\s*(mil)?\s*(?:colones|cones|₡|rojos)/)||n.match(/\b(\d{4,6}|\d{1,2}\s*mil)\b/);
+function precioDe(t){const n=norm(t);let m=n.match(/(?:₡|c\/|precio|cuesta|vale|\ba)\s*:?\s*(\d[\d.,]*)\s*(mil)?/)||n.match(/(\d[\d.,]*)\s*(mil)?\s*(?:colones|cones|₡|rojos)/)||n.match(/\b(\d{4,6}|\d{1,2}\s*mil)\b/);
  if(!m)return'';let v=parseFloat(String(m[1]).replace(/[.,](?=\d{3}\b)/g,'').replace(',','.'));if(/mil/.test(m[0]))v*=1000;return v>=100?String(Math.round(v)):''}
 function parsearAfiche(texto){const partes=texto.split(/[,;\n]/).map(x=>x.trim()).filter(Boolean);
  const precio=precioDe(texto);const sinP=partes.filter(x=>!/(₡|colon|precio|cuesta|vale|\b\d{3,}\b|\bmil\b)/i.test(x));
  let tit=sinP.shift()||'Mi joya';const n=norm(tit);const tipo=TIPOS.find(k=>n.startsWith(k))||TIPOS.find(k=>n.includes(k))||'';
- let sub='';const tw=tit.split(/\s+/);if(tw.length>2){sub=tw.slice(1).join(' ');tit=tw[0]}else if(tw.length===2){sub=tw[1];tit=tw[0]}
+ let sub='';const tw=tit.split(/\s+/);if(tw.length>6){sub=tw.slice(1,5).join(' ').replace(/\s+(de|con|y|para|del|la|el)$/i,'');tit=tw[0];sinP.unshift(tw.slice(5).join(' '))}else if(tw.length>2){sub=tw.slice(1).join(' ');tit=tw[0]}else if(tw.length===2){sub=tw[1];tit=tw[0]}
  let frase='';const fi=sinP.findIndex(x=>/(divert|unic|colorid|elegant|delicad|lind|hermos|tiern|moderno|bonit)/i.test(norm(x))&&x.split(' ').length<=6);
  if(fi>=0)frase=sinP.splice(fi,1)[0].split(/\s+/).map(cap).join(' • ');
- const feats=sinP.map(cap).slice(0,5);while(feats.length<3)feats.push(['Hecho a mano en Costa Rica','Ideal para cualquier ocasión','Diseño único'][feats.length]);
+ const feats=sinP.map(x=>{const w=x.split(/\s+/);return cap(w.length>6?w.slice(0,6).join(' ').replace(/\s+(de|con|y|para|del|la|el)$/i,''):x)}).slice(0,5);while(feats.length<3)feats.push(['Hecho a mano en Costa Rica','Ideal para cualquier ocasión','Diseño único'][feats.length]);
  const det=feats.filter(f=>/cierre|broche|cuenta|perla|dije|detalle|piedra/i.test(f));
  const d1=feats.find(f=>/cierre|broche|langosta/i.test(f))||'Detalle del cierre';const d2=feats.some(f=>/cuenta|perla|bola|chicle/i.test(f))?'Detalle de las cuentas':'Detalle hecho a mano';
  return{tit:cap(tit),sub:sub?cap(sub):'hecho a mano',frase:frase||'Hecho a mano con amor 💗',feats,d1,d2,precio}}
@@ -242,19 +243,20 @@ $('afHacer').onclick=async()=>{if(!afFile){msg('Primero elegí la foto de tu joy
 const afc=$('afCv'),ag=afc.getContext('2d');
 function pill(g,x,y,w,h,fill,stroke){g.beginPath();g.roundRect(x,y,w,h,h/2);g.fillStyle=fill;g.fill();if(stroke){g.lineWidth=4;g.strokeStyle=stroke;g.stroke()}}
 function texto(g,t,x,y,maxW,lh,font,color,align='left'){g.font=font;g.fillStyle=color;g.textAlign=align;g.textBaseline='middle';const ws=String(t).split(' ');let l='',ls=[];for(const w of ws){const p=l?l+' '+w:w;if(g.measureText(p).width>maxW&&l){ls.push(l);l=w}else l=p}ls.push(l);ls.forEach((L,i)=>g.fillText(L,x,y+(i-(ls.length-1)/2)*lh));return ls.length}
-function fit(g,t,maxW,size,fam){let s=size;do{g.font=`${fam.w||700} ${s}px ${fam.f}`;s-=2}while(g.measureText(t).width>maxW&&s>20);return g.font}
+function fit(g,t,maxW,size,fam,min=20){let s=size;do{g.font=`${fam.w||700} ${s}px ${fam.f}`;s-=2}while(g.measureText(t).width>maxW&&s>min);return g.font}
+function corto(g,t,maxW){t=String(t);if(g.measureText(t).width<=maxW)return t;while(t.length>1&&g.measureText(t+'…').width>maxW)t=t.slice(0,-1);return t.trim()+'…'}
 function ajoya(g,x,y,w,h,sh=.35){const s=Math.min(w/obj.width,h/obj.height),W=obj.width*s,H=obj.height*s;g.save();g.shadowColor=`rgba(80,30,60,${sh})`;g.shadowBlur=40;g.shadowOffsetY=18;g.drawImage(obj,x+(w-W)/2,y+(h-H)/2,W,H);g.restore()}
 function burbuja(g,i,cx,cy,R,borde){const [px,py,r]=detPts[i];g.save();g.beginPath();g.arc(cx,cy,R,0,7);g.closePath();g.fillStyle='#fff';g.fill();g.clip();g.drawImage(orig,px-r,py-r,2*r,2*r,cx-R,cy-R,2*R,2*R);g.restore();g.beginPath();g.arc(cx,cy,R,0,7);g.lineWidth=9;g.strokeStyle=borde;g.stroke();g.lineWidth=3;g.strokeStyle='#fff';g.beginPath();g.arc(cx,cy,R-7,0,7);g.stroke()}
 function corazon(g,x,y,s,c){g.save();g.translate(x,y);g.scale(s/30,s/30);g.beginPath();g.moveTo(0,8);g.bezierCurveTo(-18,-6,-8,-20,0,-9);g.bezierCurveTo(8,-20,18,-6,0,8);g.fillStyle=c;g.fill();g.restore()}
 function bokeh(g,W,H,cols,n=40){for(let i=0;i<n;i++){g.beginPath();g.arc(Math.random()*W,Math.random()*H,8+Math.random()*50,0,7);g.fillStyle=cols[i%cols.length];g.globalAlpha=.08+Math.random()*.15;g.fill()}g.globalAlpha=1}
-const precioTxt=p=>p?'₡'+String(p).replace(/\B(?=(\d{3})+(?!\d))/g,'.'):'';
+const precioTxt=p=>(p=String(p||'').replace(/\D/g,''))?'₡'+p.replace(/\B(?=(\d{3})+(?!\d))/g,'.'):'';
 const BEN=[['💗','Luce linda'],['🤲','Hecho a mano'],['🎁','Perfecto para regalar']];
 function chicle(d){const W=1080,H=1620;afc.width=W;afc.height=H;const g=ag;
  let gr=g.createLinearGradient(0,0,0,H);gr.addColorStop(0,'#fff5fa');gr.addColorStop(1,'#fde6f1');g.fillStyle=gr;g.fillRect(0,0,W,H);bokeh(g,W,H,['#ff9cc8','#c9a8ff','#ffd27a','#9ee6c8']);
  // título
  g.save();g.shadowColor='#e7a4c766';g.shadowBlur=20;pill(g,40,40,640,420,'#fde3ef');g.restore();g.lineWidth=6;g.strokeStyle='#fff';g.beginPath();g.roundRect(40,40,640,420,60);g.stroke();
- g.font=fit(g,d.tit,560,150,{f:'Fredoka'});g.textAlign='center';g.textBaseline='middle';g.lineWidth=14;g.strokeStyle='#fff';g.strokeText(d.tit,360,150);g.fillStyle='#9b5fd0';g.fillText(d.tit,360,150);
- g.font=fit(g,d.sub,580,96,{f:'Fredoka'});g.strokeText(d.sub,360,275);g.fillStyle='#e8478f';g.fillText(d.sub,360,275);
+ g.font=fit(g,d.tit,560,150,{f:'Fredoka'},50);d.tit=corto(g,d.tit,600);g.textAlign='center';g.textBaseline='middle';g.lineWidth=14;g.strokeStyle='#fff';g.strokeText(d.tit,360,150);g.fillStyle='#9b5fd0';g.fillText(d.tit,360,150);
+ g.font=fit(g,d.sub,580,96,{f:'Fredoka'},40);d.sub=corto(g,d.sub,600);g.strokeText(d.sub,360,275);g.fillStyle='#e8478f';g.fillText(d.sub,360,275);
  pill(g,70,345,580,80,'#b48cff');texto(g,d.frase,360,385,540,40,'600 34px Fredoka','#fff','center');corazon(g,690,70,40,'#ff6fae');corazon(g,615,195,30,'#ff8fc0');
  // joya
  ajoya(g,40,480,640,720);
@@ -272,8 +274,8 @@ function elegante(d){const W=1080,H=1080;afc.width=W;afc.height=H;const g=ag;
  let gr=g.createRadialGradient(400,500,50,540,540,900);gr.addColorStop(0,'#fff3f6');gr.addColorStop(1,'#f3c9d5');g.fillStyle=gr;g.fillRect(0,0,W,H);bokeh(g,W,H,['#ffffff','#f7a8c0','#e9b97a'],50);
  for(let i=0;i<14;i++)flor(g,Math.random()<.5?Math.random()*140:W-Math.random()*120,Math.random()*H,10+Math.random()*16);
  // titulo
- g.font=fit(g,d.tit,620,170,{w:400,f:'"Great Vibes"'});g.textAlign='center';g.textBaseline='alphabetic';const go=g.createLinearGradient(0,40,0,200);go.addColorStop(0,'#d9a956');go.addColorStop(1,'#a87428');g.fillStyle=go;g.fillText(d.tit,400,175);
- g.font=fit(g,d.sub,640,46,{w:600,f:'"Playfair Display"'});g.fillStyle='#8a4a62';g.fillText(d.sub,420,240);
+ g.font=fit(g,d.tit,620,170,{w:400,f:'"Great Vibes"'},60);d.tit=corto(g,d.tit,660);g.textAlign='center';g.textBaseline='alphabetic';const go=g.createLinearGradient(0,40,0,200);go.addColorStop(0,'#d9a956');go.addColorStop(1,'#a87428');g.fillStyle=go;g.fillText(d.tit,400,175);
+ g.font=fit(g,d.sub,640,46,{w:600,f:'"Playfair Display"'},30);d.sub=corto(g,d.sub,660);g.fillStyle='#8a4a62';g.fillText(d.sub,420,240);
  pill(g,140,272,560,76,'#fbe1ea');texto(g,d.frase,420,310,520,34,'italic 500 30px "Playfair Display"','#7a4258','center');
  // pedestal octagonal
  g.save();g.shadowColor='#b0607a55';g.shadowBlur=40;g.shadowOffsetY=20;const px=70,py=380,pw=580,ph=600,c=90;g.beginPath();g.moveTo(px+c,py);g.lineTo(px+pw-c,py);g.lineTo(px+pw,py+c);g.lineTo(px+pw,py+ph-c);g.lineTo(px+pw-c,py+ph);g.lineTo(px+c,py+ph);g.lineTo(px,py+ph-c);g.lineTo(px,py+c);g.closePath();
@@ -287,7 +289,7 @@ function elegante(d){const W=1080,H=1080;afc.width=W;afc.height=H;const g=ag;
 function flor(g,x,y,r){g.save();g.translate(x,y);for(let i=0;i<5;i++){g.rotate(Math.PI*2/5);g.beginPath();g.ellipse(0,r*.7,r*.45,r*.7,0,0,7);g.fillStyle='#f7b6c8';g.globalAlpha=.85;g.fill()}g.globalAlpha=1;g.beginPath();g.arc(0,0,r*.3,0,7);g.fillStyle='#f5d77a';g.fill();g.restore()}
 function tienda(d){const W=1080,H=1350;afc.width=W;afc.height=H;const g=ag;g.fillStyle='#ffffff';g.fillRect(0,0,W,H);
  g.fillStyle='#faf6f8';g.beginPath();g.roundRect(60,230,960,850,40);g.fill();
- const tt=d.tit+' '+d.sub.charAt(0).toLowerCase()+d.sub.slice(1);g.font=fit(g,tt,960,84,{w:600,f:'"Playfair Display"'});g.textAlign='center';g.textBaseline='middle';g.fillStyle='#3a2a35';g.fillText(tt,540,110);
+ const tt=d.tit+' '+d.sub.charAt(0).toLowerCase()+d.sub.slice(1);g.font=fit(g,tt,960,84,{w:600,f:'"Playfair Display"'},40);const tt2=corto(g,tt,980);g.textAlign='center';g.textBaseline='middle';g.fillStyle='#3a2a35';g.fillText(tt2,540,110);
  texto(g,d.frase,540,180,900,36,'500 32px Quicksand','#b0608a','center');ajoya(g,100,260,880,780,.25);
  burbuja(g,0,190,960,100,'#e6c3d4');burbuja(g,1,890,960,100,'#e6c3d4');
  const fs=sinDup(d,3,['Hecho a mano']);let x=60,y=1110;g.font='600 28px Quicksand';fs.forEach((f,i)=>{if(y>1170)return;const t=icono(f,i)+' '+f;const w=Math.min(470,g.measureText(t).width+60);if(x+w>1020){x=60;y+=90}if(y>1170)return;pill(g,x,y,w,70,'#fdeef5');texto(g,t,x+w/2,y+36,w-30,30,'600 28px Quicksand','#5a3a50','center');x+=w+20});
