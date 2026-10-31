@@ -42,13 +42,26 @@ import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.31.0";
+const APP_VERSION = "1.31.1";
 // v1.25.1: emparejar con el QR de la compu (#pc-token=…). Se lee y se borra del enlace de inmediato (no queda en el historial).
 let pcEmparejar = null, pcEmparejando = false;
 try {
   const h = new URLSearchParams(location.hash.slice(1)).get("pc-token");
   if (location.hash.includes("pc-token")) { const q = leerQRCompu(location.href) || {}; history.replaceState(null, "", location.pathname + location.search); pcEmparejar = { tok: (h || "").replace(/\s+/g, ""), url: q.url || "" }; }
 } catch { /* */ }
+// v1.31.1: importar keys con enlace #addkeys=<base64url JSON {v:1,keys:[…]}>. Se lee y se borra del enlace de inmediato.
+function leerAddKeys(txt) {
+  try {
+    const m = String(txt || "").match(/addkeys=([A-Za-z0-9_\-]+)/);
+    if (!m) return null;
+    const b = m[1].replace(/-/g, "+").replace(/_/g, "/");
+    const j = JSON.parse(decodeURIComponent(escape(atob(b + "===".slice((b.length + 3) % 4)))));
+    const ks = (Array.isArray(j.keys) ? j.keys : []).map((k) => String(k || "").replace(/\s+/g, "")).filter((k) => k.length >= 20);
+    return ks.length ? ks : null;
+  } catch { return null; }
+}
+let pendingAddKeys = null;
+try { if (location.hash.includes("addkeys=")) { pendingAddKeys = leerAddKeys(location.hash) || []; history.replaceState(null, "", location.pathname + location.search); } } catch { /* */ }
 // Pregunta por defecto cuando se manda solo la foto o el video (v1.8.1)
 const DEFAULT_MEDIA_PROMPT = "¿Qué es esto? Dígamelo en pocas palabras y, si tiene texto o datos importantes (montos, fechas, avisos o errores), léamelos.";
 const DEFAULT_VIDEO_PROMPT = "¿Qué se ve en este video? Resúmalo en pocas palabras y léame el texto importante que aparezca.";
@@ -2594,6 +2607,14 @@ function addKeyRow(val = "") {
 }
 function syncAddKey() { const b = document.getElementById("add-key"), box = document.getElementById("extra-keys"); if (b && box) b.disabled = box.children.length >= 9; }
 function renderExtraKeys(list) { const box = document.getElementById("extra-keys"); if (!box) return; box.replaceChildren(); for (const k of list.slice(0, 9)) addKeyRow(k); syncAddKey(); }
+document.getElementById("import-keys-btn")?.addEventListener("click", () => {
+  const f = document.getElementById("import-keys"); const l = leerAddKeys(f.value);
+  const st = document.getElementById("import-keys-st");
+  if (!l) { st.textContent = "Ese enlace no es válido. Pegue el enlace completo de llaves."; return; }
+  const n = importarKeys(l); f.value = ""; renderExtraKeys(config.geminiExtraKeys || []);
+  els.apiKey.value = config.geminiApiKey || ""; if (snapshot) { snapshot.geminiApiKey = config.geminiApiKey || ""; snapshot.geminiExtraKeys = [...(config.geminiExtraKeys || [])]; } updateDirty();
+  st.textContent = n ? `✓ ${n === 1 ? "1 llave agregada" : n + " llaves agregadas"} y guardadas.` : "Esas llaves ya estaban guardadas.";
+});
 document.getElementById("add-key")?.addEventListener("click", () => { addKeyRow(""); updateDirty(); document.querySelector("#extra-keys .xk-row:last-child input, #extra-keys > div:last-child input")?.focus(); });
 
 // "Probar conexión": si funciona, la key se guarda de una vez
@@ -2976,6 +2997,7 @@ function wipePersonalDom() {
   for (const el of [els.apiKey, els.userName, els.assistantName, els.personality]) { if (el) el.value = ""; }
   if (els.apiKey) els.apiKey.type = "password";
   document.getElementById("extra-keys")?.replaceChildren();
+  { const f = document.getElementById("import-keys"); if (f) f.value = ""; }
   els.factsList.replaceChildren();
   els.factsCount.textContent = "";
   els.saludo.replaceChildren();
@@ -3043,8 +3065,26 @@ function lockApp(reason = "manual") {
   console.info("Antares: bloqueado", reason);
 }
 
+function importarKeys(list) {
+  if (!list || !list.length) return showNote("El enlace de llaves no traía llaves válidas.", { warn: true });
+  const cur = [config.geminiApiKey, ...(config.geminiExtraKeys || [])].filter(Boolean);
+  const nuevas = list.filter((k, i) => !cur.includes(k) && list.indexOf(k) === i);
+  const cabe = Math.max(0, 10 - cur.length);
+  const add = nuevas.slice(0, cabe);
+  if (add.length) {
+    if (!config.geminiApiKey) config.geminiApiKey = add.shift(), (config.geminiExtraKeys ||= []);
+    config.geminiExtraKeys = [...(config.geminiExtraKeys || []), ...add];
+    memory.saveConfig(config); applyConfig();
+    try { if (!els.settingsView.hidden) renderExtraKeys(config.geminiExtraKeys); } catch { /* */ }
+  }
+  const n = Math.min(nuevas.length, cabe), total = Math.min(10, cur.length + n);
+  const extra = nuevas.length > cabe ? ` (${nuevas.length - cabe} no cupieron: máximo 10)` : "";
+  showNote(n ? `Listo: ${n === 1 ? "se agregó 1 llave" : `se agregaron ${n} llaves`} de respaldo. Ahora tiene ${total} en total${extra}.` : `Esas llaves ya estaban guardadas. Tiene ${total} en total.`, { bold: "🔑 " });
+  return n;
+}
 function loadData() {
   config = memory.getConfig();
+  if (pendingAddKeys) { const l = pendingAddKeys; pendingAddKeys = null; setTimeout(() => importarKeys(l), 600); }
   applyConfig();
   els.messages.replaceChildren();
   lastUserCode = null;
