@@ -1,0 +1,134 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Viernes · Fondos para fotos (muestra)</title>
+<link rel="icon" href="icons/icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Playfair+Display:wght@600&family=Quicksand:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#14081f;--bg2:#24103a;--pink:#ff5fa8;--pink2:#ffb3d6;--lila:#b48cff;--ink:#fbeefe;--mut:#c9a9d8;--line:rgba(255,160,220,.22)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:Quicksand,system-ui,sans-serif;color:var(--ink);background:radial-gradient(120% 60% at 80% -10%,#5a1d6e 0,transparent 60%),var(--bg);min-height:100dvh}
+header{padding:14px 16px;border-bottom:1px solid var(--line);text-align:center}
+h1{margin:0;font-family:"Playfair Display",serif;font-size:24px;background:linear-gradient(90deg,var(--pink2),var(--lila));-webkit-background-clip:text;color:transparent}
+header p{margin:4px 0 0;color:var(--mut);font-size:14px}
+main{max-width:560px;margin:auto;padding:14px}
+.btn{display:block;width:100%;font:700 20px Quicksand,sans-serif;padding:18px;margin:10px 0;border:0;border-radius:18px;color:#fff;background:linear-gradient(90deg,var(--pink),#a855f7);box-shadow:0 6px 18px #ff5fa844}
+.btn.sec{background:rgba(255,255,255,.08);border:1px solid var(--line)}
+.btn:disabled{opacity:.4}
+#msg{text-align:center;font-size:18px;min-height:26px;margin:8px 0;color:var(--pink2)}
+#lienzo{width:100%;border-radius:16px;touch-action:none;display:none;background:repeating-conic-gradient(#ddd 0 25%,#fff 0 50%) 0 0/20px 20px}
+.tabs{display:flex;gap:6px;margin-top:10px}.tabs button{flex:1;font:700 16px Quicksand;padding:14px 4px;border-radius:14px;border:1px solid var(--line);background:var(--bg2);color:var(--ink)}
+.tabs button.on{background:var(--pink);color:#fff}
+.panel{display:none;padding:10px 0}.panel.on{display:block}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.grid button{aspect-ratio:1;border-radius:14px;border:3px solid transparent;font:700 13px Quicksand;color:#333}
+.grid button.on{border-color:var(--pink2)}
+label{display:block;font-size:17px;margin:12px 0 4px}input[type=range]{width:100%;height:34px;accent-color:var(--pink)}
+.fila{display:flex;gap:8px}.fila .btn{font-size:17px;padding:14px 6px}
+.fila .btn.on{outline:3px solid var(--pink2)}
+.ayuda{color:var(--mut);font-size:14px;text-align:center}
+</style></head><body>
+<header><h1>✨ Fondos para tus fotos</h1><p>Muestra de Viernes · todo funciona en tu teléfono, gratis</p></header>
+<main>
+<input type="file" id="archivo" accept="image/*" hidden>
+<input type="file" id="archivoFondo" accept="image/*" hidden>
+<button class="btn" id="elegir">📷 Elegir foto de tu joya</button>
+<div id="msg"></div>
+<canvas id="lienzo"></canvas>
+<div id="editor" style="display:none">
+<div class="tabs"><button data-p="pFondo" class="on">🎨 Fondo</button><button data-p="pMover">✋ Mover</button><button data-p="pRetocar">🖌️ Retocar</button></div>
+<div class="panel on" id="pFondo"><div class="grid" id="fondos"></div>
+<button class="btn sec" id="miFondo">🖼️ Usar mi propia foto de fondo</button></div>
+<div class="panel" id="pMover"><p class="ayuda">Arrastrá la joya con el dedo. Con dos dedos la agrandás o achicás.</p>
+<label>Tamaño</label><input type="range" id="tam" min="20" max="250" value="100">
+<label>Sombra suave</label><input type="range" id="sombra" min="0" max="100" value="40">
+<button class="btn sec" id="centrar">↺ Volver al centro</button></div>
+<div class="panel" id="pRetocar"><p class="ayuda">Pasá el dedo sobre la foto para borrar lo que sobra o recuperar partes de la cadena.</p>
+<div class="fila"><button class="btn sec on" id="bBorrar">🧽 Borrar</button><button class="btn sec" id="bRec">✨ Recuperar</button></div>
+<label>Grosor del pincel</label><input type="range" id="grosor" min="4" max="80" value="20"></div>
+<button class="btn" id="compartir">📤 Compartir</button>
+<div class="fila"><button class="btn sec" id="png">⬇️ PNG</button><button class="btn sec" id="jpg">⬇️ JPG</button></div>
+<button class="btn sec" id="otra">📷 Otra foto</button>
+</div>
+</main>
+<script type="module">
+const $=id=>document.getElementById(id);
+const cv=$('lienzo'),cx=cv.getContext('2d');
+const msg=t=>$('msg').textContent=t;
+let orig,mask,obj,fondo={tipo:'color',v:'#ffffff'},fondoImg=null,pos={x:.5,y:.5,s:1},modo='mover',pincel='borrar',lib;
+const N=1080;cv.width=cv.height=N;
+// texturas generadas
+function tex(kind){const c=document.createElement('canvas');c.width=c.height=N;const g=c.getContext('2d');
+ const ruido=(a)=>{const d=g.getImageData(0,0,N,N);for(let i=0;i<d.data.length;i+=4){const r=(Math.random()-.5)*a;d.data[i]+=r;d.data[i+1]+=r;d.data[i+2]+=r}g.putImageData(d,0,0)};
+ if(kind==='madera'){g.fillStyle='#a0703f';g.fillRect(0,0,N,N);for(let y=0;y<N;y+=2){g.strokeStyle=`rgba(${60+Math.random()*40|0},35,15,${.05+Math.random()*.25})`;g.lineWidth=1+Math.random()*3;g.beginPath();g.moveTo(0,y);for(let x=0;x<=N;x+=40)g.lineTo(x,y+Math.sin(x/90+y/50)*6);g.stroke()}ruido(14)}
+ if(kind==='marmol'){g.fillStyle='#f3f1ee';g.fillRect(0,0,N,N);for(let k=0;k<26;k++){g.strokeStyle=`rgba(120,120,130,${.05+Math.random()*.2})`;g.lineWidth=.5+Math.random()*2.5;g.beginPath();let x=Math.random()*N,y=0;g.moveTo(x,y);while(y<N){x+=(Math.random()-.5)*60;y+=20+Math.random()*30;g.lineTo(x,y)}g.stroke()}g.filter='blur(1px)';g.drawImage(c,0,0);g.filter='none';ruido(8)}
+ if(kind==='tela'){g.fillStyle='#e9dcc9';g.fillRect(0,0,N,N);for(let i=0;i<N;i+=3){g.fillStyle=`rgba(0,0,0,${Math.random()*.06})`;g.fillRect(i,0,1.5,N);g.fillStyle=`rgba(255,255,255,${Math.random()*.08})`;g.fillRect(0,i,N,1.5)}ruido(10)}
+ if(kind==='lino'){g.fillStyle='#c7b8d8';g.fillRect(0,0,N,N);for(let i=0;i<N;i+=4){g.fillStyle=`rgba(60,30,80,${Math.random()*.07})`;g.fillRect(i,0,2,N);g.fillRect(0,i,N,2)}ruido(12)}
+ return c}
+const FONDOS=[['#ffffff','Blanco'],['#000000','Negro'],['#f8d7e3','Rosa'],['#e8e0d0','Crema'],['#cfe8e0','Menta'],['#d9e6f5','Cielo'],
+ ['g:#fde2e4,#e2d1f9','Suave'],['g:#fff1d6,#ffd1dc','Durazno'],['g:#d4fc79,#96e6a1','Verde'],['g:#2c1a4d,#6b2d5c','Noche'],
+ ['t:madera','Madera'],['t:marmol','Mármol'],['t:tela','Tela'],['t:lino','Lino lila']];
+const texCache={};
+FONDOS.forEach(([v,n],i)=>{const b=document.createElement('button');b.textContent=n;
+ if(v[0]==='#')b.style.background=v;else if(v.startsWith('g:'))b.style.background=`linear-gradient(160deg,${v.slice(2)})`;
+ else{texCache[v]=tex(v.slice(2));b.style.background=`url(${texCache[v].toDataURL('image/jpeg',.6)}) center/cover`}
+ if(v==='#000000'||v.includes('2c1a4d'))b.style.color='#fff';
+ b.onclick=()=>{document.querySelectorAll('#fondos button').forEach(x=>x.classList.remove('on'));b.classList.add('on');fondo={v};fondoImg=null;dibujar()};
+ if(i===0)b.classList.add('on');$('fondos').append(b)});
+function pintarFondo(g){const v=fondo.v;
+ if(fondoImg){const s=Math.max(N/fondoImg.width,N/fondoImg.height);g.drawImage(fondoImg,(N-fondoImg.width*s)/2,(N-fondoImg.height*s)/2,fondoImg.width*s,fondoImg.height*s)}
+ else if(v[0]==='#'){g.fillStyle=v;g.fillRect(0,0,N,N)}
+ else if(v.startsWith('g:')){const [a,b]=v.slice(2).split(',');const gr=g.createLinearGradient(0,0,N*.4,N);gr.addColorStop(0,a);gr.addColorStop(1,b);g.fillStyle=gr;g.fillRect(0,0,N,N)}
+ else g.drawImage(texCache[v],0,0)}
+function rect(){const s=Math.min(N*.85/obj.width,N*.85/obj.height)*pos.s;const w=obj.width*s,h=obj.height*s;return{x:pos.x*N-w/2,y:pos.y*N-h/2,w,h,s}}
+function rehacerObj(){const g=obj.getContext('2d');g.globalCompositeOperation='copy';g.drawImage(orig,0,0);g.globalCompositeOperation='destination-in';g.drawImage(mask,0,0);g.globalCompositeOperation='source-over'}
+function dibujar(){cx.clearRect(0,0,N,N);pintarFondo(cx);const r=rect();const sh=+$('sombra').value;
+ if(sh){cx.save();cx.shadowColor=`rgba(0,0,0,${sh/160})`;cx.shadowBlur=10+sh*.5;cx.shadowOffsetY=6+sh*.25;cx.drawImage(obj,r.x,r.y,r.w,r.h);cx.restore()}
+ cx.drawImage(obj,r.x,r.y,r.w,r.h)}
+async function cargarLib(){if(!lib){msg('⏳ Preparando el borrador mágico (solo la primera vez tarda)…');lib=await import('https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.5/+esm')}return lib}
+async function procesar(file){$('elegir').disabled=true;$('editor').style.display='none';cv.style.display='none';
+ try{const L=await cargarLib();
+  orig=await createImageBitmap(file);
+  // reducir para teléfono
+  const M=1600,k=Math.min(1,M/Math.max(orig.width,orig.height));const oc=document.createElement('canvas');oc.width=orig.width*k|0;oc.height=orig.height*k|0;oc.getContext('2d').drawImage(orig,0,0,oc.width,oc.height);orig=oc;
+  const blobIn=await new Promise(r=>oc.toBlob(r,'image/png'));
+  const t0=performance.now();
+  const out=await L.removeBackground(blobIn,{model:'isnet_fp16',output:{format:'image/png'},progress:(key,cur,tot)=>{if(key.startsWith('fetch'))msg(`⏳ Descargando borrador mágico… ${Math.round(cur/tot*100)}%`);else msg('✂️ Quitando el fondo…')}});
+  const cut=await createImageBitmap(out);
+  mask=document.createElement('canvas');mask.width=oc.width;mask.height=oc.height;mask.getContext('2d').drawImage(cut,0,0,oc.width,oc.height);
+  obj=document.createElement('canvas');obj.width=oc.width;obj.height=oc.height;rehacerObj();
+  pos={x:.5,y:.5,s:1};$('tam').value=100;cv.style.display='block';$('editor').style.display='block';dibujar();
+  window.__listo=((performance.now()-t0)/1000).toFixed(1);msg('✅ ¡Listo! Ahora elegí un fondo');
+ }catch(e){console.error(e);msg('😕 No pude quitar el fondo. Probá otra foto.')}
+ $('elegir').disabled=false}
+$('elegir').onclick=$('otra').onclick=()=>$('archivo').click();
+$('archivo').onchange=e=>{const f=e.target.files[0];if(f)procesar(f);e.target.value=''};
+$('miFondo').onclick=()=>$('archivoFondo').click();
+$('archivoFondo').onchange=async e=>{const f=e.target.files[0];if(!f)return;fondoImg=await createImageBitmap(f);document.querySelectorAll('#fondos button').forEach(x=>x.classList.remove('on'));dibujar()};
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button,.panel').forEach(x=>x.classList.remove('on'));b.classList.add('on');$(b.dataset.p).classList.add('on');modo=b.dataset.p==='pRetocar'?'pincel':'mover'});
+$('tam').oninput=()=>{pos.s=$('tam').value/100;dibujar()};$('sombra').oninput=dibujar;
+$('centrar').onclick=()=>{pos={x:.5,y:.5,s:1};$('tam').value=100;dibujar()};
+$('bBorrar').onclick=()=>{pincel='borrar';$('bBorrar').classList.add('on');$('bRec').classList.remove('on')};
+$('bRec').onclick=()=>{pincel='rec';$('bRec').classList.add('on');$('bBorrar').classList.remove('on')};
+// toques
+const dedos=new Map();let ini=null;
+const pt=e=>{const b=cv.getBoundingClientRect();return{x:(e.clientX-b.left)/b.width,y:(e.clientY-b.top)/b.height}};
+function pintar(p){const r=rect();const mx=(p.x*N-r.x)/r.s,my=(p.y*N-r.y)/r.s;const g=mask.getContext('2d');const rad=+$('grosor').value/r.s;
+ if(pincel==='borrar'){g.globalCompositeOperation='destination-out';g.fillStyle='#000'}else{g.globalCompositeOperation='source-over';g.fillStyle='#fff'}
+ g.beginPath();g.arc(mx,my,rad,0,7);g.fill();g.globalCompositeOperation='source-over';rehacerObj();dibujar()}
+cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);dedos.set(e.pointerId,pt(e));
+ if(modo==='pincel'){pintar(pt(e));return}
+ const a=[...dedos.values()];ini={pos:{...pos},a:a.map(p=>({...p})),d:a.length>1?Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y):0}});
+cv.addEventListener('pointermove',e=>{if(!dedos.has(e.pointerId))return;dedos.set(e.pointerId,pt(e));
+ if(modo==='pincel'){pintar(pt(e));return}
+ const a=[...dedos.values()];if(!ini)return;
+ if(a.length>1&&ini.d){pos.s=Math.max(.2,Math.min(2.5,ini.pos.s*Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)/ini.d));$('tam').value=pos.s*100}
+ else{pos.x=ini.pos.x+a[0].x-ini.a[0].x;pos.y=ini.pos.y+a[0].y-ini.a[0].y}dibujar()});
+const fin=e=>{dedos.delete(e.pointerId);const a=[...dedos.values()];ini=a.length?{pos:{...pos},a,d:0}:null};
+cv.addEventListener('pointerup',fin);cv.addEventListener('pointercancel',fin);
+// exportar
+const blob=t=>new Promise(r=>cv.toBlob(r,t,.92));
+async function bajar(t,ext){const b=await blob(t);const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='joya-'+Date.now()+'.'+ext;a.click();msg('✅ Foto guardada en Descargas')}
+$('png').onclick=()=>bajar('image/png','png');$('jpg').onclick=()=>bajar('image/jpeg','jpg');
+$('compartir').onclick=async()=>{const b=await blob('image/jpeg');const f=new File([b],'joya.jpg',{type:'image/jpeg'});
+ if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:'Mi joya'})}catch(e){}}else bajar('image/jpeg','jpg')};
+</script></body></html>
