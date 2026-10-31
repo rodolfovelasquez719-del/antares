@@ -124,6 +124,29 @@ function dibujar(){cx.clearRect(0,0,N,N);pintarFondo(cx);const r=rect();const sh
  if(sh){cx.save();cx.shadowColor=`rgba(0,0,0,${sh/160})`;cx.shadowBlur=10+sh*.5;cx.shadowOffsetY=6+sh*.25;cx.drawImage(obj,r.x,r.y,r.w,r.h);cx.restore()}
  cx.drawImage(obj,r.x,r.y,r.w,r.h)}
 async function cargarLib(){if(!lib){msg('⏳ Preparando el borrador mágico (solo la primera vez tarda)…');lib=await import('https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.5/+esm')}return lib}
+
+// Quedarse solo con el objeto principal (componente conexa más grande) y recortar a su tamaño
+function limpiar(){const W=mask.width,H=mask.height,k=Math.min(1,320/Math.max(W,H)),w=Math.max(1,Math.round(W*k)),h=Math.max(1,Math.round(H*k));
+ const sc=document.createElement('canvas');sc.width=w;sc.height=h;const sg=sc.getContext('2d');sg.drawImage(mask,0,0,w,h);const a=sg.getImageData(0,0,w,h).data;
+ const bin=new Uint8Array(w*h);for(let i=0;i<w*h;i++)bin[i]=a[i*4+3]>110?1:0;const bin0=bin.slice();
+ {// quitar partes finas y grises (hilos, vetas del mármol): apertura morfológica + color
+ const oc2=document.createElement('canvas');oc2.width=w;oc2.height=h;const og=oc2.getContext('2d');og.drawImage(orig,0,0,w,h);const c=og.getImageData(0,0,w,h).data;
+ const r=Math.max(1,Math.round(Math.max(w,h)*.012));const morf=(src,val)=>{const o=new Uint8Array(w*h);for(let y=0;y<h;y++)for(let x=0;x<w;x++){let v=!val;out:for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const X=x+dx,Y=y+dy;const b=(X>=0&&Y>=0&&X<w&&Y<h)?src[Y*w+X]:0;if(b==val){v=val;break out}}o[y*w+x]=v?1:0}return o};
+ const op=morf(morf(bin,0),1);for(let i=0;i<w*h;i++)if(bin[i]&&!op[i]){const R_=c[i*4],G=c[i*4+1],B=c[i*4+2],mx=Math.max(R_,G,B),mn=Math.min(R_,G,B);if(mx-mn<38)bin[i]=0}}
+ const thin=new Uint8Array(w*h);for(let i=0;i<w*h;i++)thin[i]=bin0[i]&&!bin[i]?1:0;
+ const R=Math.max(2,Math.round(Math.max(w,h)*.015)),dil=new Uint8Array(w*h);// dilatar para unir cierres/cadenas
+ for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(bin[y*w+x])for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){const X=x+dx,Y=y+dy;if(X>=0&&Y>=0&&X<w&&Y<h)dil[Y*w+X]=1}
+ const lab=new Int32Array(w*h),area=[0];let n=0;const st=[];
+ for(let i=0;i<w*h;i++)if(dil[i]&&!lab[i]){n++;area[n]=0;lab[i]=n;st.push(i);while(st.length){const j=st.pop();area[n]+=bin[j];const x=j%w,y=j/w|0;for(const q of [x>0?j-1:-1,x<w-1?j+1:-1,y>0?j-w:-1,y<h-1?j+w:-1])if(q>=0&&dil[q]&&!lab[q]){lab[q]=n;st.push(q)}}}
+ if(n<1)return;let best=1;for(let i=2;i<=n;i++)if(area[i]>area[best])best=i;
+ // borrar todo lo que no es el objeto principal
+ const keep=sg.createImageData(w,h);let x0=w,y0=h,x1=0,y1=0;for(let i=0;i<w*h;i++)if(lab[i]===best&&(bin[i]||a[i*4+3]>110&&!thin[i])){keep.data[i*4+3]=255;if(bin[i]){const x=i%w,y=i/w|0;if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y}}
+ sg.putImageData(keep,0,0);const mg=mask.getContext('2d');mg.globalCompositeOperation='destination-in';mg.imageSmoothingEnabled=true;mg.drawImage(sc,0,0,W,H);mg.globalCompositeOperation='source-over';
+ // limpiar transparencias débiles (hilos, sombras)
+ const md=mg.getImageData(0,0,W,H);for(let i=3;i<md.data.length;i+=4)if(md.data[i]<60)md.data[i]=0;mg.putImageData(md,0,0);
+ const pad=Math.round(Math.max(W,H)*.03),X0=Math.max(0,Math.floor(x0/k)-pad),Y0=Math.max(0,Math.floor(y0/k)-pad),X1=Math.min(W,Math.ceil((x1+1)/k)+pad),Y1=Math.min(H,Math.ceil((y1+1)/k)+pad);
+ const crop=(c)=>{const n=document.createElement('canvas');n.width=X1-X0;n.height=Y1-Y0;n.getContext('2d').drawImage(c,X0,Y0,n.width,n.height,0,0,n.width,n.height);return n};
+ mask=crop(mask);orig=crop(orig)}
 async function procesar(file,auto){$('elegir').disabled=true;$('editor').style.display='none';cv.style.display='none';
  try{const L=await cargarLib();
   orig=await createImageBitmap(file);
@@ -134,7 +157,8 @@ async function procesar(file,auto){$('elegir').disabled=true;$('editor').style.d
   const out=await L.removeBackground(blobIn,{model:'isnet_fp16',output:{format:'image/png'},progress:(key,cur,tot)=>{if(key.startsWith('fetch'))msg(`⏳ Descargando borrador mágico… ${Math.round(cur/tot*100)}%`);else msg('✂️ Quitando el fondo…')}});
   const cut=await createImageBitmap(out);
   mask=document.createElement('canvas');mask.width=oc.width;mask.height=oc.height;mask.getContext('2d').drawImage(cut,0,0,oc.width,oc.height);
-  obj=document.createElement('canvas');obj.width=oc.width;obj.height=oc.height;rehacerObj();
+  limpiar();
+  obj=document.createElement('canvas');obj.width=mask.width;obj.height=mask.height;rehacerObj();
   pos={x:.5,y:.5,s:1};$('tam').value=100;cv.style.display='block';$('editor').style.display='block';$('herr').style.display=auto?'none':'block';$('aMano').style.display=auto?'block':'none';if(auto)$('auto').style.display='none';dibujar();
   window.__listo=((performance.now()-t0)/1000).toFixed(1);if(!auto)msg('✅ ¡Listo! Ahora elegí un fondo');
  return true}catch(e){console.error(e);msg('😕 No pude quitar el fondo. Probá otra foto.')}
@@ -236,7 +260,8 @@ function parsearAfiche(texto){const partes=texto.split(/[,;\n]/).map(x=>x.trim()
  if(fi>=0)frase=sinP.splice(fi,1)[0].split(/\s+/).map(cap).join(' • ');
  const feats=sinP.map(cap).slice(0,5);while(feats.length<3)feats.push(['Hecho a mano en Costa Rica','Ideal para cualquier ocasión','Diseño único'][feats.length]);
  const det=feats.filter(f=>/cierre|broche|cuenta|perla|dije|detalle|piedra/i.test(f));
- return{tit:cap(tit),sub:sub?cap(sub):'hecho a mano',frase:frase||'Hecho a mano con amor 💗',feats,d1:det[0]||'Detalle del cierre',d2:det[1]||'Detalle hecho a mano',precio}}
+ const d1=feats.find(f=>/cierre|broche|langosta/i.test(f))||'Detalle del cierre';const d2=feats.some(f=>/cuenta|perla|bola|chicle/i.test(f))?'Detalle de las cuentas':'Detalle hecho a mano';
+ return{tit:cap(tit),sub:sub?cap(sub):'hecho a mano',frase:frase||'Hecho a mano con amor 💗',feats,d1,d2,precio}}
 async function afGemini(texto){let cfg;try{cfg=JSON.parse(localStorage.getItem('viernes.config.v1')||localStorage.getItem('viernes.config.bak'))}catch{}
  const k=cfg&&((cfg.keys&&cfg.keys[0])||cfg.key);if(!k)return null;
  const pr=`Una artesana de Costa Rica describe su joya para un afiche de venta. Devuelve SOLO JSON: {"tit":"tipo de joya, 1 palabra (Collar, Pulsera...)","sub":"resto del nombre, corto","frase":"3 palabras separadas por ' • '","feats":["3 a 5 características cortas, máx 5 palabras c/u"],"d1":"rótulo corto del detalle 1 (ej. cierre)","d2":"rótulo corto del detalle 2","precio":"solo número en colones o vacío"}. No inventes precio.\nTexto: ${texto}`;
@@ -284,7 +309,7 @@ function chicle(d){const W=1080,H=1620;afc.width=W;afc.height=H;const g=ag;
  // columna derecha
  const cx=880,Rb=150,bc='#f39bc5';burbuja(g,0,cx,215,Rb,bc);pill(g,720,375,330,90,'#ff7fb5');texto(g,d.d1,885,420,300,34,'700 30px Fredoka','#fff','center');
  const pc=['#ffd6e7','#e6d9ff','#d5f5e8','#fff1c4','#d9ecff'],ic=['#ff7fb5','#a77bf0','#5cc9a0','#f2c14e','#6aa6e8'];
- const fs=d.feats.slice(0,4);fs.forEach((f,i)=>{const y=510+i*120;pill(g,700,y,360,100,pc[i]);g.beginPath();g.arc(752,y+50,40,0,7);g.fillStyle=ic[i];g.fill();texto(g,icono(f,i),752,y+52,60,30,'40px sans-serif','#fff','center');texto(g,f,808,y+50,240,30,'600 27px Quicksand','#4a3550','left')});
+ const fs=d.feats.filter(f=>norm(f)!==norm(d.d1)&&norm(f)!==norm(d.d2));for(const x of ['Hecho a mano en Costa Rica','Ideal para regalar'])if(fs.length<4&&!fs.includes(x))fs.push(x);fs.length=Math.min(fs.length,4);fs.forEach((f,i)=>{const y=510+i*120;pill(g,700,y,360,100,pc[i]);g.beginPath();g.arc(752,y+50,40,0,7);g.fillStyle=ic[i];g.fill();texto(g,icono(f,i),752,y+52,60,30,'40px sans-serif','#fff','center');texto(g,f,808,y+50,240,30,'600 27px Quicksand','#4a3550','left')});
  burbuja(g,1,cx,1120,Rb,bc);pill(g,720,1280,330,90,'#ff7fb5');texto(g,d.d2,885,1325,300,34,'700 30px Fredoka','#fff','center');
  // precio
  if(d.precio){g.save();g.translate(250,1395);g.rotate(-.05);pill(g,-170,-60,340,120,'#e8478f','#fff');texto(g,precioTxt(d.precio),0,4,320,60,'700 70px Fredoka','#fff','center');g.restore()}
@@ -303,8 +328,8 @@ function elegante(d){const W=1080,H=1080;afc.width=W;afc.height=H;const g=ag;
  const pg=g.createLinearGradient(px,py,px+pw,py+ph);pg.addColorStop(0,'#f7c6d3');pg.addColorStop(1,'#e8a3b6');g.fillStyle=pg;g.fill();g.restore();
  ajoya(g,px+40,py+40,pw-80,ph-80,.4);
  // derecha: burbujas + badges
- const bc='#d98aa4';burbuja(g,0,900,200,135,bc);pill(g,770,350,260,60,'#fff8');texto(g,d.d1,900,380,240,28,'italic 600 26px "Playfair Display"','#7a4258','center');
- const fs=d.feats.slice(0,3);fs.forEach((f,i)=>{const y=470+i*115;g.beginPath();g.arc(760,y,46,0,7);g.fillStyle='#fde4ec';g.fill();g.lineWidth=3;g.strokeStyle='#d98aa4';g.stroke();texto(g,icono(f,i),760,y+2,60,30,'40px sans-serif','#000','center');texto(g,f,935,y,250,30,'italic 600 26px "Playfair Display"','#6a3a50','center')});
+ const bc='#d98aa4';burbuja(g,0,900,200,135,bc);pill(g,750,345,300,84,'#fff8');texto(g,d.d1,900,387,280,30,'italic 600 26px "Playfair Display"','#7a4258','center');
+ const fs=sinDup(d,3);fs.forEach((f,i)=>{const y=470+i*115;g.beginPath();g.arc(760,y,46,0,7);g.fillStyle='#fde4ec';g.fill();g.lineWidth=3;g.strokeStyle='#d98aa4';g.stroke();texto(g,icono(f,i),760,y+2,60,30,'40px sans-serif','#000','center');texto(g,f,935,y,250,30,'italic 600 26px "Playfair Display"','#6a3a50','center')});
  burbuja(g,1,900,880,120,bc);pill(g,780,1010,240,56,'#fff8');texto(g,d.d2,900,1038,230,26,'italic 600 24px "Playfair Display"','#7a4258','center');
  if(d.precio){g.save();g.shadowColor='#7a3a5266';g.shadowBlur=20;pill(g,380,900,330,130,'#b8607e');g.restore();g.lineWidth=4;g.strokeStyle='#fff';g.beginPath();g.roundRect(390,910,310,110,55);g.stroke();texto(g,precioTxt(d.precio),545,968,290,60,'600 68px "Playfair Display"','#fff','center')}}
 function flor(g,x,y,r){g.save();g.translate(x,y);for(let i=0;i<5;i++){g.rotate(Math.PI*2/5);g.beginPath();g.ellipse(0,r*.7,r*.45,r*.7,0,0,7);g.fillStyle='#f7b6c8';g.globalAlpha=.85;g.fill()}g.globalAlpha=1;g.beginPath();g.arc(0,0,r*.3,0,7);g.fillStyle='#f5d77a';g.fill();g.restore()}
@@ -313,9 +338,10 @@ function tienda(d){const W=1080,H=1350;afc.width=W;afc.height=H;const g=ag;g.fil
  const tt=d.tit+' '+d.sub.charAt(0).toLowerCase()+d.sub.slice(1);g.font=fit(g,tt,960,84,{w:600,f:'"Playfair Display"'});g.textAlign='center';g.textBaseline='middle';g.fillStyle='#3a2a35';g.fillText(tt,540,110);
  texto(g,d.frase,540,180,900,36,'500 32px Quicksand','#b0608a','center');ajoya(g,100,260,880,780,.25);
  burbuja(g,0,190,960,100,'#e6c3d4');burbuja(g,1,890,960,100,'#e6c3d4');
- const fs=d.feats.slice(0,4);let x=60,y=1110;g.font='600 28px Quicksand';fs.forEach((f,i)=>{const t=icono(f,i)+' '+f;const w=Math.min(470,g.measureText(t).width+60);if(x+w>1020){x=60;y+=90}pill(g,x,y,w,70,'#fdeef5');texto(g,t,x+w/2,y+36,w-30,30,'600 28px Quicksand','#5a3a50','center');x+=w+20});
+ const fs=sinDup(d,3,['Hecho a mano']);let x=60,y=1110;g.font='600 28px Quicksand';fs.forEach((f,i)=>{if(y>1170)return;const t=icono(f,i)+' '+f;const w=Math.min(470,g.measureText(t).width+60);if(x+w>1020){x=60;y+=90}if(y>1170)return;pill(g,x,y,w,70,'#fdeef5');texto(g,t,x+w/2,y+36,w-30,30,'600 28px Quicksand','#5a3a50','center');x+=w+20});
  g.fillStyle='#3a2a35';g.fillRect(0,1240,W,110);if(d.precio)texto(g,precioTxt(d.precio),200,1295,320,50,'700 60px Fredoka','#fff','center');
  texto(g,'🤲 Hecho a mano · 🎁 Para regalar',d.precio?700:540,1295,620,30,'600 30px Quicksand','#ffd6e7','center')}
+function sinDup(d,n,extra=['Hecho a mano en Costa Rica','Ideal para regalar']){const fs=d.feats.filter(f=>norm(f)!==norm(d.d1)&&norm(f)!==norm(d.d2));for(const x of extra)if(fs.length<n&&!fs.includes(x))fs.push(x);return fs.slice(0,n)}
 function afiche(){const d=deCampos();if(!d.feats.length)d.feats=['Hecho a mano'];({chicle,elegante,tienda})[plant](d)}
 const afBlob=t=>new Promise(r=>afc.toBlob(r,t,.92));
 async function afBajar(t,ext){const b=await afBlob(t);const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='afiche-'+Date.now()+'.'+ext;a.click();msg('✅ Afiche guardado en Descargas')}
