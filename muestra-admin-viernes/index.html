@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="es-CR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex"><title>Antares · Administrar Viernes (muestra)</title>
+<meta name="robots" content="noindex"><title>Antares · Administrar Viernes</title>
 <style>
 body{font-family:system-ui,sans-serif;background:#0b1220;color:#e6edf7;margin:0;padding:16px;max-width:640px;margin:auto}
 h1{font-size:22px}h2{font-size:17px;margin:0 0 8px}.card{background:#131c2e;border:1px solid #24324d;border-radius:14px;padding:14px;margin:12px 0}
@@ -8,8 +8,12 @@ label{display:block;font-size:13px;color:#9fb0cc;margin:8px 0}input,select,texta
 button{font:inherit;padding:11px 14px;border-radius:10px;border:1px solid #2c3d5e;background:#1b2740;color:#e6edf7;margin:4px 0}button.pri{background:linear-gradient(135deg,#ff5fa8,#a855f7);border:0;font-weight:700}
 .row{display:flex;gap:8px}.row>*{flex:1}.hint{font-size:13px;color:#9fb0cc}.ok{color:#5eead4}.bad{color:#fca5a5}
 #qr{background:#fff;padding:12px;border-radius:12px;display:block;margin:10px auto;max-width:100%}
+.volver-bar{position:sticky;top:0;z-index:5;margin:-16px -16px 8px;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;background:rgba(11,18,32,.95);backdrop-filter:blur(8px);border-bottom:1px solid #24324d}
+.volver{width:100%;min-height:48px;font-size:17px;font-weight:700;background:#16233b;border:1px solid #3b82f6;color:#e6edf7;margin:0}
+.volver-abajo{margin:16px 0 calc(16px + env(safe-area-inset-bottom))}
 </style></head><body>
-<h1>🪐 Antares · Administrar Viernes <small class="hint">(muestra)</small></h1>
+<div class="volver-bar"><button type="button" class="volver" data-volver>← Volver a Antares</button></div>
+<h1>🪐 Administrar Viernes</h1>
 <p class="hint">Desde aquí usted prepara la app <b>Viernes</b> de Wendy. Ella no ve ninguna configuración: solo escanea el código o abre el enlace una vez.</p>
 
 <div class="card"><h2>1. Keys de Gemini (1 o 2)</h2>
@@ -40,7 +44,16 @@ button{font:inherit;padding:11px 14px;border-radius:10px;border:1px solid #2c3d5
 <p>Versión publicada: <b id="ver">…</b></p>
 <p class="hint">Para ver el estado en el teléfono de Wendy: en Viernes, tocar 5 veces el círculo "V" de arriba → «Enviar estado a Freddy» (manda versión, si está configurada e instalada; nunca la key). También puede abrir <a style="color:#f9a8d4" href="../viernes/#estado" target="_blank">Viernes → estado</a> en este equipo.</p>
 <a href="../viernes/" target="_blank"><button>Abrir Viernes</button></a></div>
+<div class="volver-abajo"><button type="button" class="volver" data-volver>← Volver a Antares</button></div>
 <script src="qrcode.js"></script>
+<script>
+// Volver: si vino desde Antares (misma app), atrás; si no, abre Antares (misma carpeta = sigue dentro de la app instalada)
+document.querySelectorAll("[data-volver]").forEach((b)=>b.addEventListener("click",()=>{
+  const home=new URL("../",location.href).href;
+  let desdeAntares=false;try{desdeAntares=document.referrer&&new URL(document.referrer).href.startsWith(home)&&!document.referrer.includes("/viernes/")&&!document.referrer.includes("muestra-admin-viernes");}catch{}
+  if(desdeAntares&&history.length>1){history.back();setTimeout(()=>{if(location.href.includes("muestra-admin-viernes"))location.href=home;},600);}else location.href=home;
+}));
+</script>
 <script>
 const $=(i)=>document.getElementById(i);
 const url=new URL("../viernes/",location.href).href;

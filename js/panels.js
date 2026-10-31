@@ -124,7 +124,7 @@ function renderLanding() {
         </button>
         <div class="viernes-box" id="viernes-box" ${window.__viernesOpen ? "" : "hidden"}>
           <a class="btn primary" href="./viernes/" target="_blank" rel="noopener">Abrir Viernes</a>
-          <a class="btn" href="./muestra-admin-viernes/" target="_blank" rel="noopener">Administrar Viernes</a>
+          <a class="btn" href="./muestra-admin-viernes/">Administrar Viernes</a>
           <p class="viernes-note">Viernes es una app aparte, con su propia memoria (no comparte nada con Antares). Desde «Administrar» se crea el enlace o QR que la deja lista en el teléfono de Wendy; la key nunca se guarda en el código. Versión publicada: <b id="viernes-ver">…</b></p>
         </div></li>` : ""}
       ${GROUPS[g].map(([id]) => { const [name, desc, icon] = CARD[id]; const c = cardCount(id);
