@@ -2,7 +2,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Viernes · Fondos para fotos (muestra)</title>
 <link rel="icon" href="icons/icon-192.png">
-<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Playfair+Display:wght@600&family=Quicksand:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Fredoka:wght@500;700&family=Playfair+Display:ital,wght@0,600;1,500&family=Playfair+Display:wght@600&family=Quicksand:wght@500;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#14081f;--bg2:#24103a;--pink:#ff5fa8;--pink2:#ffb3d6;--lila:#b48cff;--ink:#fbeefe;--mut:#c9a9d8;--line:rgba(255,160,220,.22)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -25,6 +25,7 @@ main{max-width:560px;margin:auto;padding:14px}
 label{display:block;font-size:17px;margin:12px 0 4px}input[type=range]{width:100%;height:34px;accent-color:var(--pink)}
 .fila{display:flex;gap:8px}.fila .btn{font-size:17px;padding:14px 6px}
 .fila .btn.on{outline:3px solid var(--pink2)}
+.campo{width:100%;font:18px Quicksand;border-radius:14px;padding:12px;border:1px solid var(--line);background:var(--bg2);color:var(--ink)}
 .ayuda{color:var(--mut);font-size:14px;text-align:center}
 </style></head><body>
 <header><h1>✨ Fondos para tus fotos</h1><p>Muestra de Viernes · todo funciona en tu teléfono, gratis</p></header>
@@ -33,7 +34,29 @@ label{display:block;font-size:17px;margin:12px 0 4px}input[type=range]{width:100
 <input type="file" id="archivoFondo" accept="image/*" hidden>
 <div id="modos"><p class="ayuda" style="font-size:17px">¿Cómo querés hacerlo?</p>
 <button class="btn" id="mAuto" style="font-size:22px;padding:24px">🪄 Automático<br><small>(escribo y lo hace)</small></button>
-<button class="btn sec" id="mMano" style="font-size:22px;padding:24px">✋ A mano</button></div>
+<button class="btn sec" id="mMano" style="font-size:22px;padding:24px">✋ A mano</button>
+<button class="btn sec" id="mAfiche" style="font-size:22px;padding:24px">🛍️ Afiche de venta</button></div>
+<div id="af" style="display:none">
+<button class="btn sec" id="afFoto">📷 1. Elegir foto de tu joya</button>
+<div id="afPrev" class="ayuda"></div>
+<label>2. Contame de tu joya (o dictalo):</label>
+<textarea id="afTexto" rows="3" class="campo" placeholder="Ej: collar estilo chicle, colorido divertido único, cierre de langosta, cuentas grandes, colores pastel, 7000 colones"></textarea>
+<button class="btn sec" id="afMic">🎤 Dictar</button>
+<label>3. Elegí el diseño:</label>
+<div class="tabs" id="afPlant"><button data-t="chicle" class="on">🍬 Chicle</button><button data-t="elegante">🌸 Elegante</button><button data-t="tienda">🤍 Tienda</button></div>
+<button class="btn" id="afHacer">🛍️ ¡Hacé mi afiche!</button>
+<div id="afRes" style="display:none">
+<canvas id="afCv" style="width:100%;border-radius:16px;margin-top:10px"></canvas>
+<div class="tabs" id="afPlant2"></div>
+<button class="btn" id="afShare">📤 Compartir</button>
+<div class="fila"><button class="btn sec" id="afPng">⬇️ PNG</button><button class="btn sec" id="afJpg">⬇️ JPG</button></div>
+<button class="btn sec" id="afDet">🔍 Otros detalles</button>
+<details style="margin:8px 0"><summary style="font-size:18px;padding:10px">✏️ Cambiar textos</summary>
+<label>Nombre</label><input id="fTit" class="campo"><label>Subtítulo</label><input id="fSub" class="campo">
+<label>Frase corta</label><input id="fFra" class="campo"><label>Características (una por renglón)</label><textarea id="fCar" rows="4" class="campo"></textarea>
+<label>Detalle 1</label><input id="fD1" class="campo"><label>Detalle 2</label><input id="fD2" class="campo">
+<label>Precio (₡)</label><input id="fPre" class="campo" inputmode="numeric"></details></div>
+<button class="btn sec" id="afVolver">🏠 Inicio</button></div>
 <div id="auto" style="display:none">
 <button class="btn sec" id="aFoto">📷 1. Elegir foto de tu joya</button>
 <div id="aPrev" class="ayuda"></div>
@@ -189,6 +212,115 @@ $('aHacer').onclick=async()=>{if(!aFile){msg('Primero elegí la foto de tu joya 
  fondo={v:c.fondo};fondoImg=c.foto&&aFondo?aFondo:null;pos={x:.5,y:.5,s:c.tam/100};$('tam').value=c.tam;$('sombra').value=c.sombra;marcar();dibujar();
  window.__auto=c;msg('✅ ¡Listo! Si te gusta, compartila');cv.scrollIntoView({behavior:'smooth'})};
 $('aMano').onclick=()=>{$('herr').style.display='block';$('aMano').style.display='none';msg('✋ Ajustá lo que quieras')};
+
+
+// ======== AFICHE DE VENTA ========
+let afFile=null,plant='chicle',AF={},detPts=[];
+$('mAfiche').onclick=()=>{$('modos').style.display='none';$('af').style.display='block'};
+$('afVolver').onclick=()=>{$('af').style.display='none';$('afRes').style.display='none';$('modos').style.display='block';msg('')};
+$('afFoto').onclick=async()=>{const f=await pedir();if(f){afFile=f;$('afPrev').innerHTML=`<img src="${URL.createObjectURL(f)}" style="max-width:60%;max-height:160px;border-radius:12px">`}};
+if(!SR)$('afMic').style.display='none';else $('afMic').onclick=()=>{const r=new SR();r.lang='es-CR';$('afMic').textContent='🎙️ Te escucho…';r.onresult=e=>$('afTexto').value=e.results[0][0].transcript;r.onend=()=>$('afMic').textContent='🎤 Dictar';r.start()};
+$('afPlant2').innerHTML=$('afPlant').innerHTML;
+document.querySelectorAll('#afPlant button,#afPlant2 button').forEach(b=>b.onclick=()=>{plant=b.dataset.t;document.querySelectorAll('#afPlant button,#afPlant2 button').forEach(x=>x.classList.toggle('on',x.dataset.t===plant));if(AF.listo)afiche()});
+const cap=t=>t.charAt(0).toUpperCase()+t.slice(1);
+const TIPOS=['collar','pulsera','brazalete','aretes','arete','tobillera','anillo','cadena','gargantilla','choker','llavero','set','juego'];
+const ICON=[[/cierre|broche|langosta/,'🔗'],[/cuenta|bola|chicle|perla/,'⭐'],[/material|calidad|resist|acero|plata|oro|dorad/,'🌿'],[/color|pastel|vibrant/,'🌸'],[/ocasion|regal|todo/,'💛'],[/mano|artesan/,'🤲'],[/ajust|extens|tama/,'📏'],[/piedra|cristal|brill/,'💎'],[/coraz|amor/,'❤️']];
+const icono=(t,i)=>{const n=norm(t);for(const [r,e] of ICON)if(r.test(n))return e;return['⭐','🌿','🌸','💛','💎','✨'][i%6]};
+function precioDe(t){const n=norm(t);let m=n.match(/(?:₡|c\/|precio|cuesta|vale|a)\s*([\d.,]+)\s*(mil)?/)||n.match(/([\d.,]+)\s*(mil)?\s*(?:colones|cones|₡|rojos)/)||n.match(/\b(\d{4,6}|\d{1,2}\s*mil)\b/);
+ if(!m)return'';let v=parseFloat(String(m[1]).replace(/[.,](?=\d{3}\b)/g,'').replace(',','.'));if(/mil/.test(m[0]))v*=1000;return v>=100?String(Math.round(v)):''}
+function parsearAfiche(texto){const partes=texto.split(/[,;\n]/).map(x=>x.trim()).filter(Boolean);
+ const precio=precioDe(texto);const sinP=partes.filter(x=>!/(₡|colon|precio|cuesta|vale|\b\d{3,}\b|\bmil\b)/i.test(x));
+ let tit=sinP.shift()||'Mi joya';const n=norm(tit);const tipo=TIPOS.find(k=>n.startsWith(k))||TIPOS.find(k=>n.includes(k))||'';
+ let sub='';const tw=tit.split(/\s+/);if(tw.length>2){sub=tw.slice(1).join(' ');tit=tw[0]}else if(tw.length===2){sub=tw[1];tit=tw[0]}
+ let frase='';const fi=sinP.findIndex(x=>/(divert|unic|colorid|elegant|delicad|lind|hermos|tiern|moderno|bonit)/i.test(norm(x))&&x.split(' ').length<=6);
+ if(fi>=0)frase=sinP.splice(fi,1)[0].split(/\s+/).map(cap).join(' • ');
+ const feats=sinP.map(cap).slice(0,5);while(feats.length<3)feats.push(['Hecho a mano en Costa Rica','Ideal para cualquier ocasión','Diseño único'][feats.length]);
+ const det=feats.filter(f=>/cierre|broche|cuenta|perla|dije|detalle|piedra/i.test(f));
+ return{tit:cap(tit),sub:sub?cap(sub):'hecho a mano',frase:frase||'Hecho a mano con amor 💗',feats,d1:det[0]||'Detalle del cierre',d2:det[1]||'Detalle hecho a mano',precio}}
+async function afGemini(texto){let cfg;try{cfg=JSON.parse(localStorage.getItem('viernes.config.v1')||localStorage.getItem('viernes.config.bak'))}catch{}
+ const k=cfg&&((cfg.keys&&cfg.keys[0])||cfg.key);if(!k)return null;
+ const pr=`Una artesana de Costa Rica describe su joya para un afiche de venta. Devuelve SOLO JSON: {"tit":"tipo de joya, 1 palabra (Collar, Pulsera...)","sub":"resto del nombre, corto","frase":"3 palabras separadas por ' • '","feats":["3 a 5 características cortas, máx 5 palabras c/u"],"d1":"rótulo corto del detalle 1 (ej. cierre)","d2":"rótulo corto del detalle 2","precio":"solo número en colones o vacío"}. No inventes precio.\nTexto: ${texto}`;
+ try{const ctl=new AbortController();setTimeout(()=>ctl.abort(),9000);
+  const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',{method:'POST',signal:ctl.signal,headers:{'Content-Type':'application/json','x-goog-api-key':k},body:JSON.stringify({contents:[{parts:[{text:pr}]}],generationConfig:{responseMimeType:'application/json',temperature:.3}})});
+  if(!r.ok)return null;const j=JSON.parse((await r.json()).candidates[0].content.parts[0].text);
+  if(!j.tit||!Array.isArray(j.feats))return null;j.feats=j.feats.slice(0,5).map(String);j.precio=String(j.precio||'').replace(/\D/g,'');return j}catch{return null}}
+const CAMPOS={tit:'fTit',sub:'fSub',frase:'fFra',d1:'fD1',d2:'fD2',precio:'fPre'};
+function aCampos(d){for(const k in CAMPOS)$(CAMPOS[k]).value=d[k]||'';$('fCar').value=d.feats.join('\n')}
+function deCampos(){const d={};for(const k in CAMPOS)d[k]=$(CAMPOS[k]).value.trim();d.feats=$('fCar').value.split('\n').map(x=>x.trim()).filter(Boolean).slice(0,5);return d}
+document.querySelectorAll('#afRes .campo').forEach(e=>e.oninput=()=>afiche());
+// puntos de detalle sobre la joya
+function puntos(azar){const w=mask.width,h=mask.height,a=mask.getContext('2d').getImageData(0,0,w,h).data;const op=[];const st=Math.max(2,Math.round(Math.max(w,h)/200));
+ let x0=w,y0=h,x1=0,y1=0;for(let y=0;y<h;y+=st)for(let x=0;x<w;x+=st)if(a[(y*w+x)*4+3]>160){op.push([x,y]);if(x<x0)x0=x;if(y<y0)y0=y;if(x>x1)x1=x;if(y>y1)y1=y}
+ const r=Math.max(x1-x0,y1-y0)*.13+10;if(!op.length)return[[w/2,h/3,r],[w/2,h*2/3,r]];
+ if(azar){const p=()=>op[Math.random()*op.length|0];let A=p(),B=p();for(let i=0;i<30&&Math.hypot(A[0]-B[0],A[1]-B[1])<r*2.5;i++)B=p();return[[...A,r],[...B,r]]}
+ const top=op.reduce((m,p)=>p[1]<m[1]?p:m),bot=op.reduce((m,p)=>p[1]>m[1]?p:m);return[[top[0],top[1]+r*.6,r],[bot[0],bot[1]-r*.6,r]]}
+$('afDet').onclick=()=>{detPts=puntos(true);afiche()};
+$('afHacer').onclick=async()=>{if(!afFile){msg('Primero elegí la foto de tu joya 📷');return}
+ const texto=$('afTexto').value.trim()||'Collar hecho a mano';msg('🪄 Leyendo lo que escribiste…');
+ const d=(await afGemini(texto))||parsearAfiche(texto);aCampos(d);
+ $('af').style.display='none';const ok=await procesar(afFile,true);$('editor').style.display='none';cv.style.display='none';$('af').style.display='block';
+ if(!ok)return;detPts=puntos(false);AF.listo=true;$('afRes').style.display='block';await Promise.all(['700 40px Fredoka','600 40px Fredoka','400 40px "Great Vibes"','600 40px "Playfair Display"','italic 500 40px "Playfair Display"','600 40px Quicksand'].map(f=>document.fonts.load(f).catch(()=>0)));afiche();window.__afiche=deCampos();
+ msg('✅ ¡Tu afiche está listo!');$('afCv').scrollIntoView({behavior:'smooth'})};
+// ---- dibujo ----
+const afc=$('afCv'),ag=afc.getContext('2d');
+function pill(g,x,y,w,h,fill,stroke){g.beginPath();g.roundRect(x,y,w,h,h/2);g.fillStyle=fill;g.fill();if(stroke){g.lineWidth=4;g.strokeStyle=stroke;g.stroke()}}
+function texto(g,t,x,y,maxW,lh,font,color,align='left'){g.font=font;g.fillStyle=color;g.textAlign=align;g.textBaseline='middle';const ws=String(t).split(' ');let l='',ls=[];for(const w of ws){const p=l?l+' '+w:w;if(g.measureText(p).width>maxW&&l){ls.push(l);l=w}else l=p}ls.push(l);ls.forEach((L,i)=>g.fillText(L,x,y+(i-(ls.length-1)/2)*lh));return ls.length}
+function fit(g,t,maxW,size,fam){let s=size;do{g.font=`${fam.w||700} ${s}px ${fam.f}`;s-=2}while(g.measureText(t).width>maxW&&s>20);return g.font}
+function ajoya(g,x,y,w,h,sh=.35){const s=Math.min(w/obj.width,h/obj.height),W=obj.width*s,H=obj.height*s;g.save();g.shadowColor=`rgba(80,30,60,${sh})`;g.shadowBlur=40;g.shadowOffsetY=18;g.drawImage(obj,x+(w-W)/2,y+(h-H)/2,W,H);g.restore()}
+function burbuja(g,i,cx,cy,R,borde){const [px,py,r]=detPts[i];g.save();g.beginPath();g.arc(cx,cy,R,0,7);g.closePath();g.fillStyle='#fff';g.fill();g.clip();g.drawImage(orig,px-r,py-r,2*r,2*r,cx-R,cy-R,2*R,2*R);g.restore();g.beginPath();g.arc(cx,cy,R,0,7);g.lineWidth=9;g.strokeStyle=borde;g.stroke();g.lineWidth=3;g.strokeStyle='#fff';g.beginPath();g.arc(cx,cy,R-7,0,7);g.stroke()}
+function corazon(g,x,y,s,c){g.save();g.translate(x,y);g.scale(s/30,s/30);g.beginPath();g.moveTo(0,8);g.bezierCurveTo(-18,-6,-8,-20,0,-9);g.bezierCurveTo(8,-20,18,-6,0,8);g.fillStyle=c;g.fill();g.restore()}
+function bokeh(g,W,H,cols,n=40){for(let i=0;i<n;i++){g.beginPath();g.arc(Math.random()*W,Math.random()*H,8+Math.random()*50,0,7);g.fillStyle=cols[i%cols.length];g.globalAlpha=.08+Math.random()*.15;g.fill()}g.globalAlpha=1}
+const precioTxt=p=>p?'₡'+String(p).replace(/\B(?=(\d{3})+(?!\d))/g,'.'):'';
+const BEN=[['💗','Luce linda'],['🤲','Hecho a mano'],['🎁','Perfecto para regalar']];
+function chicle(d){const W=1080,H=1620;afc.width=W;afc.height=H;const g=ag;
+ let gr=g.createLinearGradient(0,0,0,H);gr.addColorStop(0,'#fff5fa');gr.addColorStop(1,'#fde6f1');g.fillStyle=gr;g.fillRect(0,0,W,H);bokeh(g,W,H,['#ff9cc8','#c9a8ff','#ffd27a','#9ee6c8']);
+ // título
+ g.save();g.shadowColor='#e7a4c766';g.shadowBlur=20;pill(g,40,40,640,420,'#fde3ef');g.restore();g.lineWidth=6;g.strokeStyle='#fff';g.beginPath();g.roundRect(40,40,640,420,60);g.stroke();
+ g.font=fit(g,d.tit,560,150,{f:'Fredoka'});g.textAlign='center';g.textBaseline='middle';g.lineWidth=14;g.strokeStyle='#fff';g.strokeText(d.tit,360,150);g.fillStyle='#9b5fd0';g.fillText(d.tit,360,150);
+ g.font=fit(g,d.sub,580,96,{f:'Fredoka'});g.strokeText(d.sub,360,275);g.fillStyle='#e8478f';g.fillText(d.sub,360,275);
+ pill(g,70,345,580,80,'#b48cff');texto(g,d.frase,360,385,540,40,'600 34px Fredoka','#fff','center');corazon(g,690,70,40,'#ff6fae');corazon(g,615,195,30,'#ff8fc0');
+ // joya
+ ajoya(g,40,480,640,720);
+ // columna derecha
+ const cx=880,Rb=150,bc='#f39bc5';burbuja(g,0,cx,215,Rb,bc);pill(g,720,375,330,90,'#ff7fb5');texto(g,d.d1,885,420,300,34,'700 30px Fredoka','#fff','center');
+ const pc=['#ffd6e7','#e6d9ff','#d5f5e8','#fff1c4','#d9ecff'],ic=['#ff7fb5','#a77bf0','#5cc9a0','#f2c14e','#6aa6e8'];
+ const fs=d.feats.slice(0,4);fs.forEach((f,i)=>{const y=510+i*120;pill(g,700,y,360,100,pc[i]);g.beginPath();g.arc(752,y+50,40,0,7);g.fillStyle=ic[i];g.fill();texto(g,icono(f,i),752,y+52,60,30,'40px sans-serif','#fff','center');texto(g,f,808,y+50,240,30,'600 27px Quicksand','#4a3550','left')});
+ burbuja(g,1,cx,1120,Rb,bc);pill(g,720,1280,330,90,'#ff7fb5');texto(g,d.d2,885,1325,300,34,'700 30px Fredoka','#fff','center');
+ // precio
+ if(d.precio){g.save();g.translate(250,1395);g.rotate(-.05);pill(g,-170,-60,340,120,'#e8478f','#fff');texto(g,precioTxt(d.precio),0,4,320,60,'700 70px Fredoka','#fff','center');g.restore()}
+ // barra beneficios
+ pill(g,20,1480,1040,120,'#fff');g.fillStyle='#ffd6e7';g.beginPath();g.roundRect(20,1480,1040,120,40);g.fill();
+ BEN.forEach(([e,t],i)=>{const x=190+i*350;texto(g,e,x,1515,80,40,'44px sans-serif','#000','center');texto(g,t,x,1567,330,30,'600 30px Quicksand','#5a3a60','center')})}
+function elegante(d){const W=1080,H=1080;afc.width=W;afc.height=H;const g=ag;
+ let gr=g.createRadialGradient(400,500,50,540,540,900);gr.addColorStop(0,'#fff3f6');gr.addColorStop(1,'#f3c9d5');g.fillStyle=gr;g.fillRect(0,0,W,H);bokeh(g,W,H,['#ffffff','#f7a8c0','#e9b97a'],50);
+ for(let i=0;i<14;i++)flor(g,Math.random()<.5?Math.random()*140:W-Math.random()*120,Math.random()*H,10+Math.random()*16);
+ // titulo
+ g.font=fit(g,d.tit,620,170,{w:400,f:'"Great Vibes"'});g.textAlign='center';g.textBaseline='alphabetic';const go=g.createLinearGradient(0,40,0,200);go.addColorStop(0,'#d9a956');go.addColorStop(1,'#a87428');g.fillStyle=go;g.fillText(d.tit,400,175);
+ g.font=fit(g,d.sub,640,46,{w:600,f:'"Playfair Display"'});g.fillStyle='#8a4a62';g.fillText(d.sub,420,240);
+ pill(g,140,272,560,76,'#fbe1ea');texto(g,d.frase,420,310,520,34,'italic 500 30px "Playfair Display"','#7a4258','center');
+ // pedestal octagonal
+ g.save();g.shadowColor='#b0607a55';g.shadowBlur=40;g.shadowOffsetY=20;const px=70,py=380,pw=580,ph=600,c=90;g.beginPath();g.moveTo(px+c,py);g.lineTo(px+pw-c,py);g.lineTo(px+pw,py+c);g.lineTo(px+pw,py+ph-c);g.lineTo(px+pw-c,py+ph);g.lineTo(px+c,py+ph);g.lineTo(px,py+ph-c);g.lineTo(px,py+c);g.closePath();
+ const pg=g.createLinearGradient(px,py,px+pw,py+ph);pg.addColorStop(0,'#f7c6d3');pg.addColorStop(1,'#e8a3b6');g.fillStyle=pg;g.fill();g.restore();
+ ajoya(g,px+40,py+40,pw-80,ph-80,.4);
+ // derecha: burbujas + badges
+ const bc='#d98aa4';burbuja(g,0,900,200,135,bc);pill(g,770,350,260,60,'#fff8');texto(g,d.d1,900,380,240,28,'italic 600 26px "Playfair Display"','#7a4258','center');
+ const fs=d.feats.slice(0,3);fs.forEach((f,i)=>{const y=470+i*115;g.beginPath();g.arc(760,y,46,0,7);g.fillStyle='#fde4ec';g.fill();g.lineWidth=3;g.strokeStyle='#d98aa4';g.stroke();texto(g,icono(f,i),760,y+2,60,30,'40px sans-serif','#000','center');texto(g,f,935,y,250,30,'italic 600 26px "Playfair Display"','#6a3a50','center')});
+ burbuja(g,1,900,880,120,bc);pill(g,780,1010,240,56,'#fff8');texto(g,d.d2,900,1038,230,26,'italic 600 24px "Playfair Display"','#7a4258','center');
+ if(d.precio){g.save();g.shadowColor='#7a3a5266';g.shadowBlur=20;pill(g,380,900,330,130,'#b8607e');g.restore();g.lineWidth=4;g.strokeStyle='#fff';g.beginPath();g.roundRect(390,910,310,110,55);g.stroke();texto(g,precioTxt(d.precio),545,968,290,60,'600 68px "Playfair Display"','#fff','center')}}
+function flor(g,x,y,r){g.save();g.translate(x,y);for(let i=0;i<5;i++){g.rotate(Math.PI*2/5);g.beginPath();g.ellipse(0,r*.7,r*.45,r*.7,0,0,7);g.fillStyle='#f7b6c8';g.globalAlpha=.85;g.fill()}g.globalAlpha=1;g.beginPath();g.arc(0,0,r*.3,0,7);g.fillStyle='#f5d77a';g.fill();g.restore()}
+function tienda(d){const W=1080,H=1350;afc.width=W;afc.height=H;const g=ag;g.fillStyle='#ffffff';g.fillRect(0,0,W,H);
+ g.fillStyle='#faf6f8';g.beginPath();g.roundRect(60,230,960,850,40);g.fill();
+ const tt=d.tit+' '+d.sub.charAt(0).toLowerCase()+d.sub.slice(1);g.font=fit(g,tt,960,84,{w:600,f:'"Playfair Display"'});g.textAlign='center';g.textBaseline='middle';g.fillStyle='#3a2a35';g.fillText(tt,540,110);
+ texto(g,d.frase,540,180,900,36,'500 32px Quicksand','#b0608a','center');ajoya(g,100,260,880,780,.25);
+ burbuja(g,0,190,960,100,'#e6c3d4');burbuja(g,1,890,960,100,'#e6c3d4');
+ const fs=d.feats.slice(0,4);let x=60,y=1110;g.font='600 28px Quicksand';fs.forEach((f,i)=>{const t=icono(f,i)+' '+f;const w=Math.min(470,g.measureText(t).width+60);if(x+w>1020){x=60;y+=90}pill(g,x,y,w,70,'#fdeef5');texto(g,t,x+w/2,y+36,w-30,30,'600 28px Quicksand','#5a3a50','center');x+=w+20});
+ g.fillStyle='#3a2a35';g.fillRect(0,1240,W,110);if(d.precio)texto(g,precioTxt(d.precio),200,1295,320,50,'700 60px Fredoka','#fff','center');
+ texto(g,'🤲 Hecho a mano · 🎁 Para regalar',d.precio?700:540,1295,620,30,'600 30px Quicksand','#ffd6e7','center')}
+function afiche(){const d=deCampos();if(!d.feats.length)d.feats=['Hecho a mano'];({chicle,elegante,tienda})[plant](d)}
+const afBlob=t=>new Promise(r=>afc.toBlob(r,t,.92));
+async function afBajar(t,ext){const b=await afBlob(t);const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='afiche-'+Date.now()+'.'+ext;a.click();msg('✅ Afiche guardado en Descargas')}
+$('afPng').onclick=()=>afBajar('image/png','png');$('afJpg').onclick=()=>afBajar('image/jpeg','jpg');
+$('afShare').onclick=async()=>{const b=await afBlob('image/jpeg');const f=new File([b],'afiche.jpg',{type:'image/jpeg'});if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:'Mi afiche'})}catch(e){}}else afBajar('image/jpeg','jpg')};
 
 const fin=e=>{dedos.delete(e.pointerId);const a=[...dedos.values()];ini=a.length?{pos:{...pos},a,d:0}:null};
 cv.addEventListener('pointerup',fin);cv.addEventListener('pointercancel',fin);
