@@ -183,11 +183,19 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Pausas por modelo después de un 429 (se respeta el retryDelay que manda Google), compartidas entre clientes
 const cooldown = {};
+// v1.31: varias keys con cambio silencioso. Pausa por key (general y solo búsqueda); se recuerda por huella, nunca la key.
+const KEY_STATE = "antares.keystate.v1";
+const keyState = (() => { try { return JSON.parse(localStorage.getItem(KEY_STATE)) || {}; } catch { return {}; } })();
+const keyId = (k) => { let h = 0; for (const c of k) h = (h * 31 + c.charCodeAt(0)) | 0; return "k" + (h >>> 0).toString(36); };
+const kst = (k) => (keyState[keyId(k)] ||= { gen: 0, srch: 0 });
+function coolKey(k, kind, ms) { kst(k)[kind] = Date.now() + ms; try { localStorage.setItem(KEY_STATE, JSON.stringify(keyState)); } catch { /* */ } }
+const keyReady = (k, kind = "gen") => Date.now() > kst(k)[kind];
 
 export class GeminiClient {
   constructor({ apiKey = "", assistantName = DEFAULT_ASSISTANT_NAME, userName = "", personality = "",
-                preferredModel = "", noGrounding = {}, onModelOk = null } = {}) {
-    this.apiKey = (apiKey || "").replace(/\s+/g, "");
+                preferredModel = "", noGrounding = {}, onModelOk = null, extraKeys = [] } = {}) {
+    this.keys = [apiKey, ...(extraKeys || [])].map((k) => String(k || "").replace(/\s+/g, "")).filter((k, i, a) => k && a.indexOf(k) === i).slice(0, 10);
+    this.apiKey = this.keys.find((k) => keyReady(k)) || this.keys[0] || "";
     this.assistantName = (assistantName || "").trim() || DEFAULT_ASSISTANT_NAME;
     this.systemPrompt = buildSystemPrompt(this.assistantName, userName, personality);
     this.preferredModel = (preferredModel || "").trim();
@@ -329,7 +337,7 @@ export class GeminiClient {
     const [title, text] = ERRORS[kind] || ERRORS.unknown;
     let details = this.attempts.length ? "Intentos:\n" + this.attemptsSummaryLines().join("\n") : "";
     if (extra) details = (extra + (details ? "\n\n" + details : "")).trim();
-    if (this.apiKey) details = details.split(this.apiKey).join("***");
+    for (const k of this.keys || [this.apiKey]) if (k) details = details.split(k).join("***");
     return { ok: false, kind, title, text, details, retryAfter, sources: [], model: "", ms };
   }
 
@@ -450,7 +458,7 @@ export class GeminiClient {
 
     const record = (model, code, msg, usedSearch) => {
       msg = String(msg || "").replace(/\s+/g, " ").trim().slice(0, 160);
-      if (this.apiKey) msg = msg.split(this.apiKey).join("***");
+      for (const k of this.keys) msg = msg.split(k).join("***");
       this.attempts.push({ model, code, msg, search: usedSearch });
       if (DEBUG()) console.debug(`Antares LLM: ${model}${usedSearch ? " +search" : ""} -> ${code} ${msg}`);
     };
@@ -483,6 +491,8 @@ export class GeminiClient {
       const model = queue.shift();
       let thinking = thinkingOpt, retried = false, countedModel = false, level = levelOpt;
       let useSearch = search && !this.noGrounding[model];
+      const keysTried = new Set();
+      if (useSearch && this.keys.length > 1 && !keyReady(this.apiKey, "srch")) { const sk = this.keys.find((k) => keyReady(k) && keyReady(k, "srch")); if (sk) this.apiKey = sk; else useSearch = false; }
       for (;;) {
         const remaining = deadline - performance.now();
         if (remaining < 3000) break;
@@ -578,6 +588,15 @@ export class GeminiClient {
           this.noGrounding[model] = true;
           if (this.onModelOk && !internal) { try { this.onModelOk({ noGrounding: this.noGrounding }); } catch { /* */ } }
           continue;
+        }
+        // v1.31: otra key disponible -> se cambia en silencio y se reintenta el mismo modelo
+        if (this.keys.length > 1 && (STOP_KINDS.has(kind) || kind === "rate" || kind === "daily")) {
+          const searchOnly = useSearch && (kind === "rate" || kind === "daily");
+          coolKey(this.apiKey, searchOnly ? "srch" : "gen", STOP_KINDS.has(kind) ? 6 * 3600e3 : kind === "daily" ? 3600e3 : Math.max((err.retryDelay || 0) * 1000, 120e3));
+          keysTried.add(this.apiKey);
+          const next = this.keys.find((k) => !keysTried.has(k) && keyReady(k) && (!useSearch || keyReady(k, "srch")));
+          if (next) { this.apiKey = next; record(model, "key", "cambio a otra key", useSearch); continue; }
+          if (searchOnly) { useSearch = false; keysTried.clear(); const back = this.keys.find((k) => keyReady(k)); if (back) this.apiKey = back; continue; }
         }
         if (STOP_KINDS.has(kind)) return this.errorResult(kind, elapsed(), lastExtra);
         if (functions && code === 400) { lastKind = "tools"; break; } // este modelo no acepta herramientas: probar el siguiente

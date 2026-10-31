@@ -6,14 +6,16 @@ import { tx, idbGet, idbEntries, seal, unseal, isSealed } from "./vault.js";
 export const K_HISTORY = "antares.history.v1";
 export const K_FACTS = "antares.facts.v1";
 export const K_CONFIG = "antares.config.v1";
+export const K_CONFIG_BAK = "antares.config.bak";
 const MAX_HISTORY = 300;
 const MAX_THUMBS = 60;               // miniaturas que se conservan (las más recientes)
-export const DATA_KEYS = [K_CONFIG, K_HISTORY, K_FACTS];
+export const DATA_KEYS = [K_CONFIG, K_HISTORY, K_FACTS, K_CONFIG_BAK];
 export const LS_LIMIT = 5 * 1024 * 1024;
 const CONFIG_REV = 4;
 
 export const DEFAULT_CONFIG = {
   geminiApiKey: "",
+  geminiExtraKeys: [],   // v1.31: keys de respaldo (2..10)
   assistantName: "Antares",
   userName: "",
   personality: "",
@@ -207,8 +209,13 @@ export const memory = {
   getData(key) { return load(key, null); },
   saveData(key, value) { return saveWithRoom(key, value); },
 
-  getConfig() { return { ...DEFAULT_CONFIG, ...load(K_CONFIG, {}) }; },
-  saveConfig(cfg) { return saveWithRoom(K_CONFIG, cfg); },
+  getConfig() {
+    let c = load(K_CONFIG, null);
+    const b = load(K_CONFIG_BAK, null);
+    if ((!c || !c.geminiApiKey) && b && b.geminiApiKey) c = { ...(c || {}), ...b }; // v1.31: respaldo
+    return { ...DEFAULT_CONFIG, ...(c || {}) };
+  },
+  saveConfig(cfg) { const r = saveWithRoom(K_CONFIG, cfg); if (r && r.ok) rawSave(K_CONFIG_BAK, cfg); return r; },
 
   getHistory(limit = 0) {
     const h = load(K_HISTORY, []);

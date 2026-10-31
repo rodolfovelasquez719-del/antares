@@ -1428,3 +1428,8 @@ body.compact:not(.desk) #stage .pulpo-escena, body.kb-open #stage .pulpo-escena 
 .viernes-box .btn{text-align:center;text-decoration:none;min-height:44px;display:flex;align-items:center;justify-content:center}
 .viernes-note{margin:4px 0 0;font-size:13px;opacity:.85;line-height:1.4}
 .viernes-card strong{color:#f9a8d4}
+
+/* v1.31 keys de respaldo */
+.extra-keys .xk-row{display:flex;gap:6px;align-items:center;margin-top:8px}
+.extra-keys .xk-row input{flex:1;min-width:0}
+.extra-keys .xk-st{font-size:.8em;opacity:.85;margin:2px 0 0 4px}

@@ -42,7 +42,7 @@ import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.30.1";
+const APP_VERSION = "1.31.0";
 // v1.25.1: emparejar con el QR de la compu (#pc-token=…). Se lee y se borra del enlace de inmediato (no queda en el historial).
 let pcEmparejar = null, pcEmparejando = false;
 try {
@@ -138,9 +138,10 @@ let tutorMode = false;          // modo tutor de robótica en el chat (solo esta
 let wake = null;                // escucha continua «Hey Antares»
 
 // ---------- Cliente Gemini ----------
-function makeClient(apiKey = config.geminiApiKey) {
+function makeClient(apiKey = config.geminiApiKey, extraKeys = apiKey === config.geminiApiKey ? config.geminiExtraKeys : []) {
   return new GeminiClient({
     apiKey,
+    extraKeys: Array.isArray(extraKeys) ? extraKeys : [],
     assistantName: config.assistantName,
     userName: config.userName,
     personality: config.personality,
@@ -2369,6 +2370,7 @@ let historyPushed = false;
 function formValues() {
   return {
     geminiApiKey: els.apiKey.value.replace(/\s+/g, ""),
+    geminiExtraKeys: [...document.querySelectorAll("#extra-keys input")].map((i) => i.value.replace(/\s+/g, "")).filter(Boolean),
     assistantName: els.assistantName.value.trim(),
     userName: els.userName.value.trim(),
     personality: els.personality.value.trim(),
@@ -2412,6 +2414,7 @@ function setConnStatus(kind, text, details = "") {
 function fillSettings() {
   try { window.__pcFill && window.__pcFill(); } catch { /* */ }
   els.apiKey.value = config.geminiApiKey || "";
+  renderExtraKeys(config.geminiExtraKeys || []);
   setKeyVisible(false);
   els.assistantName.value = config.assistantName || DEFAULT_ASSISTANT_NAME;
   els.userName.value = config.userName || "";
@@ -2565,6 +2568,33 @@ els.save.addEventListener("click", async () => {
   setSettingsStatus("Cambios guardados");
   renderStorage();
 });
+
+// v1.31: lista de keys de respaldo (ocultas, con Probar y Quitar)
+function addKeyRow(val = "") {
+  const box = document.getElementById("extra-keys");
+  if (!box || box.children.length >= 9) return;
+  const wrap = document.createElement("div");
+  const row = document.createElement("div"); row.className = "xk-row";
+  const inp = document.createElement("input");
+  Object.assign(inp, { type: "password", className: "field", value: val, placeholder: "Key de respaldo", autocomplete: "off", spellcheck: false });
+  inp.setAttribute("autocapitalize", "off");
+  const st = document.createElement("div"); st.className = "xk-st";
+  const pb = document.createElement("button"); pb.type = "button"; pb.className = "btn"; pb.textContent = "Probar";
+  const qb = document.createElement("button"); qb.type = "button"; qb.className = "btn"; qb.textContent = "Quitar";
+  pb.onclick = async () => {
+    const k = inp.value.replace(/\s+/g, "");
+    if (!k) { st.textContent = "Pegue la key primero"; return; }
+    pb.disabled = true; st.textContent = "Probando…";
+    try { const t = await makeClient(k, []).testConnection(); st.textContent = t.ok ? `✓ Funciona · ${shortModel(t.model)}` : `✗ ${t.r.title}`; }
+    catch { st.textContent = "✗ Error inesperado"; }
+    pb.disabled = false;
+  };
+  qb.onclick = () => { wrap.remove(); updateDirty(); syncAddKey(); };
+  row.append(inp, pb, qb); wrap.append(row, st); box.append(wrap); syncAddKey();
+}
+function syncAddKey() { const b = document.getElementById("add-key"), box = document.getElementById("extra-keys"); if (b && box) b.disabled = box.children.length >= 9; }
+function renderExtraKeys(list) { const box = document.getElementById("extra-keys"); if (!box) return; box.replaceChildren(); for (const k of list.slice(0, 9)) addKeyRow(k); syncAddKey(); }
+document.getElementById("add-key")?.addEventListener("click", () => { addKeyRow(""); updateDirty(); document.querySelector("#extra-keys .xk-row:last-child input, #extra-keys > div:last-child input")?.focus(); });
 
 // "Probar conexión": si funciona, la key se guarda de una vez
 els.testConn.addEventListener("click", async () => {
@@ -2945,6 +2975,7 @@ els.comboSwitch.addEventListener("change", (ev) => {
 function wipePersonalDom() {
   for (const el of [els.apiKey, els.userName, els.assistantName, els.personality]) { if (el) el.value = ""; }
   if (els.apiKey) els.apiKey.type = "password";
+  document.getElementById("extra-keys")?.replaceChildren();
   els.factsList.replaceChildren();
   els.factsCount.textContent = "";
   els.saludo.replaceChildren();
