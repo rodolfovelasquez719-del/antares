@@ -132,7 +132,7 @@ function limpiar(){const W=mask.width,H=mask.height,k=Math.min(1,320/Math.max(W,
  {// quitar partes finas y grises (hilos, vetas del mármol): apertura morfológica + color
  const oc2=document.createElement('canvas');oc2.width=w;oc2.height=h;const og=oc2.getContext('2d');og.drawImage(orig,0,0,w,h);const c=og.getImageData(0,0,w,h).data;
  const r=Math.max(1,Math.round(Math.max(w,h)*.012));const morf=(src,val)=>{const o=new Uint8Array(w*h);for(let y=0;y<h;y++)for(let x=0;x<w;x++){let v=!val;out:for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const X=x+dx,Y=y+dy;const b=(X>=0&&Y>=0&&X<w&&Y<h)?src[Y*w+X]:0;if(b==val){v=val;break out}}o[y*w+x]=v?1:0}return o};
- const op=morf(morf(bin,0),1);for(let i=0;i<w*h;i++)if(bin[i]&&!op[i]){const R_=c[i*4],G=c[i*4+1],B=c[i*4+2],mx=Math.max(R_,G,B),mn=Math.min(R_,G,B);if(mx-mn<38)bin[i]=0}}
+ const op=morf(morf(bin,0),1);for(let i=0;i<w*h;i++)if(bin[i]&&!op[i]){const R_=c[i*4],G=c[i*4+1],B=c[i*4+2],mx=Math.max(R_,G,B),mn=Math.min(R_,G,B);if(mx-mn<30&&mn>120)bin[i]=0}}
  const thin=new Uint8Array(w*h);for(let i=0;i<w*h;i++)thin[i]=bin0[i]&&!bin[i]?1:0;
  const R=Math.max(2,Math.round(Math.max(w,h)*.015)),dil=new Uint8Array(w*h);// dilatar para unir cierres/cadenas
  for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(bin[y*w+x])for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){const X=x+dx,Y=y+dy;if(X>=0&&Y>=0&&X<w&&Y<h)dil[Y*w+X]=1}
