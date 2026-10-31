@@ -4,7 +4,9 @@ import { initEditor } from "./editor.js";
 import { initPoster, initCollage } from "./poster.js";
 import { initPrecios } from "./precios.js";
 import { loadCanvas, busy } from "./img.js";
-export const VERSION = "0.5.0";
+import { crearMemoria } from "../../comun/memoria.js";
+export const mem = crearMemoria("viernes"); // carpeta "viernes" en este teléfono
+export const VERSION = "0.6.0";
 const $ = (id) => document.getElementById(id);
 const CFG = "viernes.config.v1", CHAT = "viernes.chat.v1";
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
@@ -67,12 +69,15 @@ function renderChat() {
 async function send(text) {
   if (!text.trim()) return;
   if (!hasKey()) return show("v-nokey");
+  const hit = mem.buscar(text); // pregunta repetida: se responde de la memoria, sin red ni tokens
+  if (hit) { chat.push({ role: "user", text }, { role: "model", text: hit.texto }); bubble("user", text); bubble("v", hit.texto); save(CHAT, chat.slice(-60)); return; }
   if (!navigator.onLine) return toast("Estás sin internet. Revisa el wifi o los datos 📶");
   chat.push({ role: "user", text }); bubble("user", text);
   const t = bubble("v", "Pensando"); t.classList.add("typing");
-  const r = await askViernes(chat.slice(-12).filter((m, i, a) => i > 0 || m.role === "user"), { search: /\b(hoy|precio|dónde|donde|horario|noticia|clima|tendencia|cuánto|cuanto|abre)\b/i.test(text) });
+  const r = await askViernes(chat.slice(-12).filter((m, i, a) => i > 0 || m.role === "user"), { search: /\b(hoy|precio|dónde|donde|horario|noticia|clima|tendencia|cuánto|cuanto|abre)\b/i.test(text), system: persona() + mem.paraPrompt() + mem.instruccionAprender });
+  if (r.ok) r.text = mem.extraer(r.text).texto;
   t.classList.remove("typing"); t.innerHTML = md(r.text);
-  if (r.ok) { chat.push({ role: "model", text: r.text }); save(CHAT, chat.slice(-60)); } else chat.pop();
+  if (r.ok) { chat.push({ role: "model", text: r.text }); save(CHAT, chat.slice(-60)); if (chat.length <= 3 || !/^(y|pero|entonces)\b/i.test(text)) mem.guardar(text, r.text, { fuentes: r.sources }); } else chat.pop();
 }
 let sending = false;
 $("chat-form").onsubmit = async (e) => { e.preventDefault(); if (sending) return; const v = $("chat-in").value; $("chat-in").value = ""; sending = true; try { await send(v); } finally { sending = false; } };
@@ -94,10 +99,17 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 let searching = false;
 async function search(q) {
   if (!q.trim() || searching) return; if (!hasKey()) return show("v-nokey");
-  if (!navigator.onLine) return toast("Estás sin internet. Revisa el wifi o los datos 📶");
-  searching = true; setTimeout(() => searching = false, 1500);
-  const o = $("search-out"); o.classList.remove("hidden"); o.innerHTML = '<span class="typing">Buscando</span>';
-  const r = await askViernes([{ role: "user", text: q }], { search: true });
+  const o = $("search-out");
+  const hit = mem.buscar("buscar: " + q);
+  let r = hit ? { ok: true, text: hit.texto, sources: hit.fuentes } : null;
+  if (!r) {
+    if (!navigator.onLine) return toast("Estás sin internet. Revisa el wifi o los datos 📶");
+    searching = true; setTimeout(() => searching = false, 1500);
+    o.classList.remove("hidden"); o.innerHTML = '<span class="typing">Buscando</span>';
+    r = await askViernes([{ role: "user", text: q }], { search: true, system: persona() + mem.paraPrompt() });
+    if (r.ok) mem.guardar("buscar: " + q, r.text, { fuentes: r.sources || [], volatil: true });
+  }
+  o.classList.remove("hidden");
   o.innerHTML = md(r.text) + (r.sources && r.sources.length ? "<hr><b>Fuentes:</b><br>" + r.sources.map((s) => `• <a href="${esc(s.uri)}" target="_blank" rel="noopener">${esc(s.title || "fuente")}</a>`).join("<br>") : "");
 }
 $("search-form").onsubmit = (e) => { e.preventDefault(); search($("search-in").value); };
@@ -172,8 +184,15 @@ $("vi-file2").onchange = (e) => e.target.files[0] && vision(e.target.files[0]);
 // ---- Estado (para Freddy) ----
 function renderStatus() {
   const s = { app: "Viernes", version: VERSION, configurada: hasKey() ? `sí (${config.keys.length} llave${config.keys.length > 1 ? "s" : ""})` : "no", preparada: config.setupAt ? new Date(config.setupAt).toLocaleString("es-CR") : "—",
-    instalada: matchMedia("(display-mode: standalone)").matches ? "sí" : "no", mensajes: chat.length, navegador: navigator.userAgent.match(/(Chrome|Firefox|Safari)\/[\d.]+/)?.[0] || "?" };
+    instalada: matchMedia("(display-mode: standalone)").matches ? "sí" : "no", mensajes: chat.length,
+    memoria: (({ respuestas, reutilizadas, datos }) => `${datos} datos aprendidos · ${respuestas} respuestas guardadas · ${reutilizadas} reutilizadas`)(mem.estadisticas()), navegador: navigator.userAgent.match(/(Chrome|Firefox|Safari)\/[\d.]+/)?.[0] || "?" };
   $("status-box").innerHTML = Object.entries(s).map(([k, v]) => `<b>${k}:</b> ${esc(v)}`).join("<br>");
+  $("mem-export").onclick = async () => {
+    const txt = JSON.stringify(mem.exportar(), null, 1), name = `memoria_viernes_${new Date().toISOString().slice(0, 10)}.json`;
+    const f = new File([txt], name, { type: "application/json" });
+    try { if (navigator.canShare && navigator.canShare({ files: [f] })) return await navigator.share({ files: [f], title: "Memoria de Viernes" }); } catch (e) { if (e && e.name === "AbortError") return; }
+    const a = document.createElement("a"); a.href = URL.createObjectURL(f); a.download = name; a.click(); toast("Memoria descargada");
+  };
   $("status-share").onclick = () => { const t = "Estado de Viernes\n" + Object.entries(s).map(([k, v]) => `${k}: ${v}`).join("\n"); navigator.share ? navigator.share({ text: t }) : navigator.clipboard.writeText(t).then(() => toast("Copiado")); };
 }
 $("wipe").onclick = () => { if (confirm("¿Borrar la conversación?")) { chat = []; save(CHAT, chat); renderChat(); toast("Listo"); } };

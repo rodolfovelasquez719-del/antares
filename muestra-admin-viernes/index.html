@@ -44,6 +44,11 @@ button{font:inherit;padding:11px 14px;border-radius:10px;border:1px solid #2c3d5
 <p>Versión publicada: <b id="ver">…</b></p>
 <p class="hint">Para ver el estado en el teléfono de Wendy: en Viernes, tocar 5 veces el círculo "V" de arriba → «Enviar estado a Freddy» (manda versión, si está configurada e instalada; nunca la key). También puede abrir <a style="color:#f9a8d4" href="../viernes/#estado" target="_blank">Viernes → estado</a> en este equipo.</p>
 <a href="../viernes/" target="_blank"><button>Abrir Viernes</button></a></div>
+<div class="card"><h2>5. Memoria de Viernes</h2>
+<p class="hint">Viernes aprende en el teléfono de Wendy (carpeta «viernes»): guarda datos de su negocio y gustos, y respuestas a preguntas repetidas para contestar sin internet ni gastar tokens. Esa memoria vive solo en su teléfono; no hay sincronización automática gratuita y simple, así que se revisa así:</p>
+<p class="hint">En el teléfono de Wendy: tocar 5 veces el círculo «V» → <b>«Exportar memoria (para Freddy)»</b> → enviarle el archivo por WhatsApp. Aquí: cargar ese archivo. Queda guardado en Antares en la carpeta «viernes».</p>
+<input type="file" id="mem-file" accept=".json,application/json" style="color:#fbcfe8">
+<div id="mem-view" class="hint" style="margin-top:10px"></div></div>
 <div class="volver-abajo"><button type="button" class="volver" data-volver>← Volver a Antares</button></div>
 <script src="qrcode.js"></script>
 <script>
@@ -71,4 +76,30 @@ $("gen").onclick=()=>{const k=$("k").value.replace(/\s+/g,"");if(!k){$("kst").in
  ["qr","howto","acts","warn"].forEach(i=>$(i).hidden=false);};
 $("copy").onclick=()=>navigator.clipboard.writeText(link).then(()=>$("copy").textContent="¡Copiado!");
 $("share").onclick=()=>navigator.share?navigator.share({title:"Viernes",text:"Wendy, abre este enlace en tu teléfono para preparar Viernes 💜",url:link}):$("copy").click();
+</script>
+<script>
+// Memoria de asistentes guardada en Antares: una "carpeta" por asistente (antares.asistentes.<nombre>)
+(function () {
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const view = document.getElementById("mem-view");
+  function pintar(m) {
+    if (!m) { view.textContent = "Todavía no se ha cargado ninguna memoria."; return; }
+    const f = (t) => new Date(t).toLocaleDateString("es-CR");
+    view.innerHTML = `<b>Carpeta «${esc(m.asistente)}»</b> · exportada ${f(m.exportado)}<br><br><b>Datos aprendidos (${m.datos.length}):</b><br>` +
+      (m.datos.map((d) => "• " + esc(d.t)).join("<br>") || "—") +
+      `<br><br><b>Respuestas guardadas (${m.respuestas.length}):</b><br>` +
+      (m.respuestas.slice(-40).reverse().map((r) => `• ${esc(r.q)} <span style="opacity:.7">(${r.usos || 0} usos)</span>`).join("<br>") || "—");
+  }
+  const leer = (n) => { try { return JSON.parse(localStorage.getItem("antares.asistentes." + n)); } catch { return null; } };
+  pintar(leer("viernes"));
+  document.getElementById("mem-file").onchange = async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    try {
+      const m = JSON.parse(await file.text());
+      if (m.formato !== "memoria-asistente/1" || !m.asistente) throw 0;
+      const n = String(m.asistente).replace(/[^a-z0-9_-]/gi, "").toLowerCase();
+      localStorage.setItem("antares.asistentes." + n, JSON.stringify(m)); pintar(m);
+    } catch { view.textContent = "Ese archivo no es una memoria de asistente válida."; }
+  };
+})();
 </script></body></html>
