@@ -77,3 +77,28 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--pink2);outline-
 .tabs button span{white-space:nowrap}
 @media (max-width:370px){.tabs button span{font-size:10.5px}.tplgrid{gap:6px}.tplgrid .thumb{font-size:10.5px}h2{font-size:22px}}
 body.offline .top p::after{content:" · sin internet";color:#fca5a5}
+
+/* ===== 0.8.0 Fotos para vender ===== */
+#v-fotos .fo-btn{display:block;width:100%;font:700 20px Quicksand,sans-serif;padding:18px;margin:10px 0;border:0;border-radius:18px;color:#fff;background:linear-gradient(90deg,var(--pink),#a855f7);box-shadow:0 6px 18px #ff5fa844}
+#v-fotos .fo-btn.sec{background:rgba(255,255,255,.08);border:1px solid var(--line)}
+#v-fotos .fo-btn:disabled{opacity:.4}
+#v-fotos #msg{text-align:center;font-size:18px;min-height:26px;margin:8px 0;color:var(--pink2)}
+#v-fotos #lienzo{width:100%;border-radius:16px;touch-action:none;display:none;background:repeating-conic-gradient(#ddd 0 25%,#fff 0 50%) 0 0/20px 20px}
+#v-fotos .fo-tabs{display:flex;gap:6px;margin-top:10px}
+#v-fotos .fo-tabs button{flex:1;font:700 16px Quicksand;padding:14px 4px;border-radius:14px;border:1px solid var(--line);background:var(--bg2);color:var(--ink)}
+#v-fotos .fo-tabs button.on{background:var(--pink);color:#fff}
+#v-fotos .fo-panel{display:none;padding:10px 0}
+#v-fotos .fo-panel.on{display:block}
+#v-fotos .fo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+#v-fotos .fo-grid button{aspect-ratio:1;border-radius:14px;border:3px solid transparent;font:700 13px Quicksand;color:#333}
+#v-fotos .fo-grid button.on{border-color:var(--pink2)}
+#v-fotos label{display:block;font-size:17px;margin:12px 0 4px}
+#v-fotos input[type=range]{width:100%;height:34px;accent-color:var(--pink)}
+#v-fotos .fo-fila{display:flex;gap:8px}
+#v-fotos .fo-fila .fo-btn{font-size:17px;padding:14px 6px}
+#v-fotos .fo-fila .fo-btn.on{outline:3px solid var(--pink2)}
+#v-fotos .fo-campo{width:100%;font:18px Quicksand;border-radius:14px;padding:12px;border:1px solid var(--line);background:var(--bg2);color:var(--ink)}
+#v-fotos .fo-ayuda{color:var(--mut);font-size:14px;text-align:center}
+#v-fotos{padding-bottom:90px}#v-fotos .fo-btn small{font-size:15px;font-weight:500}
+.fotos-entry{display:block;width:calc(100% - 24px);margin:10px 12px;font:700 20px Quicksand,sans-serif;padding:16px;border:0;border-radius:18px;color:#fff;background:linear-gradient(90deg,var(--pink),#a855f7);box-shadow:0 6px 18px #ff5fa844}
+#chat-pic.on{background:var(--pink)}

@@ -22,9 +22,11 @@
 <main>
   <!-- CHAT -->
   <section id="v-chat" class="view active">
+    <button class="fotos-entry" id="go-fotos">📸 Fotos para vender</button>
     <div id="chat-log" class="log"></div>
     <form id="chat-form" class="composer">
       <button type="button" id="mic" class="icon-btn" aria-label="Hablar">🎙️</button>
+      <label class="icon-btn" id="chat-pic" aria-label="Foto" style="display:grid;place-items:center;border-radius:12px">📎<input type="file" accept="image/*" id="chat-file" hidden></label>
       <input id="chat-in" autocomplete="off" placeholder="Escríbeme o toca el micrófono…">
       <button class="send" aria-label="Enviar">➤</button>
     </form>
@@ -43,6 +45,7 @@
   <!-- FOTOS -->
   <section id="v-photo" class="view">
     <h2>Editor de fotos</h2>
+    <button class="fotos-entry" id="go-fotos3">📸 Fotos para vender (quitar fondo y afiches)</button>
     <label class="upload big" id="ph-upload"><input type="file" accept="image/*" id="ph-file" hidden>📷 Elegir o tomar foto</label>
     <div id="ph-editor" class="hidden">
       <div class="stage"><canvas id="ph-canvas"></canvas></div>
@@ -200,6 +203,70 @@ Ideal para regalar</textarea></label>
     </div>
   </section>
 
+  <!-- FOTOS PARA VENDER (0.8.0) -->
+  <section id="v-fotos" class="view">
+    <h2 style="text-align:center;margin:8px 0 0">📸 Fotos para vender</h2>
+
+<input type="file" id="archivo" accept="image/*" hidden>
+<input type="file" id="archivoFondo" accept="image/*" hidden>
+<div id="modos"><p class="fo-ayuda" style="font-size:17px">¿Cómo querés hacerlo?</p>
+<button class="fo-btn" id="mAuto" style="font-size:22px;padding:24px">🪄 Automático<br><small>(escribo y lo hace)</small></button>
+<button class="fo-btn sec" id="mMano" style="font-size:22px;padding:24px">✋ A mano</button>
+<button class="fo-btn sec" id="mAfiche" style="font-size:22px;padding:24px">🛍️ Afiche de venta</button></div>
+<div id="af" style="display:none">
+<button class="fo-btn sec" id="afFoto">📷 1. Elegir foto de tu joya</button>
+<div id="afPrev" class="fo-ayuda"></div>
+<label>2. Contame de tu joya (o dictalo):</label>
+<textarea id="afTexto" rows="3" class="fo-campo" placeholder="Ej: collar estilo chicle, colorido divertido único, cierre de langosta, cuentas grandes, colores pastel, 7000 colones"></textarea>
+<button class="fo-btn sec" id="afMic">🎤 Dictar</button>
+<label>3. Elegí el diseño:</label>
+<div class="fo-tabs" id="afPlant"><button data-t="chicle" class="on">🍬 Chicle</button><button data-t="elegante">🌸 Elegante</button><button data-t="tienda">🤍 Tienda</button></div>
+<button class="fo-btn" id="afHacer">🛍️ ¡Hacé mi afiche!</button>
+<div id="afRes" style="display:none">
+<canvas id="afCv" style="width:100%;border-radius:16px;margin-top:10px"></canvas>
+<div class="fo-tabs" id="afPlant2"></div>
+<button class="fo-btn" id="afShare">📤 Compartir</button>
+<div class="fo-fila"><button class="fo-btn sec" id="afPng">⬇️ PNG</button><button class="fo-btn sec" id="afJpg">⬇️ JPG</button></div>
+<button class="fo-btn sec" id="afDet">🔍 Otros detalles</button>
+<details style="margin:8px 0"><summary style="font-size:18px;padding:10px">✏️ Cambiar textos</summary>
+<label>Nombre</label><input id="fTit" class="fo-campo"><label>Subtítulo</label><input id="fSub" class="fo-campo">
+<label>Frase corta</label><input id="fFra" class="fo-campo"><label>Características (una por renglón)</label><textarea id="fCar" rows="4" class="fo-campo"></textarea>
+<label>Detalle 1</label><input id="fD1" class="fo-campo"><label>Detalle 2</label><input id="fD2" class="fo-campo">
+<label>Precio (₡)</label><input id="fPre" class="fo-campo" inputmode="numeric"></details></div>
+<button class="fo-btn sec" id="afVolver">🏠 Inicio</button></div>
+<div id="auto" style="display:none">
+<button class="fo-btn sec" id="aFoto">📷 1. Elegir foto de tu joya</button>
+<div id="aPrev" class="fo-ayuda"></div>
+<label>2. Decime qué querés:</label>
+<textarea id="aTexto" rows="3" style="width:100%;font:18px Quicksand;border-radius:14px;padding:12px;border:1px solid var(--line);background:var(--bg2);color:var(--ink)" placeholder="Ej: quitale el fondo y ponele mármol con sombra"></textarea>
+<button class="fo-btn sec" id="aMic">🎤 Dictar</button>
+<button class="fo-btn sec" id="aFondoFoto" style="display:none">🖼️ Elegir la foto de fondo</button>
+<button class="fo-btn" id="aHacer">🪄 ¡Hacelo!</button>
+<button class="fo-btn sec" id="aVolver">← Volver</button></div>
+<button class="fo-btn" id="elegir" style="display:none">📷 Elegir foto de tu joya</button>
+<div id="msg"></div>
+<canvas id="lienzo"></canvas>
+<div id="editor" style="display:none">
+<button class="fo-btn sec" id="aMano" style="display:none">✋ Ajustar a mano</button>
+<div id="herr">
+<div class="fo-tabs"><button data-p="pFondo" class="on">🎨 Fondo</button><button data-p="pMover">✋ Mover</button><button data-p="pRetocar">🖌️ Retocar</button></div>
+<div class="fo-panel on" id="pFondo"><div class="fo-grid" id="fondos"></div>
+<button class="fo-btn sec" id="miFondo">🖼️ Usar mi propia foto de fondo</button></div>
+<div class="fo-panel" id="pMover"><p class="fo-ayuda">Arrastrá la joya con el dedo. Con dos dedos la agrandás o achicás.</p>
+<label>Tamaño</label><input type="range" id="tam" min="20" max="250" value="100">
+<label>Sombra suave</label><input type="range" id="sombra" min="0" max="100" value="40">
+<button class="fo-btn sec" id="centrar">↺ Volver al centro</button></div>
+<div class="fo-panel" id="pRetocar"><p class="fo-ayuda">Pasá el dedo sobre la foto para borrar lo que sobra o recuperar partes de la cadena.</p>
+<div class="fo-fila"><button class="fo-btn sec on" id="bBorrar">🧽 Borrar</button><button class="fo-btn sec" id="bRec">✨ Recuperar</button></div>
+<label>Grosor del pincel</label><input type="range" id="grosor" min="4" max="80" value="20"></div>
+</div>
+<button class="fo-btn" id="compartir">📤 Compartir</button>
+<div class="fo-fila"><button class="fo-btn sec" id="png">⬇️ PNG</button><button class="fo-btn sec" id="jpg">⬇️ JPG</button></div>
+<button class="fo-btn sec" id="otra">📷 Otra foto</button>
+<button class="fo-btn sec" id="inicio">🏠 Inicio</button>
+</div>
+  </section>
+
   <!-- ESTADO (oculto; se abre con #estado o tocando 5 veces el logo) -->
   <section id="v-set" class="view">
     <h2>Estado de Viernes</h2>
@@ -210,7 +277,7 @@ Ideal para regalar</textarea></label>
   </section>
   <section id="v-nokey" class="view">
     <div class="card center"><div class="bigemoji">💜</div><h2>¡Hola, Wendy!</h2><p>Para que yo pueda conversar y escribir, Freddy tiene que prepararme.<br><br>Pídele a Freddy tu <b>enlace de Viernes</b> y ábrelo en este teléfono.</p>
-    <p class="hint">Mientras tanto, los pósteres, el collage y el editor de fotos ya funcionan.</p></div>
+    <button class="fotos-entry" id="go-fotos2">📸 Fotos para vender</button><p class="hint">Mientras tanto, los pósteres, el collage y el editor de fotos ya funcionan.</p></div>
   </section>
 </main>
 

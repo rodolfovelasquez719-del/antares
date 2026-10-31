@@ -5,8 +5,9 @@ import { initPoster, initCollage } from "./poster.js";
 import { initPrecios } from "./precios.js";
 import { loadCanvas, busy } from "./img.js";
 import { crearMemoria } from "../../comun/memoria.js";
+import { initFotos, abrirFotos } from "./fotos.js";
 export const mem = crearMemoria("viernes"); // carpeta "viernes" en este teléfono
-export const VERSION = "0.7.0";
+export const VERSION = "0.8.0";
 const $ = (id) => document.getElementById(id);
 const CFG = "viernes.config.v1", CHAT = "viernes.chat.v1";
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
@@ -76,7 +77,23 @@ function renderChat() {
   if (!chat.length) bubble("v", `¡Hola, ${config.name || "Wendy"}! Soy Viernes 💜 ¿En qué te ayudo hoy? Puedes escribirme o tocar el micrófono 🎙️`);
   chat.slice(-30).forEach((m) => bubble(m.role, m.text));
 }
+// ---- 0.8.0: Fotos para vender ----
+const abrirSeccionFotos = () => { initFotos(); show("v-fotos"); };
+["go-fotos", "go-fotos2", "go-fotos3"].forEach((id) => $(id) && ($(id).onclick = abrirSeccionFotos));
+let fotoChat = null;
+$("chat-file").onchange = (e) => { fotoChat = e.target.files[0] || null; e.target.value = ""; $("chat-pic").classList.toggle("on", !!fotoChat);
+  if (fotoChat) { toast("📷 Foto lista. Ahora dime qué hago (ej.: quitale el fondo, hazme un afiche)", 3500); $("chat-in").focus(); } };
+const PIDE_FOTO = /fondo|afiche|p[oó]ster|anuncio|recort|quit|editar|edita|vender|m[aá]rmol|madera|degrad/i;
+function enviarFoto(text) {
+  const f = fotoChat; fotoChat = null; $("chat-pic").classList.remove("on");
+  const t = text.trim() || "fondo blanco para vender";
+  bubble("user", "📷 " + t);
+  const modo = abrirFotosDesdeChat(f, t);
+  bubble("v", modo === "afiche" ? "¡Con gusto! 🛍️ Te estoy haciendo el afiche en **Fotos para vender**." : "¡Con gusto! 🪄 Lo estoy haciendo en **Fotos para vender**.");
+}
+function abrirFotosDesdeChat(f, t) { initFotos(); show("v-fotos"); return abrirFotos(f, PIDE_FOTO.test(t) || /a mano/i.test(t) ? t : "fondo blanco para vender " + t); }
 async function send(text) {
+  if (fotoChat) return enviarFoto(text);
   if (!text.trim()) return;
   if (!hasKey()) return show("v-nokey");
   const hit = mem.buscar(text); // pregunta repetida: se responde de la memoria, sin red ni tokens
@@ -218,7 +235,7 @@ initPrecios(() => { document.querySelector('#biz-tabs [data-b="ideas"]').click()
 if (location.hash === "#estado") { renderStatus(); show("v-set"); }
 addEventListener("hashchange", async () => { if (/(setup|sync)=/.test(location.hash)) { await readSetup();
 if (!history.state) history.replaceState({ v: "v-chat" }, "", location.pathname + location.search + (location.hash === "#estado" ? "#estado" : "")); $("hello").textContent = `Tu asistente, ${config.name || "Wendy"} ✨`; renderChat(); show("v-chat"); } else if (location.hash === "#estado") { renderStatus(); show("v-set"); } });
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(() => {});
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js", { scope: "./" }).then((r) => r.update && r.update()).catch(() => {});
 const net = () => { document.body.classList.toggle("offline", !navigator.onLine); };
 addEventListener("online", () => { net(); toast("Volvió el internet ✅"); }); addEventListener("offline", () => { net(); toast("Sin internet: pósteres, fotos y precios siguen funcionando 💜", 4000); }); net();
 window.__viernesReady = true;
