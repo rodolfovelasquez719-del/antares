@@ -31,10 +31,24 @@ label{display:block;font-size:17px;margin:12px 0 4px}input[type=range]{width:100
 <main>
 <input type="file" id="archivo" accept="image/*" hidden>
 <input type="file" id="archivoFondo" accept="image/*" hidden>
-<button class="btn" id="elegir">📷 Elegir foto de tu joya</button>
+<div id="modos"><p class="ayuda" style="font-size:17px">¿Cómo querés hacerlo?</p>
+<button class="btn" id="mAuto" style="font-size:22px;padding:24px">🪄 Automático<br><small>(escribo y lo hace)</small></button>
+<button class="btn sec" id="mMano" style="font-size:22px;padding:24px">✋ A mano</button></div>
+<div id="auto" style="display:none">
+<button class="btn sec" id="aFoto">📷 1. Elegir foto de tu joya</button>
+<div id="aPrev" class="ayuda"></div>
+<label>2. Decime qué querés:</label>
+<textarea id="aTexto" rows="3" style="width:100%;font:18px Quicksand;border-radius:14px;padding:12px;border:1px solid var(--line);background:var(--bg2);color:var(--ink)" placeholder="Ej: quitale el fondo y ponele mármol con sombra"></textarea>
+<button class="btn sec" id="aMic">🎤 Dictar</button>
+<button class="btn sec" id="aFondoFoto" style="display:none">🖼️ Elegir la foto de fondo</button>
+<button class="btn" id="aHacer">🪄 ¡Hacelo!</button>
+<button class="btn sec" id="aVolver">← Volver</button></div>
+<button class="btn" id="elegir" style="display:none">📷 Elegir foto de tu joya</button>
 <div id="msg"></div>
 <canvas id="lienzo"></canvas>
 <div id="editor" style="display:none">
+<button class="btn sec" id="aMano" style="display:none">✋ Ajustar a mano</button>
+<div id="herr">
 <div class="tabs"><button data-p="pFondo" class="on">🎨 Fondo</button><button data-p="pMover">✋ Mover</button><button data-p="pRetocar">🖌️ Retocar</button></div>
 <div class="panel on" id="pFondo"><div class="grid" id="fondos"></div>
 <button class="btn sec" id="miFondo">🖼️ Usar mi propia foto de fondo</button></div>
@@ -45,9 +59,11 @@ label{display:block;font-size:17px;margin:12px 0 4px}input[type=range]{width:100
 <div class="panel" id="pRetocar"><p class="ayuda">Pasá el dedo sobre la foto para borrar lo que sobra o recuperar partes de la cadena.</p>
 <div class="fila"><button class="btn sec on" id="bBorrar">🧽 Borrar</button><button class="btn sec" id="bRec">✨ Recuperar</button></div>
 <label>Grosor del pincel</label><input type="range" id="grosor" min="4" max="80" value="20"></div>
+</div>
 <button class="btn" id="compartir">📤 Compartir</button>
 <div class="fila"><button class="btn sec" id="png">⬇️ PNG</button><button class="btn sec" id="jpg">⬇️ JPG</button></div>
 <button class="btn sec" id="otra">📷 Otra foto</button>
+<button class="btn sec" id="inicio">🏠 Inicio</button>
 </div>
 </main>
 <script type="module">
@@ -85,7 +101,7 @@ function dibujar(){cx.clearRect(0,0,N,N);pintarFondo(cx);const r=rect();const sh
  if(sh){cx.save();cx.shadowColor=`rgba(0,0,0,${sh/160})`;cx.shadowBlur=10+sh*.5;cx.shadowOffsetY=6+sh*.25;cx.drawImage(obj,r.x,r.y,r.w,r.h);cx.restore()}
  cx.drawImage(obj,r.x,r.y,r.w,r.h)}
 async function cargarLib(){if(!lib){msg('⏳ Preparando el borrador mágico (solo la primera vez tarda)…');lib=await import('https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.5/+esm')}return lib}
-async function procesar(file){$('elegir').disabled=true;$('editor').style.display='none';cv.style.display='none';
+async function procesar(file,auto){$('elegir').disabled=true;$('editor').style.display='none';cv.style.display='none';
  try{const L=await cargarLib();
   orig=await createImageBitmap(file);
   // reducir para teléfono
@@ -96,9 +112,9 @@ async function procesar(file){$('elegir').disabled=true;$('editor').style.displa
   const cut=await createImageBitmap(out);
   mask=document.createElement('canvas');mask.width=oc.width;mask.height=oc.height;mask.getContext('2d').drawImage(cut,0,0,oc.width,oc.height);
   obj=document.createElement('canvas');obj.width=oc.width;obj.height=oc.height;rehacerObj();
-  pos={x:.5,y:.5,s:1};$('tam').value=100;cv.style.display='block';$('editor').style.display='block';dibujar();
-  window.__listo=((performance.now()-t0)/1000).toFixed(1);msg('✅ ¡Listo! Ahora elegí un fondo');
- }catch(e){console.error(e);msg('😕 No pude quitar el fondo. Probá otra foto.')}
+  pos={x:.5,y:.5,s:1};$('tam').value=100;cv.style.display='block';$('editor').style.display='block';$('herr').style.display=auto?'none':'block';$('aMano').style.display=auto?'block':'none';if(auto)$('auto').style.display='none';dibujar();
+  window.__listo=((performance.now()-t0)/1000).toFixed(1);if(!auto)msg('✅ ¡Listo! Ahora elegí un fondo');
+ return true}catch(e){console.error(e);msg('😕 No pude quitar el fondo. Probá otra foto.')}
  $('elegir').disabled=false}
 $('elegir').onclick=$('otra').onclick=()=>$('archivo').click();
 $('archivo').onchange=e=>{const f=e.target.files[0];if(f)procesar(f);e.target.value=''};
@@ -123,6 +139,57 @@ cv.addEventListener('pointermove',e=>{if(!dedos.has(e.pointerId))return;dedos.se
  const a=[...dedos.values()];if(!ini)return;
  if(a.length>1&&ini.d){pos.s=Math.max(.2,Math.min(2.5,ini.pos.s*Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)/ini.d));$('tam').value=pos.s*100}
  else{pos.x=ini.pos.x+a[0].x-ini.a[0].x;pos.y=ini.pos.y+a[0].y-ini.a[0].y}dibujar()});
+
+const marcar=()=>document.querySelectorAll('#fondos button').forEach(x=>x.classList.toggle('on',FONDOS[[...x.parentNode.children].indexOf(x)][0]===fondo.v&&!fondoImg));
+$('mMano').onclick=()=>{$('modos').style.display='none';$('elegir').style.display='block';$('archivo').click()};
+$('mAuto').onclick=()=>{$('modos').style.display='none';$('auto').style.display='block'};
+$('aVolver').onclick=$('inicio').onclick=()=>{['auto','elegir','editor'].forEach(i=>$(i).style.display='none');cv.style.display='none';$('modos').style.display='block';msg('')};
+let aFile=null,aFondo=null;
+const fp=document.createElement('input');fp.type='file';fp.accept='image/*';
+const pedir=()=>new Promise(r=>{fp.onchange=()=>{r(fp.files[0]);fp.value=''};fp.click()});
+$('aFoto').onclick=async()=>{const f=await pedir();if(f){aFile=f;$('aPrev').innerHTML=`<img src="${URL.createObjectURL(f)}" style="max-width:60%;max-height:160px;border-radius:12px">`}};
+const norm=t=>t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+const quiereFoto=t=>/(foto|imagen) (de|para el) fondo|esta foto|mi foto|mi propia/.test(norm(t));
+$('aTexto').oninput=()=>$('aFondoFoto').style.display=quiereFoto($('aTexto').value)?'block':'none';
+$('aFondoFoto').onclick=async()=>{const f=await pedir();if(f){aFondo=await createImageBitmap(f);$('aFondoFoto').textContent='✅ Foto de fondo elegida'}};
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+if(!SR)$('aMic').style.display='none';else $('aMic').onclick=()=>{const r=new SR();r.lang='es-CR';r.interimResults=false;$('aMic').textContent='🎙️ Te escucho…';
+ r.onresult=e=>{$('aTexto').value=e.results[0][0].transcript;$('aTexto').oninput()};r.onend=()=>$('aMic').textContent='🎤 Dictar';r.onerror=()=>msg('No te escuché bien, probá de nuevo');r.start()};
+const COL={blanc:'#ffffff',negr:'#111111',ros:'#f8c8dc',fucsi:'#ff5fa8',crema:'#efe6d6',beige:'#e8dcc8',menta:'#cfe8e0',verde:'#b8e0c0',celest:'#cfe3f7',azul:'#a9c8f0',cielo:'#d9e6f5',lila:'#d8c8f0',morad:'#b48cff',violet:'#b48cff',durazno:'#ffd8bf',naranj:'#ffc08a',amarill:'#fff0a8',dorad:'#e8c872',gris:'#d6d6d6',roj:'#f08080',cafe:'#a07850',turques:'#9de0d8'};
+const aclara=h=>{const n=parseInt(h.slice(1),16),f=c=>Math.round(c+(255-c)*.6);return'#'+[n>>16,n>>8&255,n&255].map(c=>f(c).toString(16).padStart(2,'0')).join('')};
+function parsear(texto){const t=norm(texto);const c={fondo:'#ffffff',tam:100,sombra:35,foto:false};
+ const cols=[];for(const k in COL){const i=t.search(new RegExp('\\b'+k));if(i>=0)cols.push([i,COL[k]])}cols.sort((a,b)=>a[0]-b[0]);
+ if(/vender|venta|catalogo|tienda|producto|profesional/.test(t)){c.fondo='#ffffff';c.sombra=30}
+ if(cols.length)c.fondo=cols[0][1];
+ if(/degrad|difumin|suave|pastel/.test(t))c.fondo='g:'+(cols.length>1?cols[0][1]+','+cols[1][1]:cols.length?aclara(cols[0][1])+','+cols[0][1]:'#fde2e4,#e2d1f9');
+ for(const [k,v] of [['marmol','t:marmol'],['madera','t:madera'],['mesa','t:madera'],['lino','t:lino'],['tela','t:tela'],['manta','t:tela'],['tejid','t:tela']])if(t.includes(k)){c.fondo=v;break}
+ if(quiereFoto(texto))c.foto=true;
+ if(/mucho mas grande|bien grande|enorme|grandot/.test(t))c.tam=150;else if(/mas grande|agrand|grande/.test(t))c.tam=125;
+ if(/mucho mas peque|bien peque|chiquit/.test(t))c.tam=60;else if(/mas peque|achic|peque|chiqu/.test(t))c.tam=78;
+ if(/sin sombra/.test(t))c.sombra=0;else if(/mucha sombra|sombra fuerte|bastante sombra/.test(t))c.sombra=85;else if(/poca sombra|sombra suave|sombrita/.test(t))c.sombra=25;else if(/sombra/.test(t))c.sombra=55;
+ return c}
+async function conGemini(texto){let cfg;try{cfg=JSON.parse(localStorage.getItem('viernes.config.v1')||localStorage.getItem('viernes.config.bak'))}catch{}
+ const k=cfg&&((cfg.keys&&cfg.keys[0])||cfg.key);if(!k)return null;
+ const pr=`Convierte la instrucción de una artesana para editar la foto de su joya en JSON con: tipo ("color"|"degradado"|"textura"|"foto"), color1 (hex), color2 (hex, para degradado), textura ("madera"|"marmol"|"tela"|"lino"), tamano (20-250, 100 normal), sombra (0-100, 35 normal). Si dice para vender o catálogo usa blanco. Solo JSON.\nInstrucción: ${texto}`;
+ try{const ctl=new AbortController();setTimeout(()=>ctl.abort(),8000);
+  const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',{method:'POST',signal:ctl.signal,headers:{'Content-Type':'application/json','x-goog-api-key':k},body:JSON.stringify({contents:[{parts:[{text:pr}]}],generationConfig:{responseMimeType:'application/json',temperature:0}})});
+  if(!r.ok)return null;const j=JSON.parse((await r.json()).candidates[0].content.parts[0].text);
+  const hx=v=>/^#[0-9a-f]{6}$/i.test(v||'')?v:null,cl=(v,a,b,d)=>isFinite(+v)?Math.max(a,Math.min(b,+v)):d;
+  const c={fondo:hx(j.color1)||'#ffffff',tam:cl(j.tamano,20,250,100),sombra:cl(j.sombra,0,100,35),foto:j.tipo==='foto'};
+  if(j.tipo==='degradado')c.fondo='g:'+(hx(j.color1)||'#fde2e4')+','+(hx(j.color2)||'#e2d1f9');
+  if(j.tipo==='textura'&&['madera','marmol','tela','lino'].includes(j.textura))c.fondo='t:'+j.textura;
+  return c}catch{return null}}
+$('aHacer').onclick=async()=>{if(!aFile){msg('Primero elegí la foto de tu joya 📷');return}
+ const texto=$('aTexto').value.trim()||'fondo blanco para vender';
+ msg('🪄 Entendiendo lo que querés…');
+ const c=(await conGemini(texto))||parsear(texto);
+ if(c.foto&&!aFondo){msg('Elegí la foto de fondo 🖼️');const f=await pedir();if(f)aFondo=await createImageBitmap(f)}
+ if(!await procesar(aFile,true))return;
+ if(c.fondo.startsWith('t:')&&!texCache[c.fondo])texCache[c.fondo]=tex(c.fondo.slice(2));
+ fondo={v:c.fondo};fondoImg=c.foto&&aFondo?aFondo:null;pos={x:.5,y:.5,s:c.tam/100};$('tam').value=c.tam;$('sombra').value=c.sombra;marcar();dibujar();
+ window.__auto=c;msg('✅ ¡Listo! Si te gusta, compartila');cv.scrollIntoView({behavior:'smooth'})};
+$('aMano').onclick=()=>{$('herr').style.display='block';$('aMano').style.display='none';msg('✋ Ajustá lo que quieras')};
+
 const fin=e=>{dedos.delete(e.pointerId);const a=[...dedos.values()];ini=a.length?{pos:{...pos},a,d:0}:null};
 cv.addEventListener('pointerup',fin);cv.addEventListener('pointercancel',fin);
 // exportar
