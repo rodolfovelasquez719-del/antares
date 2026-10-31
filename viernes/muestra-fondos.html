@@ -146,7 +146,7 @@ $('mAuto').onclick=()=>{$('modos').style.display='none';$('auto').style.display=
 $('aVolver').onclick=$('inicio').onclick=()=>{['auto','elegir','editor'].forEach(i=>$(i).style.display='none');cv.style.display='none';$('modos').style.display='block';msg('')};
 let aFile=null,aFondo=null;
 const fp=document.createElement('input');fp.type='file';fp.accept='image/*';
-const pedir=()=>new Promise(r=>{fp.onchange=()=>{r(fp.files[0]);fp.value=''};fp.click()});
+const pedir=()=>new Promise(r=>{fp.onchange=()=>{r(fp.files[0]);fp.value=''};fp.oncancel=()=>r(null);fp.click()});
 $('aFoto').onclick=async()=>{const f=await pedir();if(f){aFile=f;$('aPrev').innerHTML=`<img src="${URL.createObjectURL(f)}" style="max-width:60%;max-height:160px;border-radius:12px">`}};
 const norm=t=>t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 const quiereFoto=t=>/(foto|imagen) (de|para el) fondo|esta foto|mi foto|mi propia/.test(norm(t));
@@ -183,7 +183,7 @@ $('aHacer').onclick=async()=>{if(!aFile){msg('Primero elegí la foto de tu joya 
  const texto=$('aTexto').value.trim()||'fondo blanco para vender';
  msg('🪄 Entendiendo lo que querés…');
  const c=(await conGemini(texto))||parsear(texto);
- if(c.foto&&!aFondo){msg('Elegí la foto de fondo 🖼️');const f=await pedir();if(f)aFondo=await createImageBitmap(f)}
+ if(c.foto&&!aFondo){msg('Elegí la foto de fondo 🖼️');const f=await pedir();if(f)aFondo=await createImageBitmap(f);else msg('Sin foto de fondo, uso blanco')}
  if(!await procesar(aFile,true))return;
  if(c.fondo.startsWith('t:')&&!texCache[c.fondo])texCache[c.fondo]=tex(c.fondo.slice(2));
  fondo={v:c.fondo};fondoImg=c.foto&&aFondo?aFondo:null;pos={x:.5,y:.5,s:c.tam/100};$('tam').value=c.tam;$('sombra').value=c.sombra;marcar();dibujar();
