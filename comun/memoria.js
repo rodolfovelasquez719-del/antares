@@ -21,10 +21,43 @@ export function crearMemoria(nombre, { maxRespuestas = 200, maxDatos = 80, vence
   const leer = (k) => { try { return JSON.parse(localStorage.getItem(k)) || []; } catch { return []; } };
   const escribir = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } };
   let R = leer(KR), M = leer(KD);
+  // Sincronización opcional con el servidor de la PC (cola: si falla o no hay red, queda pendiente y se reintenta)
+  const KS = `${nombre}.sync.v1`;
+  let S = (() => { try { return JSON.parse(localStorage.getItem(KS)) || {}; } catch { return {}; } })();
+  const guardarS = () => { try { localStorage.setItem(KS, JSON.stringify(S)); } catch { /* */ } };
+  let timer = null, enCurso = false;
+  const pendiente = () => { S.pendiente = true; guardarS(); clearTimeout(timer); timer = setTimeout(() => api.sincronizar(), 4000); };
+  const fusionar = (rem) => {
+    if (!rem) return;
+    const borr = new Set([...(S.olvidados || []), ...(rem.olvidados || [])]);
+    for (const d of rem.datos || []) { const n = d.n || normalizar(d.t); if (!borr.has(n) && !M.some((x) => x.n === n)) M.push({ id: d.id || n.slice(0, 12), t: d.t, n, origen: d.origen || "pc", fecha: d.fecha || 0 }); }
+    M = M.filter((x) => !borr.has(x.n)).slice(-maxDatos); S.olvidados = [...borr].slice(-200);
+    for (const x of rem.respuestas || []) { const n = x.n || normalizar(x.q); if (!n || x.vence < AHORA()) continue; const i = R.findIndex((y) => y.n === n); if (i < 0) R.push({ ...x, n }); else if ((x.t || 0) > (R[i].t || 0)) R[i] = { ...x, n }; }
+    limpiar(); escribir(KR, R); escribir(KD, M);
+  };
   const limpiar = () => { const n = AHORA(); R = R.filter((x) => x.vence > n).slice(-maxRespuestas); };
 
-  return {
+  const api = {
     nombre,
+    // {url, token} del servidor de memoria (llega por el enlace de configuración). null = apagado.
+    configurarSync(c) { S = c && c.url && c.token ? { ...S, url: String(c.url).replace(/\/+$/, ""), token: String(c.token), pendiente: true } : {}; guardarS(); if (S.url) setTimeout(() => api.sincronizar(), 500); },
+    syncActivo: () => !!(S.url && S.token),
+    estadoSync: () => ({ activo: !!(S.url && S.token), ultimo: S.ultimo || 0, pendiente: !!S.pendiente, error: S.error || "" }),
+    async sincronizar() {
+      if (!S.url || !S.token || enCurso || (typeof navigator !== "undefined" && navigator.onLine === false)) return false;
+      enCurso = true;
+      const u = `${S.url}/${encodeURIComponent(nombre)}`, h = { Authorization: "Bearer " + S.token };
+      try {
+        const g = await fetch(u, { headers: h, cache: "no-store" });
+        if (!g.ok) throw new Error("HTTP " + g.status);
+        fusionar((await g.json()).memoria);
+        const body = JSON.stringify({ ...api.exportar(), olvidados: S.olvidados || [], respuestas: R });
+        const p = await fetch(u, { method: "PUT", headers: { ...h, "Content-Type": "application/json" }, body });
+        if (!p.ok) throw new Error("HTTP " + p.status);
+        S.pendiente = false; S.ultimo = AHORA(); S.error = ""; guardarS(); return true;
+      } catch (e) { S.error = String(e && e.message || e).slice(0, 80); guardarS(); clearTimeout(timer); timer = setTimeout(() => api.sincronizar(), 5 * 60e3); return false; }
+      finally { enCurso = false; }
+    },
     // Respuesta guardada para una pregunta igual o muy parecida (null si no hay o ya venció)
     buscar(pregunta) {
       const q = String(pregunta || "").trim();
@@ -44,7 +77,7 @@ export function crearMemoria(nombre, { maxRespuestas = 200, maxDatos = 80, vence
       const vol = volatil ?? VOLATIL.test(q);
       R = R.filter((x) => x.n !== n);
       R.push({ q: q.slice(0, 300), n, r: String(respuesta).slice(0, 4000), f: fuentes.slice(0, 5), t: AHORA(), vence: AHORA() + (vol ? venceVolatil : vence), usos: 0 });
-      limpiar(); escribir(KR, R);
+      limpiar(); escribir(KR, R); if (S.url) pendiente();
     },
     // Datos aprendidos (duraderos)
     aprender(texto, origen = "auto") {
@@ -53,9 +86,9 @@ export function crearMemoria(nombre, { maxRespuestas = 200, maxDatos = 80, vence
       const n = normalizar(t);
       if (M.some((x) => x.n === n || parecido(x.n, n) > 0.8)) return false;
       M.push({ id: AHORA().toString(36) + Math.random().toString(36).slice(2, 5), t, n, origen, fecha: AHORA() });
-      M = M.slice(-maxDatos); escribir(KD, M); return true;
+      M = M.slice(-maxDatos); escribir(KD, M); if (S.url) pendiente(); return true;
     },
-    olvidar(id) { M = M.filter((x) => x.id !== id); escribir(KD, M); },
+    olvidar(id) { const x = M.find((y) => y.id === id); if (x) (S.olvidados ||= []).push(x.n); M = M.filter((y) => y.id !== id); escribir(KD, M); if (S.url) pendiente(); },
     datos: () => M.map(({ id, t, origen, fecha }) => ({ id, t, origen, fecha })),
     // Bloque para el prompt del sistema
     paraPrompt() { return M.length ? "\nLo que ya sabes (aprendido antes): " + M.map((x) => "• " + x.t).join(" ") : ""; },
@@ -64,11 +97,17 @@ export function crearMemoria(nombre, { maxRespuestas = 200, maxDatos = 80, vence
     // Saca las marcas [[APRENDI: …]] de la respuesta, guarda los datos y devuelve el texto limpio
     extraer(respuesta) {
       const nuevos = [];
-      const limpio = String(respuesta || "").replace(/\[\[\s*APRENDI\s*:\s*([^\]]+)\]\]/gi, (_, d) => { if (this.aprender(d)) nuevos.push(d.trim()); return ""; }).trim();
+      const limpio = String(respuesta || "").replace(/\[\[\s*APRENDI\s*:\s*([^\]]+)\]\]/gi, (_, d) => { if (api.aprender(d)) nuevos.push(d.trim()); return ""; }).trim();
       return { texto: limpio, nuevos };
     },
     estadisticas() { limpiar(); return { respuestas: R.length, reutilizadas: R.reduce((a, x) => a + (x.usos || 0), 0), datos: M.length }; },
-    exportar() { limpiar(); return { asistente: nombre, formato: "memoria-asistente/1", exportado: new Date().toISOString(), datos: this.datos(), respuestas: R.map(({ q, r, t, vence, usos }) => ({ q, r, t, vence, usos })) }; },
-    borrarRespuestas() { R = []; escribir(KR, R); },
+    exportar() { limpiar(); return { asistente: nombre, formato: "memoria-asistente/1", exportado: new Date().toISOString(), datos: M.map(({ id, t, n, origen, fecha }) => ({ id, t, n, origen, fecha })), respuestas: R.map(({ q, n, r, f, t, vence, usos }) => ({ q, n, r, f, t, vence, usos })) }; },
+    borrarRespuestas() { R = []; escribir(KR, R); if (S.url) pendiente(); },
+    respuestas() { limpiar(); return R.map(({ q, r, t, usos }) => ({ q, r, t, usos })); },
   };
+  if (typeof window !== "undefined") {
+    addEventListener("online", () => { if (S.pendiente) api.sincronizar(); });
+    if (S.url) setTimeout(() => api.sincronizar(), 3000);
+  }
+  return api;
 }

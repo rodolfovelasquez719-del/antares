@@ -10,6 +10,9 @@ import { Voice, isIOS, speechErrorMessage } from "./voice.js";
 import { WakeWord } from "./wake.js";
 import * as Robotics from "./robotics.js";
 import { prepareFile, toGeminiMedia, formatBytes, MAX_ATTACHMENTS } from "./media.js";
+import { crearMemoria } from "../comun/memoria.js";
+// v1.32: respuestas guardadas (carpeta «antares» en este equipo y, si se conecta, en la PC)
+const memAnt = crearMemoria("antares");
 import { fetchWeather } from "./weather.js";
 import * as Reminders from "./reminders.js";
 import * as Shopping from "./shopping.js";
@@ -42,14 +45,14 @@ import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.31.3";
+const APP_VERSION = "1.32.0";
 // v1.25.1: emparejar con el QR de la compu (#pc-token=…). Se lee y se borra del enlace de inmediato (no queda en el historial).
 let pcEmparejar = null, pcEmparejando = false;
 try {
   const h = new URLSearchParams(location.hash.slice(1)).get("pc-token");
   if (location.hash.includes("pc-token")) { const q = leerQRCompu(location.href) || {}; history.replaceState(null, "", location.pathname + location.search); pcEmparejar = { tok: (h || "").replace(/\s+/g, ""), url: q.url || "" }; }
 } catch { /* */ }
-// v1.31.3: importar keys con enlace #addkeys=<base64url JSON {v:1,keys:[…]}>. Se lee y se borra del enlace de inmediato.
+// v1.32.0: importar keys con enlace #addkeys=<base64url JSON {v:1,keys:[…]}>. Se lee y se borra del enlace de inmediato.
 function leerAddKeys(txt) {
   try {
     const m = String(txt || "").match(/addkeys=([A-Za-z0-9_\-]+)/);
@@ -57,7 +60,8 @@ function leerAddKeys(txt) {
     const b = m[1].replace(/-/g, "+").replace(/_/g, "/");
     const j = JSON.parse(decodeURIComponent(escape(atob(b + "===".slice((b.length + 3) % 4)))));
     const ks = (Array.isArray(j.keys) ? j.keys : []).map((k) => String(k || "").replace(/\s+/g, "")).filter((k) => k.length >= 20);
-    return ks.length ? ks : null;
+    if (j.sync && /^https:\/\//.test(j.sync.u) && j.sync.k) { ks.sync = { url: j.sync.u, token: j.sync.k }; }
+    return ks.length || ks.sync ? ks : null;
   } catch { return null; }
 }
 let pendingAddKeys = null;
@@ -1006,6 +1010,7 @@ async function runJob(job) {
         handleSave(memory.addMessage("assistant", ""), "la respuesta");
       }
       if (text && (wantsVoice() || job.speak) && !r.stopped) voice.speak(Code.hasFence(text) ? Code.splitFences(text).map((x) => (x.type === "text" ? x.text : " Le dejé el código en la pantalla. ")).join(" ") : text);
+      try { if (!job.kind && !(job.items || []).length && job.text && text && !r.stopped && !tutorMode) memAnt.guardar(job.text, text); } catch { /* */ }
       if (job.kind !== "mail" && job.text && looksLikeImportantFact(job.text)) {
         if (config.autoLearn) autoLearn(job.text, text); // en segundo plano, no bloquea
         else { pendingConfirm = job.text; renderConfirm(job.text); }
@@ -1240,6 +1245,11 @@ function speakLastBot() {
 function sendMessage(text, items = [], opts = {}) {
   text = (text || "").trim();
   if (busy || (!text && !items.length)) return false;
+  // v1.32: pregunta repetida o muy parecida -> respuesta guardada, sin red ni tokens
+  if (!items.length && !tutorMode && !opts.noCache && !Agent.looksActionable(text)) {
+    const hit = memAnt.buscar(text);
+    if (hit) { quickReply(text, hit.texto, opts); currentJob = Promise.resolve(); return true; }
+  }
   if (useLocal() && !items.length) { currentJob = localJob(text, opts); return true; }
   if (useLocal() && items.length) { chatNotice("El cerebro local no puede ver fotos, PDF ni videos. Para eso necesita internet y Gemini."); return false; }
   if (!client.isConfigured()) { setEstado("sinkey"); return false; }
@@ -2428,6 +2438,7 @@ function fillSettings() {
   try { window.__pcFill && window.__pcFill(); } catch { /* */ }
   els.apiKey.value = config.geminiApiKey || "";
   renderExtraKeys(config.geminiExtraKeys || []);
+  try { pintarCache(); } catch { /* */ }
   setKeyVisible(false);
   els.assistantName.value = config.assistantName || DEFAULT_ASSISTANT_NAME;
   els.userName.value = config.userName || "";
@@ -2607,13 +2618,25 @@ function addKeyRow(val = "") {
 }
 function syncAddKey() { const b = document.getElementById("add-key"), box = document.getElementById("extra-keys"); if (b && box) b.disabled = box.children.length >= 9; }
 function renderExtraKeys(list) { const box = document.getElementById("extra-keys"); if (!box) return; box.replaceChildren(); for (const k of list.slice(0, 9)) addKeyRow(k); syncAddKey(); }
+function pintarCache() {
+  const e = document.getElementById("cache-info"); if (!e) return;
+  const s = memAnt.estadisticas(), y = memAnt.estadoSync();
+  e.textContent = `${s.respuestas} respuestas guardadas · ${s.reutilizadas} veces reutilizadas (sin red ni tokens). Copia en la PC: ${y.activo ? (y.ultimo ? "última " + new Date(y.ultimo).toLocaleString("es-CR") : "pendiente") + (y.error ? " · sin conexión con la PC" : "") : "no conectada"}.`;
+  document.getElementById("cache-sync").hidden = !y.activo;
+}
+document.getElementById("cache-ver")?.addEventListener("click", (ev) => {
+  const l = memAnt.respuestas().slice(-50).reverse();
+  openModal("Respuestas guardadas", l.length ? l.map((x) => `• ${x.q}\n   (${new Date(x.t).toLocaleDateString("es-CR")}, ${x.usos || 0} usos)`).join("\n") : "Todavía no hay respuestas guardadas.", ev.currentTarget);
+});
+document.getElementById("cache-borrar")?.addEventListener("click", () => { if (confirm("¿Borrar todas las respuestas guardadas?")) { memAnt.borrarRespuestas(); pintarCache(); } });
+document.getElementById("cache-sync")?.addEventListener("click", async () => { const ok = await memAnt.sincronizar(); pintarCache(); setSettingsStatus(ok ? "Copiado a la PC" : "No se pudo conectar con la PC", !ok); });
 document.getElementById("import-keys-btn")?.addEventListener("click", () => {
   const f = document.getElementById("import-keys"); const l = leerAddKeys(f.value);
   const st = document.getElementById("import-keys-st");
   if (!l) { st.textContent = "Ese enlace no es válido. Pegue el enlace completo de llaves."; return; }
   const n = importarKeys(l); f.value = ""; renderExtraKeys(config.geminiExtraKeys || []);
   els.apiKey.value = config.geminiApiKey || ""; if (snapshot) { snapshot.geminiApiKey = config.geminiApiKey || ""; snapshot.geminiExtraKeys = [...(config.geminiExtraKeys || [])]; } updateDirty();
-  st.textContent = n ? `✓ ${n === 1 ? "1 llave agregada" : n + " llaves agregadas"} y guardadas.` : "Esas llaves ya estaban guardadas.";
+  st.textContent = l.sync && !l.length ? "✓ Copia en la PC conectada." : n ? `✓ ${n === 1 ? "1 llave agregada" : n + " llaves agregadas"} y guardadas.` : "Esas llaves ya estaban guardadas.";
 });
 document.getElementById("add-key")?.addEventListener("click", () => { addKeyRow(""); updateDirty(); document.querySelector("#extra-keys .xk-row:last-child input, #extra-keys > div:last-child input")?.focus(); });
 
@@ -3066,6 +3089,7 @@ function lockApp(reason = "manual") {
 }
 
 function importarKeys(list) {
+  if (list && list.sync) { memAnt.configurarSync(list.sync); if (!list.length) { showNote("Listo: las respuestas guardadas se copiarán también a su PC.", { bold: "💾 " }); return 0; } }
   if (!list || !list.length) return showNote("El enlace de llaves no traía llaves válidas.", { warn: true });
   const cur = [config.geminiApiKey, ...(config.geminiExtraKeys || [])].filter(Boolean);
   const nuevas = list.filter((k, i) => !cur.includes(k) && list.indexOf(k) === i);

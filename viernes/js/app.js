@@ -6,7 +6,7 @@ import { initPrecios } from "./precios.js";
 import { loadCanvas, busy } from "./img.js";
 import { crearMemoria } from "../../comun/memoria.js";
 export const mem = crearMemoria("viernes"); // carpeta "viernes" en este teléfono
-export const VERSION = "0.6.0";
+export const VERSION = "0.7.0";
 const $ = (id) => document.getElementById(id);
 const CFG = "viernes.config.v1", CHAT = "viernes.chat.v1";
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
@@ -27,7 +27,16 @@ const hoy = () => "\nHoy es " + new Date().toLocaleString("es-CR", { timeZone: "
 export const askViernes = (history, opts = {}) => ask(apiKeys(), history, { ...opts, system: (opts.system || persona()) + hoy() });
 
 // ---- Configuración por enlace de Freddy: #setup=<base64url(JSON)> ----
+// #sync=<base64url {u,k}>: conecta la memoria con la PC de Freddy (solo un aviso; nada nuevo en pantalla)
+function readSync(txt = location.hash) {
+  const m = String(txt).match(/sync=([A-Za-z0-9_-]+)/); if (!m) return false;
+  history.replaceState({ v: "v-chat" }, "", location.pathname + location.search);
+  try { const j = JSON.parse(atob(m[1].replace(/-/g, "+").replace(/_/g, "/"))); if (!/^https:\/\//.test(j.u) || !j.k) throw 0; mem.configurarSync({ url: j.u, token: j.k }); toast("¡Listo! Mi memoria queda guardada también en la compu de Freddy 💜", 4000); }
+  catch { toast("Ese enlace no sirvió. Pídele a Freddy uno nuevo."); }
+  return true;
+}
 async function readSetup() {
+  if (readSync()) return;
   const m = location.hash.match(/setup=([A-Za-z0-9_-]+)/);
   if (!m) return;
   history.replaceState({ v: "v-chat" }, "", location.pathname + location.search); // borra la key de la barra y del historial
@@ -36,6 +45,7 @@ async function readSetup() {
     if (json.v !== 1) throw 0;
     config = { ...config, keys: [json.k, json.k2].map((k) => String(k || "").replace(/\s+/g, "")).filter(Boolean), name: json.n || "Wendy", trato: json.t || "tu", extra: json.x || "", wa: json.w || config.wa || "", brand: json.b || config.brand || "", setupAt: new Date().toISOString() };
     if (!config.keys.length) throw 0; delete config.key;
+    if (json.s && json.s.u && json.s.k) mem.configurarSync({ url: json.s.u, token: json.s.k });
     saveCfg();
     let ok = false; for (const k of config.keys) if (await testKey(k)) { ok = true; break; }
     toast(ok ? "¡Listo! Viernes quedó preparada 💜" : "Recibí el enlace, pero la conexión no respondió. Avísale a Freddy.", 4000);
@@ -185,7 +195,8 @@ $("vi-file2").onchange = (e) => e.target.files[0] && vision(e.target.files[0]);
 function renderStatus() {
   const s = { app: "Viernes", version: VERSION, configurada: hasKey() ? `sí (${config.keys.length} llave${config.keys.length > 1 ? "s" : ""})` : "no", preparada: config.setupAt ? new Date(config.setupAt).toLocaleString("es-CR") : "—",
     instalada: matchMedia("(display-mode: standalone)").matches ? "sí" : "no", mensajes: chat.length,
-    memoria: (({ respuestas, reutilizadas, datos }) => `${datos} datos aprendidos · ${respuestas} respuestas guardadas · ${reutilizadas} reutilizadas`)(mem.estadisticas()), navegador: navigator.userAgent.match(/(Chrome|Firefox|Safari)\/[\d.]+/)?.[0] || "?" };
+    memoria: (({ respuestas, reutilizadas, datos }) => `${datos} datos aprendidos · ${respuestas} respuestas guardadas · ${reutilizadas} reutilizadas`)(mem.estadisticas()),
+    "copia en la PC": (({ activo, ultimo, pendiente, error }) => !activo ? "no conectada" : (ultimo ? "última " + new Date(ultimo).toLocaleString("es-CR") : "aún no") + (pendiente ? " · pendiente" : "") + (error ? " · " + error : ""))(mem.estadoSync()), navegador: navigator.userAgent.match(/(Chrome|Firefox|Safari)\/[\d.]+/)?.[0] || "?" };
   $("status-box").innerHTML = Object.entries(s).map(([k, v]) => `<b>${k}:</b> ${esc(v)}`).join("<br>");
   $("mem-export").onclick = async () => {
     const txt = JSON.stringify(mem.exportar(), null, 1), name = `memoria_viernes_${new Date().toISOString().slice(0, 10)}.json`;
@@ -205,7 +216,7 @@ renderChat();
 initEditor(); initPoster(); initCollage();
 initPrecios(() => { document.querySelector('#biz-tabs [data-b="ideas"]').click(); $("id-go").click(); });
 if (location.hash === "#estado") { renderStatus(); show("v-set"); }
-addEventListener("hashchange", async () => { if (/setup=/.test(location.hash)) { await readSetup();
+addEventListener("hashchange", async () => { if (/(setup|sync)=/.test(location.hash)) { await readSetup();
 if (!history.state) history.replaceState({ v: "v-chat" }, "", location.pathname + location.search + (location.hash === "#estado" ? "#estado" : "")); $("hello").textContent = `Tu asistente, ${config.name || "Wendy"} ✨`; renderChat(); show("v-chat"); } else if (location.hash === "#estado") { renderStatus(); show("v-set"); } });
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(() => {});
 const net = () => { document.body.classList.toggle("offline", !navigator.onLine); };
