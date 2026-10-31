@@ -7,7 +7,7 @@ import { loadCanvas, busy } from "./img.js";
 import { crearMemoria } from "../../comun/memoria.js";
 import { initFotos, abrirFotos } from "./fotos.js";
 export const mem = crearMemoria("viernes"); // carpeta "viernes" en este teléfono
-export const VERSION = "0.8.0";
+export const VERSION = "0.8.1";
 const $ = (id) => document.getElementById(id);
 const CFG = "viernes.config.v1", CHAT = "viernes.chat.v1";
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };

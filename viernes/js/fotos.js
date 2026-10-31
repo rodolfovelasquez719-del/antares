@@ -60,6 +60,44 @@ function limpiar(){const W=mask.width,H=mask.height,k=Math.min(1,320/Math.max(W,
  const pad=Math.round(Math.max(W,H)*.03),X0=Math.max(0,Math.floor(x0/k)-pad),Y0=Math.max(0,Math.floor(y0/k)-pad),X1=Math.min(W,Math.ceil((x1+1)/k)+pad),Y1=Math.min(H,Math.ceil((y1+1)/k)+pad);
  const crop=(c)=>{const n=document.createElement('canvas');n.width=X1-X0;n.height=Y1-Y0;n.getContext('2d').drawImage(c,X0,Y0,n.width,n.height,0,0,n.width,n.height);return n};
  mask=crop(mask);orig=crop(orig)}
+
+// 0.8.1: quitar la superficie (almohadilla, tela, mesa) que quedó DENTRO de la joya.
+// Busca el punto más interno del recorte, crece una zona de color parecido (mate) y la borra si es grande.
+function lab(r,g,b){const f=c=>{c/=255;return c>.04045?Math.pow((c+.055)/1.055,2.4):c/12.92};r=f(r);g=f(g);b=f(b);
+ let x=(r*.4124+g*.3576+b*.1805)/.95047,y=r*.2126+g*.7152+b*.0722,z=(r*.0193+g*.1192+b*.9505)/1.08883;const h=t=>t>.008856?Math.cbrt(t):7.787*t+16/116;x=h(x);y=h(y);z=h(z);return[116*y-16,500*(x-y),200*(y-z)]}
+function zonaLow(){const W=mask.width,H=mask.height,k=Math.min(1,560/Math.max(W,H)),w=Math.max(1,Math.round(W*k)),h=Math.max(1,Math.round(H*k));
+ const c1=document.createElement('canvas');c1.width=w;c1.height=h;const g1=c1.getContext('2d');g1.filter='blur(1.2px)';g1.drawImage(orig,0,0,w,h);const px=g1.getImageData(0,0,w,h).data;
+ const c2=document.createElement('canvas');c2.width=w;c2.height=h;const g2=c2.getContext('2d');g2.drawImage(mask,0,0,w,h);const al=g2.getImageData(0,0,w,h).data;
+ const L=new Float32Array(w*h*3),fg=new Uint8Array(w*h);for(let i=0;i<w*h;i++){const v=lab(px[i*4],px[i*4+1],px[i*4+2]);L[i*3]=v[0];L[i*3+1]=v[1];L[i*3+2]=v[2];fg[i]=al[i*4+3]>110?1:0}
+ return{W,H,w,h,k,L,fg}}
+function crecer(Z,seed,tol){const{w,h,L,fg}=Z;const reg=new Uint8Array(w*h);const st=[seed];reg[seed]=1;let n=0,m=[L[seed*3],L[seed*3+1],L[seed*3+2]],cnt=1;
+ while(st.length){const j=st.pop();n++;const x=j%w,y=j/w|0;for(const q of [x>0?j-1:-1,x<w-1?j+1:-1,y>0?j-w:-1,y<h-1?j+w:-1]){if(q<0||reg[q]||!fg[q])continue;
+  const d=Math.hypot(L[q*3]-m[0],(L[q*3+1]-m[1])*1.3,(L[q*3+2]-m[2])*1.3),dn=Math.hypot(L[q*3]-L[j*3],L[q*3+1]-L[j*3+1],L[q*3+2]-L[j*3+2]);
+  if(d<tol&&dn<tol*.45){reg[q]=1;st.push(q);if(cnt<4000){cnt++;for(let t=0;t<3;t++)m[t]+=(L[q*3+t]-m[t])/cnt}}}}
+ return{reg,n,m}}
+function borrarZona(Z,reg){const{w,h,W,H}=Z;// dilatar 1 px para llevarse el borde
+ const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');const id=g.createImageData(w,h);
+ for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=y*w+x;let v=reg[i];if(!v)for(const q of [i-1,i+1,i-w,i+w])if(q>=0&&q<w*h&&reg[q]){v=1;break}if(v)id.data[i*4+3]=255}
+ g.putImageData(id,0,0);const mg=mask.getContext('2d');mg.globalCompositeOperation='destination-out';mg.drawImage(c,0,0,W,H);mg.globalCompositeOperation='source-over'}
+function quitarSuperficie(minFrac=.15,forzar=false){const Z=zonaLow();const{w,h,fg,L}=Z;let total=0;for(let i=0;i<w*h;i++)total+=fg[i];if(!total)return 0;let quitadas=0;
+ for(let it=0;it<3;it++){// distancia al borde (2 pasadas)
+  const d=new Float32Array(w*h);for(let i=0;i<w*h;i++)d[i]=fg[i]?1e9:0;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=y*w+x;if(!d[i])continue;d[i]=Math.min(d[i],x?d[i-1]+1:1,y?d[i-w]+1:1,x&&y?d[i-w-1]+1.414:1,y&&x<w-1?d[i-w+1]+1.414:1)}
+  for(let y=h-1;y>=0;y--)for(let x=w-1;x>=0;x--){const i=y*w+x;if(!d[i])continue;d[i]=Math.min(d[i],x<w-1?d[i+1]+1:1,y<h-1?d[i+w]+1:1,x<w-1&&y<h-1?d[i+w+1]+1.414:1,y<h-1&&x?d[i+w-1]+1.414:1)}
+  let best=-1,bd=0;for(let i=0;i<w*h;i++)if(d[i]>bd){bd=d[i];best=i}if(best<0)break;
+  const{reg,n,m}=crecer(Z,best,16);const sat=Math.hypot(m[1],m[2]);
+  let x0=w,y0=h,x1=0,y1=0;for(let i=0;i<w*h;i++)if(reg[i]){const x=i%w,y=i/w|0;if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y}
+  const comp=n/((x1-x0+1)*(y1-y0+1));// superficie = zona llena (no una tira de sombra)
+  if(!(n/total>=minFrac&&(forzar||(sat<45&&comp>.35))))break;
+  // segunda pasada: restos del mismo color dentro de esa zona (bordes entre cuentas)
+  const cand=new Uint8Array(w*h);const mx=Math.round((x1-x0)*.08),my=Math.round((y1-y0)*.08);
+  for(let y=Math.max(0,y0-my);y<=Math.min(h-1,y1+my);y++)for(let x=Math.max(0,x0-mx);x<=Math.min(w-1,x1+mx);x++){const i=y*w+x;if(fg[i]&&!reg[i]&&L[i*3+2]<m[2]+10&&Math.hypot(L[i*3]-m[0],(L[i*3+1]-m[1])*1.3,(L[i*3+2]-m[2])*1.3)<24)cand[i]=1}
+  {let band=reg.slice();for(let r=0;r<6;r++){const nb=band.slice();for(let i=0;i<w*h;i++)if(cand[i]&&!band[i]){const x=i%w;if((x>0&&band[i-1])||(x<w-1&&band[i+1])||(i>=w&&band[i-w])||(i+w<w*h&&band[i+w]))nb[i]=1}band=nb}for(let i=0;i<w*h;i++)if(band[i])reg[i]=1}
+  borrarZona(Z,reg);for(let i=0;i<w*h;i++)if(reg[i])fg[i]=0;quitadas++}
+ return quitadas}
+// tocar para quitar una zona del mismo color
+function quitarZonaEn(mx,my){const Z=zonaLow();const x=Math.round(mx*Z.k),y=Math.round(my*Z.k);if(x<0||y<0||x>=Z.w||y>=Z.h)return;const i=y*Z.w+x;if(!Z.fg[i])return;
+ const{reg}=crecer(Z,i,14);borrarZona(Z,reg)}
 async function procesar(file,auto){$('elegir').disabled=true;$('editor').style.display='none';cv.style.display='none';
  try{const L=await cargarLib();
   orig=await createImageBitmap(file);
@@ -70,7 +108,7 @@ async function procesar(file,auto){$('elegir').disabled=true;$('editor').style.d
   const out=await L.removeBackground(blobIn,{model:'isnet_fp16',output:{format:'image/png'},progress:(key,cur,tot)=>{if(key.startsWith('fetch'))msg(`⏳ Descargando borrador mágico… ${Math.round(cur/tot*100)}%`);else msg('✂️ Quitando el fondo…')}});
   const cut=await createImageBitmap(out);
   mask=document.createElement('canvas');mask.width=oc.width;mask.height=oc.height;mask.getContext('2d').drawImage(cut,0,0,oc.width,oc.height);
-  limpiar();
+  limpiar();try{const q=quitarSuperficie();if(q)console.log('superficie quitada',q)}catch(e){console.warn(e)}
   obj=document.createElement('canvas');obj.width=mask.width;obj.height=mask.height;rehacerObj();
   pos={x:.5,y:.5,s:1};$('tam').value=100;cv.style.display='block';$('editor').style.display='block';$('herr').style.display=auto?'none':'block';$('aMano').style.display=auto?'block':'none';if(auto)$('auto').style.display='none';dibujar();
   window.__listo=((performance.now()-t0)/1000).toFixed(1);if(!auto)msg('✅ ¡Listo! Ahora elegí un fondo');
@@ -83,16 +121,17 @@ $('archivoFondo').onchange=async e=>{const f=e.target.files[0];if(!f)return;fond
 document.querySelectorAll('#editor .fo-tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#editor .fo-tabs button,#editor .fo-panel').forEach(x=>x.classList.remove('on'));b.classList.add('on');$(b.dataset.p).classList.add('on');modo=b.dataset.p==='pRetocar'?'pincel':'mover'});
 $('tam').oninput=()=>{pos.s=$('tam').value/100;dibujar()};$('sombra').oninput=dibujar;
 $('centrar').onclick=()=>{pos={x:.5,y:.5,s:1};$('tam').value=100;dibujar()};
-$('bBorrar').onclick=()=>{pincel='borrar';$('bBorrar').classList.add('on');$('bRec').classList.remove('on')};
-$('bRec').onclick=()=>{pincel='rec';$('bRec').classList.add('on');$('bBorrar').classList.remove('on')};
+const selP=(p,id)=>{pincel=p;['bBorrar','bRec','bZona'].forEach(x=>$(x).classList.toggle('on',x===id))};
+$('bBorrar').onclick=()=>selP('borrar','bBorrar');$('bRec').onclick=()=>selP('rec','bRec');$('bZona').onclick=()=>selP('zona','bZona');
+$('bAdentro').onclick=()=>{const q=quitarSuperficie(.03,true);rehacerObj();dibujar();msg(q?'✅ Quité lo de adentro':'No encontré nada más que quitar')};
 // toques
 const dedos=new Map();let ini=null;
 const pt=e=>{const b=cv.getBoundingClientRect();return{x:(e.clientX-b.left)/b.width,y:(e.clientY-b.top)/b.height}};
-function pintar(p){const r=rect();const mx=(p.x*N-r.x)/r.s,my=(p.y*N-r.y)/r.s;const g=mask.getContext('2d');const rad=+$('grosor').value/r.s;
+function pintar(p,ini){const r=rect();const mx=(p.x*N-r.x)/r.s,my=(p.y*N-r.y)/r.s;if(pincel==='zona'){if(ini){quitarZonaEn(mx,my);rehacerObj();dibujar()}return}const g=mask.getContext('2d');const rad=+$('grosor').value/r.s;
  if(pincel==='borrar'){g.globalCompositeOperation='destination-out';g.fillStyle='#000'}else{g.globalCompositeOperation='source-over';g.fillStyle='#fff'}
  g.beginPath();g.arc(mx,my,rad,0,7);g.fill();g.globalCompositeOperation='source-over';rehacerObj();dibujar()}
 cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);dedos.set(e.pointerId,pt(e));
- if(modo==='pincel'){pintar(pt(e));return}
+ if(modo==='pincel'){pintar(pt(e),true);return}
  const a=[...dedos.values()];ini={pos:{...pos},a:a.map(p=>({...p})),d:a.length>1?Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y):0}});
 cv.addEventListener('pointermove',e=>{if(!dedos.has(e.pointerId))return;dedos.set(e.pointerId,pt(e));
  if(modo==='pincel'){pintar(pt(e));return}
