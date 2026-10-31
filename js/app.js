@@ -42,14 +42,14 @@ import * as Agent from "./agent.js";
 import * as LB from "./localbrain.js";
 import { newDamasGame } from "./ocio.js";
 
-const APP_VERSION = "1.31.1";
+const APP_VERSION = "1.31.2";
 // v1.25.1: emparejar con el QR de la compu (#pc-token=…). Se lee y se borra del enlace de inmediato (no queda en el historial).
 let pcEmparejar = null, pcEmparejando = false;
 try {
   const h = new URLSearchParams(location.hash.slice(1)).get("pc-token");
   if (location.hash.includes("pc-token")) { const q = leerQRCompu(location.href) || {}; history.replaceState(null, "", location.pathname + location.search); pcEmparejar = { tok: (h || "").replace(/\s+/g, ""), url: q.url || "" }; }
 } catch { /* */ }
-// v1.31.1: importar keys con enlace #addkeys=<base64url JSON {v:1,keys:[…]}>. Se lee y se borra del enlace de inmediato.
+// v1.31.2: importar keys con enlace #addkeys=<base64url JSON {v:1,keys:[…]}>. Se lee y se borra del enlace de inmediato.
 function leerAddKeys(txt) {
   try {
     const m = String(txt || "").match(/addkeys=([A-Za-z0-9_\-]+)/);
@@ -3075,6 +3075,7 @@ function importarKeys(list) {
     if (!config.geminiApiKey) config.geminiApiKey = add.shift(), (config.geminiExtraKeys ||= []);
     config.geminiExtraKeys = [...(config.geminiExtraKeys || []), ...add];
     memory.saveConfig(config); applyConfig();
+    try { if (estado === "sinkey") setEstado(baseEstado()); } catch { /* */ }
     try { if (!els.settingsView.hidden) renderExtraKeys(config.geminiExtraKeys); } catch { /* */ }
   }
   const n = Math.min(nuevas.length, cabe), total = Math.min(10, cur.length + n);
